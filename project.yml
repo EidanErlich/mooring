@@ -15,6 +15,7 @@ targets:
       - App/Sources
       - App/Assets.xcassets
       - Helper/Shared
+      - App/Helper
       - path: Helper/dev.mooring.helper.plist
         buildPhase:
           copyFiles:
