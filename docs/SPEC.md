@@ -216,6 +216,7 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 
 - `listener.setConnectionCodeSigningRequirement(req)` (macOS 13+), where `req` is `identifier "dev.mooring.app" and certificate leaf = H"<SHA-1 of the app's signing certificate>"`. The system evaluates it against the connecting process's audit token and drops any other caller before the helper's code runs (observed 2026-09-30: "Dropping check-in message due to code signing requirement", status -67050). A build script writes the requirement into the helper's embedded `SMAuthorizedClients` (Build brief → Engineering decisions), and the helper reads it back from there at launch. Only the signed Mooring app can connect; the CLI and MCP server never talk to the helper directly.
 - If no valid requirement is embedded (unsigned or ad-hoc builds), the helper refuses every connection.
+- The app and the helper are built with the hardened runtime, so a process running as the user can't inject code into the genuine app (for example with `DYLD_INSERT_LIBRARIES` or a swapped library) and borrow its signature to pass the check. Debug builds also carry `get-task-allow` so a debugger can attach; only Release builds are held to this guarantee.
 - A second, manual audit-token check in `shouldAcceptNewConnection` was dropped (decided 2026-09-30): `NSXPCConnection` has no public audit-token API on macOS 26, and the listener requirement above already performs that check.
 
 ### 1.6 Never stuck awake
