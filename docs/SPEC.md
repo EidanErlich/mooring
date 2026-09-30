@@ -802,6 +802,13 @@ struct AwakeSettings: Codable, Equatable {
 - **Settings window:** plain SwiftUI `NavigationSplitView` with the sidebar from the UX section. Items from 1.9 map to: helper, AC requirement, thresholds, thermal → Awake › Lid & Battery; notifications → General; logs, diagnostics, uninstall → Mooring › Advanced. Luminare is used only for the Windows pages in stage 3.
 - **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
 - **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. Badges are small symbols composited at the bottom right: `laptopcomputer` (lid mode), `battery.25` (on battery), a 5 pt dot (attention).
+- **Stage 1b scope** (decided 2026-09-30):
+  - The lid rows ("Until I open the lid", "Allow lid close"), the icon badges, the attention dot and the Lid & Battery and Advanced settings pages ship in stage 1c with the lid level.
+  - The dropdown's Windows and Clipboard rows appear with stages 3 and 4.
+  - The global on/off hotkey and the Shortcuts page come later (the default is none).
+  - The status line reads `Off`, `On · until turned off`, `On · 1h 12m left`, `On · screen on · 1h 12m left` or `On · while Xcode runs`; it describes the lease that ends last. Countdowns round minutes up.
+  - Anchored-list owner labels: Menu bar, Terminal, the agent's name, the MCP client's name.
+  - The placeholder app icon is `App/Icon/AppIcon.svg`, rendered by `scripts/make-app-icon.swift`.
 
 **Stage 2 details**
 

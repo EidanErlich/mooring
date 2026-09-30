@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Placeholder app icon (docs/SPEC.md, Menu-bar icon): the filled menu-bar anchor
+       on a rounded square. Regenerate the PNGs with scripts/make-app-icon.swift. -->
+  <defs>
+    <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2E6BD8"/>
+      <stop offset="1" stop-color="#1A3F8F"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sea)"/>
+  <g transform="translate(188 188) scale(36)" fill="#FFFFFF">
+    <path fill-rule="evenodd" d="M9 .75a2.75 2.75 0 1 1 0 5.5 2.75 2.75 0 0 1 0-5.5Zm0 1.75a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/>
+    <g fill="none" stroke="#FFFFFF" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 6v10"/>
+      <path d="M5.75 8.25h6.5"/>
+      <path d="M3 10.5c0 3.2 2.7 5.5 6 5.5s6-2.3 6-5.5"/>
+    </g>
+    <path d="M3 9l2.25 3.25H.75Z"/>
+    <path d="M15 9l2.25 3.25h-4.5Z"/>
+  </g>
+</svg>
