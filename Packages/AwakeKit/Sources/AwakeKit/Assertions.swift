@@ -11,10 +11,22 @@
 import IOKit.pwr_mgt
 import os
 
-/// Makes the two IOKit power assertions match what the engine wants.
+/// Which assertions are actually held after an `apply`.
+public struct HeldAssertions: Equatable, Sendable {
+    public var system: Bool
+    public var display: Bool
+
+    public init(system: Bool, display: Bool) {
+        self.system = system
+        self.display = display
+    }
+}
+
+/// Makes the two IOKit power assertions match what the engine wants, and
+/// reports what it actually holds (a create can fail).
 @MainActor
 public protocol AssertionApplying: AnyObject {
-    func apply(system: Bool, display: Bool)
+    func apply(system: Bool, display: Bool) -> HeldAssertions
 }
 
 /// The real assertions: idle system sleep and idle display sleep, both named
@@ -30,9 +42,11 @@ public final class IOPMAssertions: AssertionApplying {
 
     public init() {}
 
-    public func apply(system: Bool, display: Bool) {
+    @discardableResult
+    public func apply(system: Bool, display: Bool) -> HeldAssertions {
         set(&systemID, wanted: system, type: kIOPMAssertPreventUserIdleSystemSleep)
         set(&displayID, wanted: display, type: kIOPMAssertPreventUserIdleDisplaySleep)
+        return HeldAssertions(system: systemID != nil, display: displayID != nil)
     }
 
     private func set(_ id: inout IOPMAssertionID?, wanted: Bool, type: String) {

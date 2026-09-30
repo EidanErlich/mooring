@@ -192,13 +192,17 @@ public final class AwakeEngine {
         reconcile()
     }
 
+    /// `state` records what is actually held, so a refused assertion never reads
+    /// as On, and the next tick tries again.
     private func reconcile() {
-        let next = target(
+        var next = target(
             leases: leases, power: PowerSnapshot(onAC: true, batteryPercent: nil), thermal: .nominal,
             lidClosed: nil, settings: settings(), now: now()
         )
         if next.systemAssertion != state.systemAssertion || next.displayAssertion != state.displayAssertion {
-            assertions.apply(system: next.systemAssertion, display: next.displayAssertion)
+            let held = assertions.apply(system: next.systemAssertion, display: next.displayAssertion)
+            next.systemAssertion = held.system
+            next.displayAssertion = held.display
         }
         if next != state {
             state = next

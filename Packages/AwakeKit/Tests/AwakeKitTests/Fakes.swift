@@ -46,8 +46,9 @@ struct Applied: Equatable {
 final class RecordingAssertions: AssertionApplying {
     var calls: [Applied] = []
 
-    func apply(system: Bool, display: Bool) {
+    func apply(system: Bool, display: Bool) -> HeldAssertions {
         calls.append(Applied(system: system, display: display))
+        return HeldAssertions(system: system, display: display)
     }
 }
 
@@ -80,5 +81,21 @@ final class EngineHarness {
 
     func advance(_ seconds: TimeInterval) {
         clock = clock.addingTimeInterval(seconds)
+    }
+}
+
+/// Assertions that fail to be created until `failuresLeft` reaches zero.
+@MainActor
+final class FlakyAssertions: AssertionApplying {
+    var failuresLeft = 1
+    var calls: [Applied] = []
+
+    func apply(system: Bool, display: Bool) -> HeldAssertions {
+        calls.append(Applied(system: system, display: display))
+        if system && failuresLeft > 0 {
+            failuresLeft -= 1
+            return HeldAssertions(system: false, display: false)
+        }
+        return HeldAssertions(system: system, display: display)
     }
 }
