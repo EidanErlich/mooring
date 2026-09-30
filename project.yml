@@ -14,15 +14,53 @@ targets:
     sources:
       - App/Sources
       - App/Assets.xcassets
+      - Helper/Shared
+      - App/Helper
+      - path: Helper/dev.mooring.helper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      - target: MooringHelper
+        embed: true
+        link: false
+        copy:
+          destination: executables
     settings:
       base:
         PRODUCT_NAME: Mooring
         PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.app
         INFOPLIST_FILE: App/Info.plist
         GENERATE_INFOPLIST_FILE: NO
-        MARKETING_VERSION: 0.0.1
-        CURRENT_PROJECT_VERSION: 1
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ENABLE_HARDENED_RUNTIME: YES   # blocks DYLD injection into the helper's only client
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
+        DEVELOPMENT_TEAM: $(MOORING_TEAM)
+  MooringHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - Helper/Sources
+      - Helper/Shared
+    preBuildScripts:
+      - name: Write helper client requirement
+        script: '"$SRCROOT/scripts/write-helper-requirement.sh" "$SRCROOT/Helper/Info.template.plist" "$DERIVED_FILE_DIR/HelperInfo.plist"'
+        inputFiles:
+          - $(SRCROOT)/Helper/Info.template.plist
+          - $(SRCROOT)/scripts/write-helper-requirement.sh
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/HelperInfo.plist
+        basedOnDependencyAnalysis: false   # the signing identity can change with no file changing
+    settings:
+      base:
+        PRODUCT_NAME: dev.mooring.helper
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.helper
+        OTHER_LDFLAGS: -sectcreate __TEXT __info_plist $(DERIVED_FILE_DIR)/HelperInfo.plist
+        SKIP_INSTALL: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
         DEVELOPMENT_TEAM: $(MOORING_TEAM)
@@ -40,6 +78,20 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
         DEVELOPMENT_TEAM: $(MOORING_TEAM)
+  MooringHelperTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Helper/Tests
+      - Helper/Sources/PMSet.swift
+      - Helper/Sources/ClientRequirement.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.helper.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
+        DEVELOPMENT_TEAM: $(MOORING_TEAM)
 schemes:
   Mooring:
     build:
@@ -48,3 +100,4 @@ schemes:
     test:
       targets:
         - MooringTests
+        - MooringHelperTests

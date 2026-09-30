@@ -4,6 +4,10 @@
 MACOSX_DEPLOYMENT_TARGET = 14.0
 SWIFT_VERSION = 6.0
 
+// One version for every target (the app and the embedded helper).
+MARKETING_VERSION = 0.0.1
+CURRENT_PROJECT_VERSION = 1
+
 // Ad-hoc signing ("Sign to Run Locally") unless Local.xcconfig names a certificate.
 MOORING_SIGN_IDENTITY = -
 MOORING_TEAM =

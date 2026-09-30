@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Adapted from Awayke@b502251: AwaykeHelper/Info.plist
+
+    MooringHelper Info.plist template. scripts/write-helper-requirement.sh fills in
+    the placeholders at build time and the result is embedded into the helper
+    binary via OTHER_LDFLAGS = -sectcreate __TEXT __info_plist.
+
+    SMAuthorizedClients holds the code-signing requirement for the one client the
+    helper accepts: dev.mooring.app signed by the same certificate (pinned by the
+    certificate's SHA-1, since there is no Developer ID team to anchor to). The
+    helper reads it back at launch and enforces it on every XPC connection.
+    Unsigned builds get MOORING_UNSIGNED, which the helper treats as "accept no one".
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>dev.mooring.helper</string>
+    <key>CFBundleName</key>
+    <string>MooringHelper</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@MARKETING_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@CURRENT_PROJECT_VERSION@</string>
+    <key>SMAuthorizedClients</key>
+    <array>
+        <string>@MOORING_CLIENT_REQUIREMENT@</string>
+    </array>
+</dict>
+</plist>

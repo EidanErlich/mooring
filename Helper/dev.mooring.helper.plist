@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Adapted from Awayke@b502251: AwaykeHelper/daemonphantom.Awayke.Helper.plist -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.mooring.helper</string>
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/dev.mooring.helper</string>
+    <key>MachServices</key>
+    <dict>
+        <key>dev.mooring.helper</key>
+        <true/>
+    </dict>
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>dev.mooring.app</string>
+    </array>
+</dict>
+</plist>

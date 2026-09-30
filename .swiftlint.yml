@@ -2,6 +2,7 @@
 included:
   - App
   - Packages
+  - Helper
 excluded:
   - build
   - Packages/*/.build
