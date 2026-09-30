@@ -12,9 +12,9 @@ import SwiftUI
 final class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
     private(set) var isPresented = false
     private weak var statusBarButton: NSStatusBarButton?
-    private let onClose: () -> Void
+    private let onClose: @MainActor () -> Void
 
-    init(onClose: @escaping () -> Void, content: () -> Content) {
+    init(onClose: @escaping @MainActor () -> Void, content: () -> Content) {
         self.onClose = onClose
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: PanelPlacement.width, height: 200),

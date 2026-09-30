@@ -12,7 +12,7 @@ struct DropdownView: View {
     @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.animation(minimumInterval: 1, paused: !model.isPresented)) { context in
             ScrollView {
                 page(now: context.date)
                     .padding(6)

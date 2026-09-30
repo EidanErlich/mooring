@@ -20,9 +20,9 @@ struct AwakeSectionView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
             ForEach(AwakeDuration.allCases, id: \.self) { duration in
-                MenuRow(title: duration.title, checked: isChecked(duration)) {
-                    model.lastDuration = duration
+                MenuRow(title: duration.title, checked: model.lastPick.isChecked(duration, menuLease: engine.menuLease)) {
                     engine.turnOnMenu(duration: duration.interval)
+                    model.lastPick = DurationPick(duration: duration, expiresAt: engine.menuLease?.expiresAt)
                 }
             }
             Divider()
@@ -72,12 +72,6 @@ struct AwakeSectionView: View {
         .padding(.vertical, 4)
     }
 
-    private func isChecked(_ duration: AwakeDuration) -> Bool {
-        guard let menu = engine.menuLease else { return false }
-        if let last = model.lastDuration { return last == duration }
-        return duration == .untilTurnedOff && menu.expiresAt == nil
-    }
-
     private func runningApps() -> [NSRunningApplication] {
         NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
@@ -90,11 +84,6 @@ private struct AppRow: View {
     let action: () -> Void
 
     var body: some View {
-        MenuRow(title: app.localizedName ?? "App", action: action)
-            .overlay(alignment: .leading) {
-                if let icon = app.icon {
-                    Image(nsImage: icon).resizable().frame(width: 16, height: 16).padding(.leading, 26)
-                }
-            }
+        MenuRow(title: app.localizedName ?? "App", icon: app.icon, action: action)
     }
 }
