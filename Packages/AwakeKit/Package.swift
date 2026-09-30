@@ -5,10 +5,10 @@ let package = Package(
     name: "AwakeKit",
     platforms: [.macOS(.v14)],
     products: [
-        .library(name: "AwakeKit", targets: ["AwakeKit"]),
+        .library(name: "AwakeKit", targets: ["AwakeKit"])
     ],
     targets: [
         .target(name: "AwakeKit"),
-        .testTarget(name: "AwakeKitTests", dependencies: ["AwakeKit"]),
+        .testTarget(name: "AwakeKitTests", dependencies: ["AwakeKit"])
     ]
 )
