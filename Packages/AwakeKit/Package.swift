@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "AwakeKit", targets: ["AwakeKit"])
     ],
     targets: [
-        .target(name: "AwakeKit"),
+        .target(name: "AwakeKit", linkerSettings: [.linkedFramework("IOKit")]),
         .testTarget(name: "AwakeKitTests", dependencies: ["AwakeKit"])
     ]
 )
