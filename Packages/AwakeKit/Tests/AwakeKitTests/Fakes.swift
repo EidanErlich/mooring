@@ -36,3 +36,49 @@ final class FakeProcesses: ProcessInspecting {
         handlers.removeValue(forKey: pid)?()
     }
 }
+
+struct Applied: Equatable {
+    let system: Bool
+    let display: Bool
+}
+
+@MainActor
+final class RecordingAssertions: AssertionApplying {
+    var calls: [Applied] = []
+
+    func apply(system: Bool, display: Bool) {
+        calls.append(Applied(system: system, display: display))
+    }
+}
+
+@MainActor
+final class MemoryLeaseStore: LeaseStoring {
+    var toLoad: [Lease] = []
+    var saved: [Lease] = []
+    var saveCount = 0
+
+    func load() -> [Lease] { toLoad }
+
+    func save(_ leases: [Lease]) {
+        saved = leases
+        saveCount += 1
+    }
+}
+
+/// An engine wired to fakes, with a clock and settings the test controls.
+@MainActor
+final class EngineHarness {
+    var clock = Date(timeIntervalSince1970: 1_000_000)
+    var settings = AwakeSettings()
+    let assertions = RecordingAssertions()
+    let store = MemoryLeaseStore()
+    let processes = FakeProcesses()
+    private(set) lazy var engine = AwakeEngine(
+        assertions: assertions, store: store, processes: processes,
+        settings: { [unowned self] in self.settings }, now: { [unowned self] in self.clock }
+    )
+
+    func advance(_ seconds: TimeInterval) {
+        clock = clock.addingTimeInterval(seconds)
+    }
+}
