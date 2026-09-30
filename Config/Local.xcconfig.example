@@ -1,0 +1,9 @@
+// Copy to Config/Local.xcconfig (gitignored) to sign with your own certificate.
+// Without it, builds are ad-hoc signed, which is enough until lid mode (stage 1a).
+//
+// List identities:  security find-identity -v -p codesigning
+// Team ID:          security find-certificate -c "<identity name>" -p | openssl x509 -noout -subject
+//                   (use the OU field; the ID in parentheses in the identity name is not the team)
+
+MOORING_SIGN_IDENTITY = Apple Development: Your Name (XXXXXXXXXX)
+MOORING_TEAM = XXXXXXXXXX

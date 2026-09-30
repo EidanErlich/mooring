@@ -1,0 +1,50 @@
+name: Mooring
+options:
+  bundleIdPrefix: dev.mooring
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+configFiles:
+  Debug: Config/Shared.xcconfig
+  Release: Config/Shared.xcconfig
+targets:
+  Mooring:
+    type: application
+    platform: macOS
+    sources:
+      - App/Sources
+      - App/Assets.xcassets
+    settings:
+      base:
+        PRODUCT_NAME: Mooring
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.app
+        INFOPLIST_FILE: App/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        MARKETING_VERSION: 0.0.1
+        CURRENT_PROJECT_VERSION: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
+        DEVELOPMENT_TEAM: $(MOORING_TEAM)
+  MooringTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - App/Tests
+    dependencies:
+      - target: Mooring
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
+        DEVELOPMENT_TEAM: $(MOORING_TEAM)
+schemes:
+  Mooring:
+    build:
+      targets:
+        Mooring: all
+    test:
+      targets:
+        - MooringTests
