@@ -31,12 +31,12 @@ public final class IOPMAssertions: AssertionApplying {
     public init() {}
 
     public func apply(system: Bool, display: Bool) {
-        set(&systemID, on: system, type: kIOPMAssertPreventUserIdleSystemSleep)
-        set(&displayID, on: display, type: kIOPMAssertPreventUserIdleDisplaySleep)
+        set(&systemID, wanted: system, type: kIOPMAssertPreventUserIdleSystemSleep)
+        set(&displayID, wanted: display, type: kIOPMAssertPreventUserIdleDisplaySleep)
     }
 
-    private func set(_ id: inout IOPMAssertionID?, on: Bool, type: String) {
-        switch (on, id) {
+    private func set(_ id: inout IOPMAssertionID?, wanted: Bool, type: String) {
+        switch (wanted, id) {
         case (true, nil):
             var newID: IOPMAssertionID = 0
             let result = IOPMAssertionCreateWithName(
