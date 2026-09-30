@@ -20,6 +20,7 @@ targets:
     sources:
       - App/Sources
       - App/UI
+      - App/Settings
       - App/Assets.xcassets
       - Helper/Shared
       - App/Helper
