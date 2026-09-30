@@ -610,7 +610,7 @@ Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL
 
 - [ ] Is the 2-minute grace after `Stop` long enough for background shells Claude starts? Measure on real sessions in stage 2.
 - [ ] Keep Loop's `Luminare` settings UI, or rebuild the Windows pages in plain SwiftUI for consistency? Decide at the start of stage 3.
-- [x] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 26? **Yes** (stage 1a spike, 2026-09-30, macOS 26.3.1): registered from the Debug build in DerivedData, approved once in Login Items & Extensions, flipped `disablesleep` with no password, and kept working after a rebuild without re-approval. The `sudo mooring install-helper` fallback is not needed.
+- [x] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 26? **Yes** (stage 1a spike, 2026-09-30, macOS 26.3.1): registered from the Debug build in DerivedData, approved once in Login Items & Extensions, flipped `disablesleep` with no password, kept accepting a rebuilt app, and after `sudo launchctl kickstart -k system/dev.mooring.helper` launchd respawned the rebuilt (hardened-runtime) helper binary, which answered with no re-approval. The `sudo mooring install-helper` fallback is not needed. Not yet observed: a reboot, and a certificate renewal.
 
 ### C. Milestones
 
