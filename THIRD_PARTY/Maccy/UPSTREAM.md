@@ -7,8 +7,10 @@
 
 ## Files taken
 
-None yet.
+| Upstream file | Mooring file |
+| --- | --- |
+| `Maccy/FloatingPanel.swift` | `App/UI/FloatingPanel.swift` (stage 1b) |
 
 ## Modifications
 
-None yet.
+- `FloatingPanel`: removed every use of `AppState`, `Popup`, `PopupPosition`, the preview/slideout, and Maccy's `Defaults` keys (saved window size and position); removed resizing and dragging. Content sizes itself through `NSHostingController.sizingOptions = [.preferredContentSize]`; the panel is placed by `PanelPlacement` under the status item and re-anchored on resize. Level `.statusBar` instead of `.screenSaver`. Esc (`cancelOperation`) closes it.

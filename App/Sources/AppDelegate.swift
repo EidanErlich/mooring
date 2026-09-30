@@ -6,6 +6,7 @@ import Defaults
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var engine: AwakeEngine?
     private var statusItemController: StatusItemController?
+    private var dropdown: DropdownController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
 
@@ -38,6 +39,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { engine.systemDidWake() }
         }
 
-        statusItemController = StatusItemController(engine: engine)
+        let statusItem = StatusItemController(engine: engine)
+        let dropdown = DropdownController(engine: engine, openSettings: {})
+        statusItem.onOpenPanel = { [weak statusItem] in
+            guard let button = statusItem?.button else { return }
+            dropdown.toggle(below: button)
+        }
+        statusItemController = statusItem
+        self.dropdown = dropdown
     }
 }

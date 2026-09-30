@@ -19,6 +19,7 @@ targets:
     platform: macOS
     sources:
       - App/Sources
+      - App/UI
       - App/Assets.xcassets
       - Helper/Shared
       - App/Helper
