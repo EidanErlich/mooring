@@ -7,7 +7,7 @@
 
 ## Files taken
 
-None (reference only).
+None (reference only). Stage 1b reimplemented, without copying, what these files do: the duration set (`ActivationSpecs.swift`), the idle-sleep assertion calls (`PowerAssertion.swift`), and the disable-after-wake and launch-at-login handling (`ChaiApp.swift`).
 
 ## Modifications
 

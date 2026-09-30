@@ -14,6 +14,7 @@
 | `AwaykeHelper/Info.plist` | `Helper/Info.template.plist` |
 | `AwaykeHelper/daemonphantom.Awayke.Helper.plist` | `Helper/dev.mooring.helper.plist` |
 | `Awayke/HelperManager.swift` | `App/Helper/HelperClient.swift` |
+| `Awayke/DisplayWakeKeeper.swift` | `Packages/AwakeKit/Sources/AwakeKit/Assertions.swift` (stage 1b) |
 
 ## Modifications
 
@@ -22,3 +23,4 @@
 - The protocol gains `lidSleepDisabled` (reads `pmset -g`) and `version`; `setSleepDisabled` is renamed `setLidSleepDisabled`, and the `pmset` call moves to `Helper/Sources/PMSet.swift` with fixed argument arrays.
 - `HelperClient`: `@MainActor`, Swift 6 strict concurrency, async calls guarded so each continuation resumes exactly once; a pending approval is not treated as a registration error.
 - The osascript admin-password fallback (`Awayke/PowerManager.swift`) is not carried over.
+- `Assertions.swift` (from `DisplayWakeKeeper`): merged with an idle-system-sleep assertion; both named "Mooring"; creates or releases each only when its desired state changes.
