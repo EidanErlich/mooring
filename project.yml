@@ -4,6 +4,12 @@ options:
   deploymentTarget:
     macOS: "14.0"
   developmentLanguage: en
+packages:
+  Defaults:
+    url: https://github.com/sindresorhus/Defaults
+    exactVersion: 9.0.9
+  AwakeKit:
+    path: Packages/AwakeKit
 configFiles:
   Debug: Config/Shared.xcconfig
   Release: Config/Shared.xcconfig
@@ -27,6 +33,8 @@ targets:
         link: false
         copy:
           destination: executables
+      - package: Defaults
+      - package: AwakeKit
     settings:
       base:
         PRODUCT_NAME: Mooring
