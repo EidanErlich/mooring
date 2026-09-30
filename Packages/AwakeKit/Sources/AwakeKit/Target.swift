@@ -32,6 +32,8 @@ public struct PowerSnapshot: Equatable, Sendable {
     }
 }
 
+// The signature is fixed by docs/SPEC.md (Core types); the guardrails in 1c use every input.
+// swiftlint:disable function_parameter_count
 /// The effective state for a set of leases: the per-flag union over live leases.
 /// `power`, `thermal`, `lidClosed` and `settings` feed the guardrails, which
 /// arrive in stage 1c; until then no suspensions are produced.
@@ -48,3 +50,4 @@ public func target(
         suspensions: []
     )
 }
+// swiftlint:enable function_parameter_count

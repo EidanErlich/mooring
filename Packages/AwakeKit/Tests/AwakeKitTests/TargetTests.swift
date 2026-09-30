@@ -3,14 +3,14 @@ import Foundation
 import Testing
 
 private let now = Date(timeIntervalSince1970: 1_000_000)
-private let ac = PowerSnapshot(onAC: true, batteryPercent: nil)
+private let onAC = PowerSnapshot(onAC: true, batteryPercent: nil)
 
 private func lease(_ id: String, _ level: AwakeLevel, expiresAt: Date? = nil) -> Lease {
     Lease(id: id, owner: .menu, reason: "r", level: level, expiresAt: expiresAt, createdAt: now)
 }
 
 private func run(_ leases: [Lease]) -> TargetState {
-    target(leases: leases, power: ac, thermal: .nominal, lidClosed: nil, settings: AwakeSettings(), now: now)
+    target(leases: leases, power: onAC, thermal: .nominal, lidClosed: nil, settings: AwakeSettings(), now: now)
 }
 
 struct TargetTests {
