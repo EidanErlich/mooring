@@ -40,6 +40,20 @@ targets:
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
         DEVELOPMENT_TEAM: $(MOORING_TEAM)
+  MooringHelperTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Helper/Tests
+      - Helper/Sources/PMSet.swift
+      - Helper/Sources/ClientRequirement.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.helper.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
+        DEVELOPMENT_TEAM: $(MOORING_TEAM)
 schemes:
   Mooring:
     build:
@@ -48,3 +62,4 @@ schemes:
     test:
       targets:
         - MooringTests
+        - MooringHelperTests
