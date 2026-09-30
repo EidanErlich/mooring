@@ -1,0 +1,9 @@
+# Default rules (docs/SPEC.md). Vendored targets get excluded here as they arrive.
+included:
+  - App
+  - Packages
+excluded:
+  - build
+  - Packages/*/.build
+line_length:
+  warning: 140

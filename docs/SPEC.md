@@ -428,7 +428,7 @@ Level 3 vendors Loop's window engine into a `WindowKit` package and runs it insi
 - Its own menu-bar icon, dock tile (`LoopDockTile`), About window and onboarding. Mooring's dropdown gains a Windows section instead.
 - Its updater (`LoopUpdaterHelper`, ZIPFoundation). Mooring has one updater for the whole app (Appendix).
 - Settings migration code for old Loop versions.
-- Loop's settings window, rebuilt as the Windows settings group inside Mooring's settings. Loop's `Luminare` UI package is kept for those pages, since about 85 Loop files import it.
+- Loop's settings window, rebuilt as the Windows settings group inside Mooring's settings. Loop's `Luminare` UI package is kept for those pages, since 36 Loop files import it.
 
 Dependencies kept: `Defaults` (shared with Maccy and level 1), `Scribe` (logging; replaced with Mooring's `os.Logger` if the port is small).
 
@@ -538,7 +538,7 @@ Level 4 vendors Maccy as a `ClipKit` package, off by default, with the same stor
 
 ### 4.2 What gets removed from Maccy
 
-- **App Intents** (`Intents/Get.swift`, `Select.swift`, `Delete.swift`, `Clear.swift`). "Get" and "Select" would let Shortcuts, and anything that can run `shortcuts run`, read the history. All four are deleted, not hidden.
+- **App Intents** (all six files in `Intents/`, including `Get.swift`, `Select.swift`, `Delete.swift`, `Clear.swift`). "Get" and "Select" would let Shortcuts, and anything that can run `shortcuts run`, read the history. All are deleted, not hidden.
 - Its menu-bar icon, updater (Sparkle moves up to the app level), App Store review prompt and About window.
 - The `defaults write … ignoreEvents` switch, replaced by the Pause menu item.
 
@@ -596,7 +596,7 @@ Recording history needs no permission. Auto-paste needs **Accessibility**, the s
   - Official Homebrew casks now reject apps that fail Gatekeeper (Chai is being removed for this), so Homebrew means a project tap only.
   - The helper's caller check (1.5) pins the signing certificate's hash instead of a Team ID.
   - Accessibility grants (levels 3 and 4) are tied to the signature, so the signing identity must stay the same across updates or users re-grant after every update.
-- **Spike before level 1 build-out:** confirm that `SMAppService.daemon` registers and runs a helper signed with a self-signed or personal-team certificate on macOS 14, 15, 26 and 27 (the owner's M4 Pro runs 27). If it doesn't, lid mode falls back to a one-time `sudo mooring install-helper` that installs a launchd daemon the classic way.
+- **Spike before level 1 build-out:** confirm that `SMAppService.daemon` registers and runs a helper signed with a self-signed or personal-team certificate on macOS 14, 15 and 26 (the owner's M4 Pro runs 26). If it doesn't, lid mode falls back to a one-time `sudo mooring install-helper` that installs a launchd daemon the classic way.
 - **Updates:** Sparkle with an EdDSA-signed appcast on GitHub Pages; Sparkle's own signature check works without Developer ID. The update check is the only network access and is opt-in on first launch. Build-from-source users update with `git pull && make install`.
 - **Uninstall:** Settings → Advanced → "Uninstall…" restores sleep, unregisters the helper and login item, removes the CLI symlink, and offers to delete clipboard history.
 
@@ -606,7 +606,7 @@ Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL
 
 - [ ] Is the 2-minute grace after `Stop` long enough for background shells Claude starts? Measure on real sessions in stage 2.
 - [ ] Keep Loop's `Luminare` settings UI, or rebuild the Windows pages in plain SwiftUI for consistency? Decide at the start of stage 3.
-- [ ] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 27? Answered by the stage 1 spike.
+- [ ] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 26? Answered by the stage 1 spike.
 
 ### C. Milestones
 
@@ -628,13 +628,13 @@ This section tells a coding agent exactly how to build Mooring. Read the whole s
 | Item | Value |
 | --- | --- |
 | Owner | Eidan Erlich, GitHub `EidanErlich` |
-| Repo | `github.com/EidanErlich/mooring` (public) |
+| Repo | `github.com/EidanErlich/mooring` (private for now; decided 2026-09-30) |
 | License | GPL-3.0-only; upstream MIT notices kept |
 | App name / CLI | Mooring / `mooring` |
 | Bundle IDs | App `dev.mooring.app`; helper `dev.mooring.helper` (also its Mach service name); CLI `dev.mooring.cli` |
-| Dev and test machine | MacBook Pro, Apple M4 Pro, macOS 27 |
+| Dev and test machine | MacBook Pro, Apple M4 Pro, macOS 26 (Tahoe) |
 | Deployment target | macOS 14 |
-| Toolchain | Current Xcode release for macOS 27; Swift 6 language mode with strict concurrency |
+| Toolchain | Xcode 26 (26.6 as of 2026-09-30); Swift 6 language mode with strict concurrency |
 | Signing | Free Apple ID personal team (Apple Development certificate); no Developer ID, no notarization |
 
 ### Repository setup
@@ -703,7 +703,7 @@ Code is copied without git history, from these exact commits:
 ### Menu-bar icon
 
 - An anchor: outline when off, filled when on; badges and the attention dot as in the UX section.
-- If SF Symbols on macOS 27 includes an anchor, use it and its `.fill` variant. Otherwise draw an original vector: `MenubarAnchor` and `MenubarAnchorFill` in `Assets.xcassets`, 18 × 18 pt, rendered as template images.
+- If SF Symbols on macOS 26 includes an anchor, use it and its `.fill` variant. Otherwise draw an original vector: `MenubarAnchor` and `MenubarAnchorFill` in `Assets.xcassets`, 18 × 18 pt, rendered as template images.
 - App icon: a placeholder anchor on a rounded square until a designed icon exists.
 
 ### Engineering decisions (authoritative)
@@ -715,6 +715,8 @@ If anything earlier in this spec conflicts with this subsection, this subsection
 - First-party code (App, Helper, CLI, the `AwakeKit` and `MooringIPC` targets) uses Swift 6 with strict concurrency.
 - Swift language mode is set per SwiftPM target, not per file, so vendored code lives in its own targets set to `swiftLanguageModes: [.v5]`: `AwaykeMonitors` (inside the AwakeKit package: `LidMonitor`, `BatteryMonitor`, `LidSessionTracker`, `AutoOffPolicy`), `WindowKit`, `ClipKit`. `AwakeKit` depends on `AwaykeMonitors`. Minimal edits to compile (`@unchecked Sendable`, `nonisolated(unsafe)`) are allowed and logged in `UPSTREAM.md`.
 - SwiftPM layout is standard: `Packages/<Package>/Package.swift`, `Sources/<Target>/`, `Tests/<Target>Tests/`. The Awayke file-map destinations therefore mean `Packages/AwakeKit/Sources/AwaykeMonitors/<File>.swift` for the four files above and `Packages/AwakeKit/Sources/AwakeKit/` for the rest.
+- **One `Defaults` version for the whole app: 9.x** (decided 2026-09-30). Loop requires Defaults ≥ 9.0 and Maccy pins 8.2.x; SwiftPM links only one version, so the app, WindowKit and ClipKit all use 9.x.
+- Awayke's `AutoOffPolicy` has a manual-override input (`overridden`, `shouldKeepOverride`) and tests for it. Mooring has no one-off override (see Guardrail settings), so the port drops both.
 - Tests use Swift Testing. Awayke's custom-runner tests are ported to it. `make test` runs `swift test` in each package plus `xcodebuild test` for the app scheme. Stage 0 adds one trivial test per package so the command passes.
 - The app's `Info.plist` sets `LSUIElement = YES` (no Dock icon).
 - SwiftLint runs via `make lint` and as a non-blocking CI step: default rules, `line_length` warning at 140, vendored targets excluded.
@@ -794,7 +796,7 @@ struct AwakeSettings: Codable, Equatable {
 - **"While an app runs…"** lists `NSWorkspace.shared.runningApplications` with `activationPolicy == .regular`, with icons.
 - **Settings window:** plain SwiftUI `NavigationSplitView` with the sidebar from the UX section. Items from 1.9 map to: helper, AC requirement, thresholds, thermal → Awake › Lid & Battery; notifications → General; logs, diagnostics, uninstall → Mooring › Advanced. Luminare is used only for the Windows pages in stage 3.
 - **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
-- **Icon:** check the SF Symbols app on macOS 27 for an anchor symbol and its `.fill` variant; if there is none, ship custom template assets in stage 0. Badges are small symbols composited at the bottom right: `laptopcomputer` (lid mode), `battery.25` (on battery), a 5 pt dot (attention).
+- **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. Badges are small symbols composited at the bottom right: `laptopcomputer` (lid mode), `battery.25` (on battery), a 5 pt dot (attention).
 
 **Stage 2 details**
 
@@ -807,13 +809,15 @@ struct AwakeSettings: Codable, Equatable {
 **Stage 3 additions to the Loop file map**
 
 - Also take `Shared/`, `Core/Multitouch/` (needed for gestures), `Settings Window/Loop/` (Advanced and Excluded Apps pages; About is dropped), and adapt `SettingsContentView.swift`, `SettingsTab.swift` and `SettingsWindowManager.swift` into the Windows settings group. Use `App/` as wiring reference only.
-- Dependencies: Luminare (imported by about 85 Loop files, so it stays), Scribe, Defaults, Subsurface.
+- Dependencies: Luminare (imported by 36 Loop files, so it stays), Scribe (57 files), Defaults, Subsurface (7 files). Loop tracks Luminare, Scribe and Subsurface on their `main` branches with no committed `Package.resolved`, so stage 3 picks and pins exact revisions.
+- Also take `Accent Color/` (wallpaper-derived accent colours, used by the radial menu theming), which the Take list above omits. `Core/LoopManager.swift` references `Updater` and `IconManager`; remove those calls when vendoring.
 - Undo keeps the last 10 arrangements in memory (window id → previous frame); it is lost on quit.
 
 **Stage 4 additions to the Maccy file map**
 
 - Also take `GlobalHotKey.swift`, `ItemsProtocol.swift`, `Notifier.swift`, `PinsPosition.swift`, `PopupPosition.swift`, `SearchVisibility.swift`, `Selection.swift`, `VoiceOver.swift`, `Sounds/`, and `History.xcdatamodeld`. `Intents/` has six files; all are left out.
 - Dependencies: Defaults, KeyboardShortcuts, Sauce, swift-log, SwiftHEXColors, Fuse (fuzzy search). Maccy's Settings and LaunchAtLogin packages are not needed.
+- Maccy pins Defaults 8.2.x; Mooring uses Defaults 9 (see Engineering decisions), so ClipKit is ported to the Defaults 9 API and the edits are logged in `UPSTREAM.md`.
 - Store file: `~/Library/Application Support/Mooring/Clipboard/Storage.sqlite`.
 - Default ignored apps (bundle ids): `com.1password.1password`, `com.agilebits.onepassword7`, `com.bitwarden.desktop`, `com.apple.keychainaccess`, `com.apple.Passwords`, `org.keepassxc.keepassxc`.
 - Skipping copies while Secure Keyboard Entry is on (`IsSecureEventInputEnabled()`) is new code, not in Maccy.
@@ -823,7 +827,7 @@ struct AwakeSettings: Codable, Equatable {
 - Sparkle appcast at `https://eidanerlich.github.io/mooring/appcast.xml`. The EdDSA private key stays in the owner's Keychain, never in the repo or CI; releases are signed on the owner's Mac.
 - Keep the same personal-team signing certificate across releases so Accessibility grants survive updates; if it ever changes, the release notes tell users to re-grant.
 
-**Gates between levels** (the roadmap diagram in the Appendix): a level is done only when its stages' owner checkpoints below have passed.
+**Gates between levels** (Appendix C, Milestones): a level is done only when its stages' owner checkpoints below have passed.
 
 ### Stages
 

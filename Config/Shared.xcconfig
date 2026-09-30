@@ -1,0 +1,11 @@
+// Build settings shared by every target. Machine-specific signing belongs in
+// Local.xcconfig (gitignored); see Local.xcconfig.example.
+
+MACOSX_DEPLOYMENT_TARGET = 14.0
+SWIFT_VERSION = 6.0
+
+// Ad-hoc signing ("Sign to Run Locally") unless Local.xcconfig names a certificate.
+MOORING_SIGN_IDENTITY = -
+MOORING_TEAM =
+
+#include? "Local.xcconfig"

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Private repo: macOS minutes are metered, so drop superseded runs.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Bootstrap
+        run: make bootstrap
+      - name: Build (unsigned)
+        run: make build XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO"
+      - name: Unit tests
+        run: make test XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO"
+      - name: Lint (non-blocking)
+        run: make lint
+        continue-on-error: true
