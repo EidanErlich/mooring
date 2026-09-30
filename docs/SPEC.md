@@ -201,19 +201,22 @@ The helper is a launchd daemon registered with `SMAppService.daemon(plistName:)`
 ```swift
 // Helper/Shared/MooringHelperProtocol.swift, compiled into both the app and the helper
 @objc protocol MooringHelperProtocol {
-  func setLidSleepDisabled(_ disabled: Bool, reply: @escaping (NSError?) -> Void)
-  func lidSleepDisabled(reply: @escaping (Bool) -> Void)   // reads `pmset -g` SleepDisabled
-  func heartbeat(reply: @escaping () -> Void)             // app calls every 30 s while lid mode is on (1.6)
-  func version(reply: @escaping (String) -> Void)
+  func setLidSleepDisabled(_ disabled: Bool, reply: @escaping @Sendable (NSError?) -> Void)
+  func lidSleepDisabled(reply: @escaping @Sendable (Bool, NSError?) -> Void)  // reads `pmset -g` SleepDisabled; error set if the read fails
+  func heartbeat(reply: @escaping @Sendable () -> Void)   // added in stage 1c: app calls every 30 s while lid mode is on (1.6)
+  func version(reply: @escaping @Sendable (String) -> Void)
 }
 ```
 
+Stage 1a ships the three methods other than `heartbeat`, which joins with the watchdog in stage 1c.
+
 It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client reach a shell. Target size is under 250 lines, with no dependencies, so anyone can audit it.
 
-**Caller validation, in two layers.** Awayke embeds an `SMAuthorizedClients` requirement in the helper's Info.plist but its listener accepts every connection. Mooring adds the check in code:
+**Caller validation.** Awayke embeds an `SMAuthorizedClients` requirement in the helper's Info.plist but its listener accepts every connection. Mooring enforces it:
 
-- `listener.setConnectionCodeSigningRequirement(req)` (macOS 13+), where `req` is `identifier "dev.mooring.app" and certificate leaf = H"<SHA-1 of the app's signing certificate>"`. A build script writes the hash into the helper at build time (Build brief → Engineering decisions). The same string goes in the helper's `SMAuthorizedClients`. Only the signed Mooring app can connect; the CLI and MCP server never talk to the helper directly.
-- In `shouldAcceptNewConnection`, also check the connection's audit token with `SecCodeCopyGuestWithAttributes` + `SecCodeCheckValidity` against the same requirement.
+- `listener.setConnectionCodeSigningRequirement(req)` (macOS 13+), where `req` is `identifier "dev.mooring.app" and certificate leaf = H"<SHA-1 of the app's signing certificate>"`. The system evaluates it against the connecting process's audit token and drops any other caller before the helper's code runs (observed 2026-09-30: "Dropping check-in message due to code signing requirement", status -67050). A build script writes the requirement into the helper's embedded `SMAuthorizedClients` (Build brief → Engineering decisions), and the helper reads it back from there at launch. Only the signed Mooring app can connect; the CLI and MCP server never talk to the helper directly.
+- If no valid requirement is embedded (unsigned or ad-hoc builds), the helper refuses every connection.
+- A second, manual audit-token check in `shouldAcceptNewConnection` was dropped (decided 2026-09-30): `NSXPCConnection` has no public audit-token API on macOS 26, and the listener requirement above already performs that check.
 
 ### 1.6 Never stuck awake
 
@@ -606,7 +609,7 @@ Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL
 
 - [ ] Is the 2-minute grace after `Stop` long enough for background shells Claude starts? Measure on real sessions in stage 2.
 - [ ] Keep Loop's `Luminare` settings UI, or rebuild the Windows pages in plain SwiftUI for consistency? Decide at the start of stage 3.
-- [ ] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 26? Answered by the stage 1 spike.
+- [x] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 26? **Yes** (stage 1a spike, 2026-09-30, macOS 26.3.1): registered from the Debug build in DerivedData, approved once in Login Items & Extensions, flipped `disablesleep` with no password, and kept working after a rebuild without re-approval. The `sudo mooring install-helper` fallback is not needed.
 
 ### C. Milestones
 
@@ -725,9 +728,9 @@ If anything earlier in this spec conflicts with this subsection, this subsection
 **Helper and signing**
 
 - `Helper/Shared/MooringHelperProtocol.swift` is compiled into both the app and the helper. `MooringIPC` holds only the socket format, so the helper has no dependencies.
-- `scripts/write-helper-requirement.sh` runs as a build phase: it reads the SHA-1 of the certificate signing the app and writes `identifier "dev.mooring.app" and certificate leaf = H"<sha1>"` into the helper's `SMAuthorizedClients` and into a generated Swift constant used by `setConnectionCodeSigningRequirement`. In CI (`CODE_SIGNING_ALLOWED=NO`) it writes a placeholder and the build defines `MOORING_UNSIGNED`, which only the CI build uses.
+- `scripts/write-helper-requirement.sh` runs as a pre-build phase of `MooringHelper`: it takes the SHA-1 of the signing certificate from `EXPANDED_CODE_SIGN_IDENTITY` and writes `identifier "dev.mooring.app" and certificate leaf = H"<sha1>"` into the helper's `SMAuthorizedClients`, in a plist embedded with `-sectcreate __TEXT __info_plist`. The helper reads it back at launch and passes it to `setConnectionCodeSigningRequirement`; there is no generated Swift constant. Ad-hoc and unsigned builds (CI, `CODE_SIGNING_ALLOWED=NO`) get the placeholder `MOORING_UNSIGNED`, and the helper then refuses every connection, so no compile flag is needed.
 - **Spike fallback (stage 1a, only if `SMAppService` registration fails):** stage 1a also builds a minimal `mooring install-helper` that copies the helper to `/Library/PrivilegedHelperTools/dev.mooring.helper`, writes `/Library/LaunchDaemons/dev.mooring.helper.plist` (same label and Mach service), and runs `launchctl bootstrap system` on it, under `sudo`.
-- **Stage 1a debug control:** in Debug builds only, right-clicking the icon shows a native `NSMenu` with "Disable lid sleep", "Enable lid sleep" and "Read SleepDisabled". Stage 1b replaces it with the dropdown panel.
+- **Stage 1a debug control:** in Debug builds only, right-clicking (or Control-clicking) the icon shows a native `NSMenu` with the helper status, "Approve lid mode…" until the helper is enabled, "Disable lid sleep", "Enable lid sleep" and "Read SleepDisabled" (disabled until approval), and Quit. Stage 1b replaces it with the dropdown panel.
 
 **Core types (AwakeKit)**
 

@@ -14,7 +14,7 @@ make run         # Debug build, then launches the app; look for the anchor in th
 make test        # unit tests for every package and the app
 ```
 
-Builds are ad-hoc signed by default. To sign with your own Apple Development certificate, which lid mode will need, copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and fill it in.
+Builds are ad-hoc signed by default. Lid mode needs a build signed with your own Apple Development certificate (copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` and fill it in), plus a one-time approval of Mooring in System Settings → General → Login Items & Extensions.
 
 Other commands:
 
