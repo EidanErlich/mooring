@@ -71,3 +71,11 @@ final class NoProcesses: ProcessInspecting {
     func startTime(of pid: Int32) -> Date? { nil }
     func watchExit(of pid: Int32, onExit: @escaping @MainActor () -> Void) -> any ProcessWatch { Watch() }
 }
+
+/// Every pid is alive and never exits.
+@MainActor
+final class AliveProcesses: ProcessInspecting {
+    private final class Watch: ProcessWatch { func cancel() {} }
+    func startTime(of pid: Int32) -> Date? { Date(timeIntervalSince1970: 1) }
+    func watchExit(of pid: Int32, onExit: @escaping @MainActor () -> Void) -> any ProcessWatch { Watch() }
+}
