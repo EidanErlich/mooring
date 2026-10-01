@@ -106,7 +106,15 @@ Settings → General can swap left and right click for people who want the dropd
 
 **What On means** is set in Settings → Awake → "When I click the icon": level (system, screen on, or lid), duration (until turned off, or 30 min to 8 h), and "end after the Mac sleeps". Defaults: system level, until turned off.
 
-**Icon states:** off (anchor outline), on (anchor filled), on + lid mode (filled anchor with a small closed-lid badge), lid mode on battery (battery badge), attention (dot: helper needs approval, guardrail paused lid mode, or permission missing).
+**Icon states** (redesigned 2026-10-01; full design in `docs/superpowers/specs/2026-10-01-menu-bar-icon-design.md`):
+
+| State | Icon |
+| --- | --- |
+| Off | Dimmed outline anchor |
+| Awake | Solid pill: anchor, an inverted **LID** tag while lid sleep is actually disabled, and one kind label for the lease that ends last: `1:12` / `42m` (timed), ▶ (a task: an app, command or agent), ∞ (until turned off) |
+| Attention | Orange pill with a white **!**: a guardrail paused something, or lid mode waits on helper approval |
+
+Small badges are not used: at menu-bar size they don't read. Settings → General can hide the countdown.
 
 ### The dropdown is a custom panel, not a native menu
 
@@ -707,7 +715,7 @@ Code is copied without git history, from these exact commits:
 
 ### Menu-bar icon
 
-- An anchor: outline when off, filled when on; badges and the attention dot as in the UX section.
+- Off is a dimmed outline anchor; awake is a solid template pill (anchor, LID tag, kind label cut out); attention is an orange "!" pill. See the UX section's Icon states.
 - If SF Symbols on macOS 26 includes an anchor, use it and its `.fill` variant. Otherwise draw an original vector: `MenubarAnchor` and `MenubarAnchorFill` in `Assets.xcassets`, 18 × 18 pt, rendered as template images.
 - App icon: a placeholder anchor on a rounded square until a designed icon exists.
 
@@ -801,7 +809,7 @@ struct AwakeSettings: Codable, Equatable {
 - **"While an app runs…"** lists `NSWorkspace.shared.runningApplications` with `activationPolicy == .regular`, with icons.
 - **Settings window:** plain SwiftUI `NavigationSplitView` with the sidebar from the UX section. Items from 1.9 map to: helper, AC requirement, thresholds, thermal → Awake › Lid & Battery; notifications → General; logs, diagnostics, uninstall → Mooring › Advanced. Luminare is used only for the Windows pages in stage 3.
 - **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
-- **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. Badges are small symbols composited at the bottom right: `laptopcomputer` (lid mode), `battery.25` (on battery), a 5 pt dot (attention).
+- **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. The badge symbols and the 5 pt dot described for stages 1b/1c are superseded by the menu-bar icon redesign (2026-10-01).
 - **Stage 1b scope** (decided 2026-09-30):
   - The lid rows ("Until I open the lid", "Allow lid close"), the icon badges, the attention dot and the Lid & Battery and Advanced settings pages ship in stage 1c with the lid level.
   - The dropdown's Windows and Clipboard rows appear with stages 3 and 4.
