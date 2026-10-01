@@ -70,21 +70,55 @@ struct RequestHandlerOpsTests {
         #expect(wireFailure(response) == WireError(code: .badRequest, message: "Missing lease id"))
     }
 
-    @Test func offReleasesOnlyCli() async {
+    @Test func offEndsTheMenuSessionAndPickedApps() async {
         let fixture = RequestFixture()
-        fixture.engine.acquire(id: "menu", owner: .menu, reason: "x", level: .system, duration: nil)
-        fixture.engine.acquire(id: "anchor-5", owner: .cli(pid: 1), reason: "x", level: .system, duration: nil, watchPID: 5)
-        _ = await fixture.acquire(.on)
-
+        fixture.engine.acquire(id: "menu", owner: .menu, reason: AwakeEngine.menuReason, level: .system, duration: nil)
         let first = await fixture.release(.off)
         #expect(releasedFlag(first) == true)
-        #expect(fixture.lease("cli") == nil)
-        #expect(fixture.lease("menu") != nil)
-        #expect(fixture.lease("anchor-5") != nil)
+        #expect(fixture.engine.leases.isEmpty)
 
+        fixture.engine.anchor(whileAppRuns: 42, appName: "Xcode")
+        fixture.engine.anchor(whileAppRuns: 43, appName: "Safari")
         let second = await fixture.release(.off)
-        #expect(second.ok)
-        #expect(releasedFlag(second) == false)
+        #expect(releasedFlag(second) == true)
+        #expect(fixture.engine.leases.isEmpty)
+    }
+
+    @Test func offLeavesAgentLeasesAndAnchors() async {
+        let fixture = RequestFixture()
+        _ = await fixture.acquire(.on)
+        _ = await fixture.acquire(.lease, id: "job", ttl: 600, agent: "claude-code")
+        _ = await fixture.acquire(.anchor, watchPid: 5)
+
+        let response = await fixture.release(.off)
+
+        #expect(releasedFlag(response) == true)
+        #expect(fixture.lease("menu") == nil)
+        #expect(fixture.lease("job") != nil)
+        #expect(fixture.lease("anchor-5") != nil)
+    }
+
+    @Test func offReleasesALegacyCliLease() async {
+        let fixture = RequestFixture()
+        fixture.engine.acquire(id: "cli", owner: .cli(pid: 1), reason: "mooring on", level: .system, duration: nil)
+        fixture.engine.acquire(id: "anchor-5", owner: .cli(pid: 1), reason: "x", level: .system, duration: nil, watchPID: 5)
+
+        let response = await fixture.release(.off)
+
+        #expect(releasedFlag(response) == true)
+        #expect(fixture.lease("cli") == nil)
+        #expect(fixture.lease("anchor-5") != nil)
+    }
+
+    @Test func offWhenNothingIsOnSaysAlreadyOff() async {
+        let fixture = RequestFixture()
+        fixture.engine.acquire(id: "anchor-5", owner: .cli(pid: 1), reason: "x", level: .system, duration: nil, watchPID: 5)
+
+        let response = await fixture.release(.off)
+
+        #expect(response.ok)
+        #expect(releasedFlag(response) == false)
+        #expect(fixture.lease("anchor-5") != nil)
     }
 
     // MARK: - validation
@@ -110,7 +144,7 @@ struct RequestHandlerOpsTests {
         let response = await fixture.acquire(.on, level: "lid")
 
         #expect(wireFailure(response) == WireError(code: .guardrail, message: "Paused: battery low"))
-        #expect(fixture.lease("cli") != nil)
+        #expect(fixture.lease("menu") != nil)
     }
 
     @Test func guardrailMessagesFollowTheirOrder() async {
@@ -164,7 +198,7 @@ struct RequestHandlerOpsTests {
             duration: nil, watchPID: 9
         )
         fixture.engine.acquire(id: "mcp-1", owner: .mcp(client: "Cursor"), reason: "x", level: .system, duration: 600)
-        _ = await fixture.acquire(.on)
+        _ = await fixture.acquire(.anchor, watchPid: 5)
 
         let response = await fixture.send(.status)
 
@@ -172,7 +206,7 @@ struct RequestHandlerOpsTests {
             Issue.record("expected a status result, got \(response)")
             return
         }
-        #expect(status.summary == "On · screen on · lid mode paused · until turned off")
+        #expect(status.summary == "On · screen on · lid mode paused · while 2 apps run")
         #expect(status.effective == LevelInfo(system: true, display: true, lid: false))
         #expect(status.systemAssertion)
         #expect(status.displayAssertion)
@@ -184,7 +218,7 @@ struct RequestHandlerOpsTests {
         #expect(status.lidClosed == false)
         #expect(status.helper == "enabled")
         #expect(status.suspensions == ["lidNeedsAC", "lowBatteryLid"])
-        #expect(status.leases.map(\.id) == ["menu", "anchor-9", "mcp-1", "cli"])
+        #expect(status.leases.map(\.id) == ["menu", "anchor-9", "mcp-1", "anchor-5"])
 
         let menu = status.leases[0]
         #expect(menu.owner == OwnerInfo(kind: "menu", name: "Menu bar"))

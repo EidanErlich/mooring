@@ -35,6 +35,8 @@ final class RequestHandler {
     private let readHelperSleepDisabled: @MainActor () async -> Bool?
     private let now: @MainActor () -> Date
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
+    /// The id `mooring on` used before it became the menu's On switch.
+    private static let legacyCLILeaseID = "cli"
 
     init(
         engine: AwakeEngine, settings: @escaping @MainActor () -> AwakeSettings,
@@ -51,6 +53,8 @@ final class RequestHandler {
     func handle(_ request: Request, from caller: Caller) async -> Response {
         do {
             switch request.args {
+            case .acquire(let args) where args.kind == .on:
+                return .success(id: request.id, .acquire(try turnOn(args)))
             case .acquire(let args): return .success(id: request.id, .acquire(try acquire(args, from: caller)))
             case .renew(let args): return .success(id: request.id, .renew(try renew(args)))
             case .release(let args): return .success(id: request.id, .release(try release(args)))
@@ -80,7 +84,10 @@ final class RequestHandler {
     private func acquire(_ args: AcquireArgs, from caller: Caller) throws -> MooringIPC.AcquireResult {
         let plan = try plan(for: args, from: caller)
         let current = now()
-        let granted = try grantedDuration(for: plan, liveLeases: engine.leases.filter { $0.isLive(at: current) }.count)
+        let granted = try grantedDuration(
+            for: plan, liveLeases: engine.leases.filter { $0.isLive(at: current) }.count,
+            exists: engine.leases.contains { $0.id == plan.id }
+        )
         guard let outcome = engine.acquire(
             id: plan.id, owner: plan.owner, reason: plan.reason, level: plan.level, duration: granted, watchPID: plan.watchPID
         ) else {
@@ -95,6 +102,32 @@ final class RequestHandler {
         return MooringIPC.AcquireResult(lease: LeaseInfo(outcome.lease), clamped: outcome.wasClamped || cutShort)
     }
 
+    /// `mooring on`: the menu's On switch. With no flags it leaves a running session alone; with
+    /// `--for` or `--level` it replaces the session (and any picked apps), as picking a duration does.
+    private func turnOn(_ args: AcquireArgs) throws -> MooringIPC.AcquireResult {
+        let ttl = try positive(args.ttl)
+        let level = try args.level.map(parseLevel)
+        let current = now()
+        let unchanged = ttl == nil && level == nil ? engine.menuLease ?? engine.sessionApps.first : nil
+        if unchanged == nil {
+            _ = try grantedDuration(
+                for: Plan(
+                    id: AwakeEngine.menuLeaseID, owner: .menu, reason: AwakeEngine.menuReason, level: level ?? .system,
+                    ttl: ttl, watchPID: nil, caller: .trusted
+                ),
+                liveLeases: engine.leases.filter { $0.isLive(at: current) }.count, exists: engine.hasMenuSession
+            )
+            engine.turnOnMenu(duration: ttl ?? settings().clickDuration, level: level)
+        }
+        guard let lease = unchanged ?? engine.menuLease else {
+            throw WireError(code: .internal, message: "Couldn't turn on")
+        }
+        if let message = guardrailMessage(holdingBack: lease.level) {
+            throw WireError(code: .guardrail, message: message)
+        }
+        return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: false)
+    }
+
     private func plan(for args: AcquireArgs, from caller: Caller) throws -> Plan {
         let ttl = try positive(args.ttl)
         let level = try args.level.map(parseLevel)
@@ -102,11 +135,7 @@ final class RequestHandler {
             ?? .cli(pid: caller.pid)
         switch args.kind {
         case .on:
-            let defaults = settings()
-            return Plan(
-                id: "cli", owner: .cli(pid: caller.pid), reason: cleaned(args.reason) ?? "mooring on",
-                level: level ?? defaults.clickLevel, ttl: ttl ?? defaults.clickDuration, watchPID: nil, caller: .trusted
-            )
+            throw WireError(code: .internal, message: "On is not a named lease")
         case .anchor:
             guard let pid = args.watchPid else { throw WireError(code: .badRequest, message: "Missing --pid") }
             return Plan(
@@ -122,10 +151,10 @@ final class RequestHandler {
         }
     }
 
-    private func grantedDuration(for plan: Plan, liveLeases: Int) throws -> TimeInterval? {
+    private func grantedDuration(for plan: Plan, liveLeases: Int, exists: Bool) throws -> TimeInterval? {
         let result = CallerPolicy.checkAcquire(
             kind: plan.caller, id: plan.id, level: plan.level, ttl: plan.ttl, watched: plan.watchPID != nil,
-            liveLeaseCount: liveLeases, exists: engine.leases.contains { $0.id == plan.id }
+            liveLeaseCount: liveLeases, exists: exists
         )
         switch result {
         case .success(let granted): return granted
@@ -162,22 +191,32 @@ final class RequestHandler {
 
     private func release(_ args: ReleaseArgs) throws -> ReleaseResult {
         let after = try positive(args.after)
-        let id: String
         switch args.kind {
         case .off:
-            id = "cli"
+            return ReleaseResult(released: turnOff())
         case .lease:
-            guard let named = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
-            try requireUnreserved(named)
-            id = named
+            guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
+            try requireUnreserved(id)
+            guard engine.leases.contains(where: { $0.id == id }) else { return ReleaseResult(released: false) }
+            if let after {
+                engine.shorten(id: id, to: now().addingTimeInterval(after))
+            } else {
+                engine.release(id: id)
+            }
+            return ReleaseResult(released: true)
         }
-        guard engine.leases.contains(where: { $0.id == id }) else { return ReleaseResult(released: false) }
-        if args.kind == .lease, let after {
-            engine.shorten(id: id, to: now().addingTimeInterval(after))
-        } else {
-            engine.release(id: id)
+    }
+
+    /// `mooring off`: ends the menu session, as the menu's On switch does, and a `cli` lease an
+    /// earlier build may have left. Agent leases and anchors stay.
+    private func turnOff() -> Bool {
+        var ended = engine.hasMenuSession
+        engine.endMenuSession()
+        if engine.leases.contains(where: { $0.id == Self.legacyCLILeaseID }) {
+            engine.release(id: Self.legacyCLILeaseID)
+            ended = true
         }
-        return ReleaseResult(released: true)
+        return ended
     }
 
     // MARK: - status

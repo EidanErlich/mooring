@@ -40,6 +40,31 @@ struct MenuSessionTests {
         #expect(harness.engine.menuLease?.level.lid == true)
     }
 
+    @Test func turnOnMenuWithLevelReplacesTheSession() {
+        let harness = harness()
+        harness.engine.anchor(whileAppRuns: 42, appName: "Xcode")
+        harness.engine.anchor(whileAppRuns: 43, appName: "Safari")
+        harness.engine.turnOnMenu(duration: 1800, level: AwakeLevel(display: true, lid: true))
+        #expect(harness.engine.leases.map(\.id) == ["menu"])
+        #expect(harness.engine.menuLease?.level == AwakeLevel(display: true, lid: true))
+        #expect(harness.engine.menuLease?.expiresAt == harness.clock.addingTimeInterval(1800))
+        #expect(harness.engine.menuLease?.reason == AwakeEngine.menuReason)
+        #expect(harness.engine.sessionApps.isEmpty)
+    }
+
+    @Test func turnOnMenuKeepsLevelWhenNotGiven() {
+        let harness = harness()
+        harness.engine.setKeepScreenOn(true)
+        harness.engine.turnOnMenu(duration: 600, level: nil)
+        #expect(harness.engine.menuLease?.level == .screenOn)
+
+        let fresh = EngineHarness()
+        fresh.settings.clickLevel = .screenOn
+        fresh.engine.turnOnMenu(duration: nil, level: nil)
+        #expect(fresh.engine.menuLease?.level == .screenOn)
+        #expect(fresh.engine.menuLease?.expiresAt == nil)
+    }
+
     @Test func sessionTogglesApplyToEveryApp() {
         let harness = harness()
         harness.engine.anchor(whileAppRuns: 42, appName: "Xcode")

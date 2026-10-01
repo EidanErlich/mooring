@@ -3,15 +3,15 @@ import Foundation
 import MooringIPC
 
 struct OnCommand: ParsableCommand, CLICommand {
-    static let configuration = CommandConfiguration(commandName: "on", abstract: "Keep the Mac awake")
+    static let configuration = CommandConfiguration(commandName: "on", abstract: "Turn on the menu bar's On switch")
 
-    @Option(help: "system, display, lid or display,lid. Defaults to the menu bar click level.")
+    @Option(help: "system, display, lid or display,lid. Defaults to the menu session's level, else the menu bar click level.")
     var level: String?
 
     @Option(name: .customLong("for"), help: "How long: 90s, 15m, 2h or 1h30m. Defaults to the menu bar click duration.")
     var duration: String?
 
-    @Option(help: "Why, shown in the menu.")
+    @Option(help: "Ignored; the menu shows \"Turned on from the menu bar\". Accepted for compatibility.")
     var reason: String?
 
     @OptionGroup var output: OutputOptions
@@ -34,7 +34,7 @@ struct OnCommand: ParsableCommand, CLICommand {
 }
 
 struct Off: ParsableCommand, CLICommand {
-    static let configuration = CommandConfiguration(abstract: "Stop keeping the Mac awake from `mooring on`")
+    static let configuration = CommandConfiguration(abstract: "Turn off the menu bar's On switch")
 
     @OptionGroup var output: OutputOptions
 
