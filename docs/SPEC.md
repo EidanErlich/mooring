@@ -287,7 +287,7 @@ Level 2 exposes the lease engine to scripts and agents, so the Mac stays awake e
 ### 2.1 IPC between the CLI and the app
 
 - **Transport:** a Unix domain socket at `~/Library/Application Support/Mooring/mooring.sock`, directory mode `0700`, socket `0600`. The app checks the peer with `getsockopt(LOCAL_PEERCRED)` and rejects any uid other than the logged-in user's.
-- **Protocol:** newline-delimited JSON, one request and one response per line, with a `v` field for versioning. Example: `{"v":1,"op":"acquire","id":"claude-abc123","level":"lid","ttl":900,"reason":"Claude Code: fix tests","watch_pid":4121}`.
+- **Protocol:** newline-delimited JSON, one request and one response per line, with a `v` field for versioning. Example: `{"v":1,"id":"<uuid>","op":"acquire","args":{"kind":"lease","id":"claude-abc123","level":"system","ttl":900,"reason":"Claude Code: fix tests","watchPid":4121}}` (the full shape is under Engineering decisions → Socket protocol).
 - **App not running:** the CLI starts it with `open -gj -b dev.mooring.app` and waits up to 3 s for the socket. If that fails it exits with code 3 and a one-line error; it never falls back to `pmset` or `caffeinate` itself.
 - **Why a socket, not XPC:** the CLI is also invoked from hook scripts and other tools' sandboxes; a socket is simpler to call from any language, and privilege stays inside the app.
 
@@ -297,22 +297,22 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 
 | Command | Does |
 | --- | --- |
-| `mooring on [--level system\|display\|lid] [--for 2h] [--reason "…"]` | Acquire the `cli` lease (same as the menu click) |
-| `mooring off` | End the `cli` lease |
+| `mooring on [--level system\|display\|lid] [--for 2h] [--reason "…"]` | Turn on the menu's On switch: the same `menu` session a left click and the dropdown control. With no flags a running session is left alone and described; otherwise one starts at Settings → "When I click the icon". With `--for` or `--level` the session is replaced, as picking a duration in the dropdown does: picked apps are cleared, the duration is `--for` or the click duration, and the level is `--level`, else the session's level, else the click level. `--reason` is accepted and ignored (the menu shows "Turned on from the menu bar") |
+| `mooring off` | End the menu session (the `menu` lease and any picked apps), like a left click while on. Also ends a `cli` lease an earlier build left. Never touches agent leases or anchors. Idempotent: prints "Already off" and exits 0 when nothing was on |
 | `mooring anchor [--level …] [--reason …] -- <command …>` | Lease tied to the child process; exits with the child's exit code |
 | `mooring anchor --pid <pid> [--level …]` | Lease until that process exits |
 | `mooring lease acquire <id> (--ttl 15m \| --watch-pid <pid>\|auto) [--level …] [--reason …] [--agent "<name>"]` | Named lease; needs `--ttl` or `--watch-pid`; re-acquiring an existing id renews it |
 | `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
 | `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
 | `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]` |
-| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, lid sleep matches what Mooring wants (read through the app and helper; the CLI never runs `pmset`), Claude plugin installed (arrives in 2b). Exits 1 if any check fails |
+| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Claude plugin installed (arrives in 2b). Exits 1 if any check fails |
 | `mooring mcp` | Run the MCP server over stdio (2.5; arrives in 2c) |
 
 **Conventions:**
 - **Flags:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`), not before it. `--no-launch` skips starting the app (the hooks use it).
 - **Durations:** `90s`, `15m`, `2h`, `1h30m`. A bare number, zero or an unknown unit is a usage error.
 - **Exit codes:** 0 success; 1 usage error, `bad_request` or `not_found`; 2 request refused by a guardrail or by policy (the reason is printed); 3 app unreachable; 4 `internal`.
-- **Owner label:** "Terminal" by default. With `--watch-pid auto` it is the agent's name (`claude` → "Claude Code", `codex` → "Codex", otherwise the process name). `--agent "<name>"` overrides it.
+- **Owner label:** "Terminal" by default for `anchor` and `lease` without an agent (`on` and `off` act on the menu session, labelled "Menu bar"). With `--watch-pid auto` it is the agent's name (`claude` → "Claude Code", `codex` → "Codex", otherwise the process name). `--agent "<name>"` overrides it.
 - **Watching:** `--watch-pid auto` resolves the nearest ancestor process that isn't a shell, which for a hook or Claude's Bash tool is the Claude Code process.
 
 **For agents** (also in `mooring --help`): two patterns, callable from any agent's shell.
@@ -407,7 +407,7 @@ The MCP server never has clipboard tools; its window tools arrive with level 3 (
 | Until turned off | Allowed, like the menu | Not allowed: `--ttl` or `--watch-pid` is required |
 | Max length | Engine max (12 h) | 4 h, including a watched lease with no TTL; renewable while renewals keep arriving |
 | `lid` level | Allowed (guardrails apply), like the menu | Refused (`denied`) until approvals arrive in 2c; then ask each time by default (see Agent control and approvals) |
-| Ids | `cli`, `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`; reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused |
+| Ids | `menu` (`on`, `off`), `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`; reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused |
 | Max concurrent leases | 32 live leases; a socket request past that gets exit code 2 (the menu is never refused) | Same |
 | Reason text | Trimmed to 80 characters, control characters stripped before display | Same |
 | Guardrails (1.7) | Always win; the caller is told in the response | Same |
@@ -674,7 +674,7 @@ This section tells a coding agent exactly how to build Mooring. Read the whole s
 make bootstrap    # brew install xcodegen swiftlint; xcodegen generate
 make build        # Debug build of the Mooring scheme
 make test         # all unit test targets
-make install      # Release build to /Applications, CLI symlink at ~/.local/bin/mooring
+make install      # Release build to /Applications (Settings → General → Install command-line tool creates the ~/.local/bin/mooring symlink)
 make reset-sleep  # sudo pmset -a disablesleep 0 (manual safety valve)
 make uninstall    # restore sleep, unregister helper, remove app and symlink
 ```
@@ -811,7 +811,7 @@ struct AwakeSettings: Codable, Equatable {
 
 - **Suspensions** are engine state; leases are never modified by guardrails. They show in the status line and as the orange attention pill. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
 - **Guardrail settings:** lid threshold 20% and all-leases threshold 10% by default; each can be set to Off. There is no one-off override beyond these settings and the lid-on-battery opt-in.
-- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease. The dropdown's *menu session* is either the `menu` lease or one or more `app-<pid>` leases, never both; the On toggle and left click end the whole session.
+- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease. The dropdown's *menu session* is either the `menu` lease or one or more `app-<pid>` leases, never both; the On toggle and left click end the whole session, and `mooring on` and `mooring off` act on that same session. `cli` is no longer an active id: it stays reserved, and `mooring off` ends one an earlier build left.
 - **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the menu session (the `menu` lease whatever its duration, and any picked apps) and never touches agent leases.
 - `leases.json` is written with mode `0600`.
 

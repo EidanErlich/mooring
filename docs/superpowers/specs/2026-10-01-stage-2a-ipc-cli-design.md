@@ -14,7 +14,7 @@ SPEC.md 2.1, 2.2, 2.6 and Engineering decisions ("Socket protocol") already fix 
 
 | Question | Decision |
 | --- | --- |
-| How far to trust commands typed in a terminal before approvals exist (2c) | **Like the menu.** `on`, `off` and `anchor` may run until turned off and may use lid mode. Named `lease` leases (what agents use) keep the 2.6 limits: a 4 h cap, and lid refused until 2c. |
+| How far to trust commands typed in a terminal before approvals exist (2c) | **Like the menu.** `on`, `off` and `anchor` may run until turned off and may use lid mode. `on` and `off` are the menu's On switch (the `menu` session), not a separate lease. Named `lease` leases (what agents use) keep the 2.6 limits: a 4 h cap, and lid refused until 2c. |
 | Where "Install command-line tool" puts `mooring` | **`~/.local/bin`, no password.** If that folder isn't on PATH, Settings shows the line to add to `~/.zshrc`. |
 | Agents holding the Mac awake for a whole job | **Agent holds**: a named lease tied to the agent's own process, released by the agent when everything is done (below). |
 | Lease rows rebuilt on every change (deferred from #6) | **Fold the fix in**: rows update in place by id. |
@@ -69,7 +69,7 @@ Pure and in AwakeKit, applied by the request handler:
 | Until turned off | Allowed | Not allowed: `--ttl` or `--watch-pid` is required |
 | Max length | Engine max (12 h) | 4 h, including a watched lease with no TTL. Renewable. |
 | Lid level | Allowed (guardrails apply) | `denied` until 2c |
-| Ids | `cli`, `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`. Reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused as `bad_request`. |
+| Ids | `menu` (`on`, `off`), `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`. Reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused as `bad_request`. |
 | Lease count | A socket request that would take the table past 32 live leases gets `denied`. The menu is never refused. | Same |
 | Reason | Trimmed to 80 characters, control characters stripped | Same |
 
@@ -88,12 +88,12 @@ Shared behaviour:
   - 3: app unreachable;
   - 4: `internal`.
 - **Durations:** `90s`, `15m`, `2h`, `1h30m`. A bare number, zero, a negative or an unknown unit is a usage error.
-- **Owner label:** "Terminal" (`.cli(pid:)`) by default. With `--watch-pid auto` it is `.agent(name:)`, named after the watched process: `claude` → "Claude Code", `codex` → "Codex", otherwise the process name. `--agent "<name>"` (trimmed to 40 characters) overrides it.
+- **Owner label:** "Terminal" (`.cli(pid:)`) by default, which applies to `anchor` and `lease` without an agent; `on` and `off` act on the menu session, labelled "Menu bar". With `--watch-pid auto` it is `.agent(name:)`, named after the watched process: `claude` → "Claude Code", `codex` → "Codex", otherwise the process name. `--agent "<name>"` (trimmed to 40 characters) overrides it.
 
 | Command | Lease | Behaviour |
 | --- | --- | --- |
-| `on [--level] [--for] [--reason]` | `cli` | Level and duration default to Settings → "When I click the icon". Re-running replaces it. Separate from the menu session: a left click doesn't end it. |
-| `off` | releases `cli` | Idempotent: exits 0 when already off. Never touches the menu session or anchors. |
+| `on [--level] [--for] [--reason]` | `menu` (owner `.menu`, reason "Turned on from the menu bar") | The menu's On switch: the same session a left click and the dropdown control. With no flags a running session is left alone and its lease is returned (the first picked app's lease when apps are picked); with none, one starts at the click defaults, as a left click does. With `--for` and/or `--level` the session is replaced, like picking a duration in the dropdown: picked apps are cleared, the duration is `--for` or the click duration, and the level is `--level`, else the session's level, else the click level. `--reason` is accepted and ignored. |
+| `off` | ends the menu session | Ends the `menu` lease and any picked apps, like a left click while on. Also releases a `cli` lease an earlier build left. Idempotent: prints "Already off" and exits 0 when nothing was on. Never touches agent leases or anchors. |
 | `anchor [--level] [--reason] -- <cmd …>` | `anchor-<childpid>`, watched | Checks the app is reachable first, so it fails fast with 3. The child inherits stdio, the working directory and the environment. INT, TERM and HUP are forwarded to it. Exits with the child's code. Level defaults to `system`, reason to the command line (trimmed). |
 | `anchor --pid <pid>` | `anchor-<pid>`, watched | Returns immediately. Exits 1 if the process isn't running. |
 | `lease acquire <id> (--ttl … \| --watch-pid <pid>\|auto) [--level] [--reason] [--agent]` | `<id>` | Policy above. Re-acquiring renews. |
@@ -102,7 +102,7 @@ Shared behaviour:
 | `status [--json]` | | See below. |
 | `doctor [--json]` | | See below. |
 
-**Guardrails.** If a guardrail holds back what was asked (lid mode while the battery is low, for example), the lease is still created and takes effect when the guardrail lifts. The CLI prints why ("Lid mode paused: battery low") and exits 2.
+**Guardrails.** If a guardrail holds back what was asked (lid mode while the battery is low, for example), the lease is still created and takes effect when the guardrail lifts. The CLI prints why ("Lid mode paused: battery low") and exits 2. The message also says the lease is held and how to end it (`mooring lease release <id>` or `mooring off`), so a caller that sees exit 2 still knows to release.
 
 **`status`** in human form:
 
@@ -110,7 +110,7 @@ Shared behaviour:
 On · lid mode · 1h 12m left
 Leases (3)
   Menu bar      Turned on from the menu bar   1h 12m left
-  Terminal      mooring on                    until turned off
+  Terminal      sleep 20                      while running
   Claude Code   Churn analysis                while running · 4h cap
 Battery 64% · Thermal nominal · Lid open · Helper enabled
 Paused: lid mode (battery low)
@@ -121,7 +121,7 @@ Paused: lid mode (battery low)
 - `summary` (the dropdown's first line, for example "On · lid mode · 1h 12m left");
 - `effective {system, display, lid}`;
 - `systemAssertion`, `displayAssertion` and `lidSleepDisabled` (read through the helper);
-- `helperSleepDisabled` and `wantsLid` (what `doctor` compares);
+- `helperSleepDisabled` (what `doctor` compares with `lidSleepDisabled`) and `wantsLid` (some live lease asks for lid mode);
 - `leases[]`, each with `id`, `owner {kind, name}`, `reason`, `level`, `expiresAt` (ISO 8601 or null), `watchPid` and `ttl`;
 - `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper` and `suspensions[]`.
 
@@ -130,7 +130,7 @@ Paused: lid mode (battery low)
 1. The app answers on the socket.
 2. `mooring` on PATH resolves to this app's binary. Fix: Settings → Install command-line tool, or the PATH line.
 3. The helper is approved.
-4. Lid sleep matches what Mooring wants. Lid sleep disabled with no lid lease means it is stuck; fix: quit and reopen Mooring, which restores sleep. This reading comes from the app's status, which asks the helper; the CLI never runs `pmset`.
+4. The helper's reading of lid sleep matches the engine's applied state (`lidSleepDisabled`). Lid sleep disabled with no lid lease means it is stuck; fix: quit and reopen Mooring, which restores sleep. This reading comes from the app's status, which asks the helper; the CLI never runs `pmset`.
 5. Claude plugin: "–, arrives in 2b".
 
 Exit 0 when nothing failed, 1 otherwise.
