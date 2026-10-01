@@ -4,6 +4,7 @@ import SwiftUI
 
 struct GeneralSettingsPage: View {
     @Default(.swapClickActions) private var swapClickActions
+    @Default(.notifyGuardrails) private var notifyGuardrails
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchError: String?
 
@@ -14,6 +15,9 @@ struct GeneralSettingsPage: View {
                 if let launchError {
                     Text(launchError).font(.caption).foregroundStyle(.red)
                 }
+            }
+            Section {
+                Toggle("Notify me when a guardrail pauses awake", isOn: $notifyGuardrails)
             }
             Section {
                 Toggle("Swap left and right click", isOn: $swapClickActions)

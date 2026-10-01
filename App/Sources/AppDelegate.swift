@@ -32,6 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.lid = lid
         self.engine = engine
+        engine.onSuspensionsAdded = { GuardrailNotifier.post($0) }
         startMonitors(engine)
         engine.restore()
 
