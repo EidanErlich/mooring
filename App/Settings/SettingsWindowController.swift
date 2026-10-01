@@ -9,6 +9,7 @@ final class SettingsWindowController {
 
     /// Set once at launch, for the pages that read engine state (diagnostics).
     var engine: AwakeEngine?
+    var lid: LidController?
 
     private lazy var window: NSWindow = {
         let window = NSWindow(

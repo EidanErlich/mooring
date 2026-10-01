@@ -20,10 +20,23 @@ final class HelperService: NSObject, NSXPCListenerDelegate, MooringHelperProtoco
     private let queue = DispatchQueue(label: "dev.mooring.helper.watchdog")
     private var watchdog = Watchdog()
     private var timer: DispatchSourceTimer?
+    private var termination: DispatchSourceSignal?
+    /// Root-owned record that the helper set SleepDisabled, so ownership survives a reboot or crash.
+    private let marker = URL(fileURLWithPath: "/Library/Application Support/Mooring/helper-owns-sleep")
 
     init(clientRequirement: String?) {
         self.clientRequirement = clientRequirement
         super.init()
+        let owning = FileManager.default.fileExists(atPath: marker.path) && (try? readSleepDisabled()) == true
+        watchdog.didStart(owningSleep: owning, at: Date())
+        // launchd sends SIGTERM on unregister, logout, kickstart -k and shutdown.
+        signal(SIGTERM, SIG_IGN)
+        termination = DispatchSource.makeSignalSource(signal: SIGTERM, queue: queue)
+        termination?.setEventHandler { [weak self] in
+            if self?.watchdog.sleepDisabledByUs == true { self?.restore(reason: "the helper is being stopped") }
+            exit(0)
+        }
+        termination?.resume()
         timer = DispatchSource.makeTimerSource(queue: queue)
         timer?.schedule(deadline: .now() + 2, repeating: 2)
         timer?.setEventHandler { [weak self] in self?.checkWatchdog() }
@@ -32,12 +45,26 @@ final class HelperService: NSObject, NSXPCListenerDelegate, MooringHelperProtoco
 
     private func checkWatchdog() {
         guard watchdog.shouldRestore(at: Date()) else { return }
+        restore(reason: "the app disconnected or stopped sending heartbeats")
+    }
+
+    private func restore(reason: String) {
         do {
             _ = try PMSet.run(PMSet.disableSleepArguments(false))
             watchdog.didRestore()
-            log.notice("watchdog restored sleep: the app disconnected or stopped sending heartbeats")
+            recordOwnership(false)
+            log.notice("watchdog restored sleep: \(reason, privacy: .public)")
         } catch {
             log.error("watchdog restore failed: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    private func recordOwnership(_ owned: Bool) {
+        if owned {
+            try? FileManager.default.createDirectory(at: marker.deletingLastPathComponent(), withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: marker.path, contents: nil)
+        } else {
+            try? FileManager.default.removeItem(at: marker)
         }
     }
 
@@ -64,6 +91,7 @@ final class HelperService: NSObject, NSXPCListenerDelegate, MooringHelperProtoco
         do {
             _ = try PMSet.run(PMSet.disableSleepArguments(disabled))
             watchdog.didSetSleepDisabled(disabled, at: Date())
+            recordOwnership(disabled)
             log.notice("disablesleep set to \(disabled ? 1 : 0, privacy: .public)")
             reply(nil)
         } catch {
@@ -90,8 +118,10 @@ final class HelperService: NSObject, NSXPCListenerDelegate, MooringHelperProtoco
 
     func heartbeat(reply: @escaping @Sendable (Bool) -> Void) {
         queue.async {
-            self.watchdog.didHeartbeat(at: Date())
-            reply((try? self.readSleepDisabled()) ?? false)
+            let sleepDisabled = (try? self.readSleepDisabled()) ?? false
+            self.watchdog.didHeartbeat(at: Date(), sleepDisabled: sleepDisabled)
+            if sleepDisabled { self.recordOwnership(true) }
+            reply(sleepDisabled)
         }
     }
 

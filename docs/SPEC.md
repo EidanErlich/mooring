@@ -208,7 +208,7 @@ The helper is a launchd daemon registered with `SMAppService.daemon(plistName:)`
 }
 ```
 
-`heartbeat` replies with the real `SleepDisabled`, so the app notices a helper that restarted and lost lid mode, and re-applies it.
+`heartbeat` replies with the real `SleepDisabled`, and a heartbeat that finds it `1` hands ownership back to a helper that restarted (`SleepDisabled` persists; only the helper's memory of having set it is lost). The app sends one at once whenever it starts heartbeating, so its watchdog covers a crash right away.
 
 It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client reach a shell. Target size is under 250 lines of code, not counting comments and blank lines (183 at stage 1c), with no dependencies, so anyone can audit it.
 
@@ -224,9 +224,9 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 `disablesleep` survives a crash, so cleanup can't live only in the app. Four layers:
 
 1. **Helper watchdog.** The helper records whether it set `disablesleep 1`. When the app's XPC connection invalidates (quit, crash, force-kill), the helper waits 10 s for a reconnect, then sets it back to 0 on its own.
-2. **App heartbeat.** While lid mode is on, the app pings the helper every 30 s. No ping for 90 s → the helper restores sleep. This catches a hung app whose connection is still open. Both are checked every 2 s on the helper's serial queue, which also runs every `pmset` write, so a restore never races a client request; the helper only restores sleep it disabled itself (stage 1c).
+2. **App heartbeat.** While lid mode is on, the app pings the helper every 30 s. No ping for 90 s → the helper restores sleep. This catches a hung app whose connection is still open. Both are checked every 2 s on the helper's serial queue, which also runs every `pmset` write, so a restore never races a client request; the helper only restores sleep it disabled itself (stage 1c). The helper records ownership in a root-owned marker (`/Library/Application Support/Mooring/helper-owns-sleep`), starts at boot (`RunAtLoad`), and if it owns a `SleepDisabled = 1` at start it waits the same 10 s for the app before restoring; it also restores on the SIGTERM launchd sends for unregister, logout, `kickstart -k` and shutdown (stage 1c).
 3. **Launch reset.** On launch the app asks the helper for the current value and resets it to 0 unless a restored lease needs lid mode (Awayke does the reset unconditionally).
-4. **Quit and uninstall.** `applicationWillTerminate` restores sleep. "Uninstall helper…" in Settings restores sleep before calling `unregister()`.
+4. **Quit and uninstall.** `applicationShouldTerminate` restores sleep (waiting up to 3 s). "Uninstall helper…" in Settings restores sleep before calling `unregister()`.
 
 ### 1.7 Guardrails (enforced by the engine, not callers)
 

@@ -62,7 +62,7 @@ struct LidBatterySettingsPage: View {
     private func uninstall() {
         Task {
             do {
-                try await HelperClient.shared.uninstall()
+                try await SettingsWindowController.shared.lid?.uninstall()
                 helperError = nil
             } catch {
                 helperError = error.localizedDescription

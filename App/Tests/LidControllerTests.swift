@@ -95,3 +95,54 @@ struct LidShutdownTests {
         #expect(engine.wantsLid)
     }
 }
+
+@MainActor
+struct LidReviewFixTests {
+    /// Keeping a SleepDisabled = 1 found at launch must hand the (possibly restarted)
+    /// helper ownership right away, not 30 s later, so its watchdog covers a crash.
+    @Test func foundLidModeIsHeartbeatImmediately() async {
+        let helper = FakeLidHelper(sleepDisabled: true)
+        let controller = LidController(helper: helper)
+        await controller.settle()
+        #expect(helper.calls.contains("heartbeat"))
+    }
+
+    @Test func uninstallRestoresThenUnregisters() async {
+        let helper = FakeLidHelper()
+        let controller = LidController(helper: helper)
+        await controller.settle()
+        controller.apply(true)
+        await controller.settle()
+        try? await controller.uninstall()
+        let set = helper.calls.lastIndex(of: "set false")
+        let unregister = helper.calls.lastIndex(of: "unregister")
+        #expect(set != nil && unregister != nil && set! < unregister!)
+        #expect(controller.applied == nil)
+        #expect(!controller.isAvailable)
+    }
+
+    /// With the helper down, uninstall still unregisters (it's how the user recovers).
+    @Test func uninstallProceedsWhenRestoreFails() async {
+        let helper = FakeLidHelper(sleepDisabled: true)
+        let controller = LidController(helper: helper)
+        await controller.settle()
+        helper.failNextSet = true
+        try? await controller.uninstall()
+        #expect(helper.calls.contains("unregister"))
+    }
+
+    /// A helper that fails instantly must not make the engine retry in a tight loop;
+    /// retries wait for the 5 s tick.
+    @Test func brokenHelperIsNotHammered() async {
+        let helper = BrokenLidHelper()
+        let controller = LidController(helper: helper)
+        let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: NoProcesses(),
+                                 lid: controller, settings: { AwakeSettings() })
+        engine.restore()
+        for _ in 0..<20 {
+            await controller.settle()
+            await Task.yield()
+        }
+        #expect(helper.calls <= 3)
+    }
+}

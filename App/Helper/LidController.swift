@@ -9,6 +9,7 @@ protocol LidHelper: AnyObject {
     func setLidSleepDisabled(_ disabled: Bool) async throws
     func lidSleepDisabled() async throws -> Bool
     func heartbeat() async throws -> Bool
+    func unregister() async throws
 }
 
 extension HelperClient: LidHelper {}
@@ -79,6 +80,18 @@ final class LidController: LidApplying {
         }
     }
 
+    /// "Uninstall helper…" (docs/SPEC.md 1.6, layer 4): restores lid sleep, then
+    /// unregisters even if the restore failed, since with the helper down that is how
+    /// the user recovers. The helper also restores on the SIGTERM unregistering sends.
+    func uninstall() async throws {
+        await shutDown()
+        try await helper.unregister()
+        applied = nil
+        isShuttingDown = false
+        updateHeartbeat()
+        onChange?()
+    }
+
     /// Waits for the request in flight, if any. For tests.
     func settle() async {
         await task?.value
@@ -87,21 +100,28 @@ final class LidController: LidApplying {
     private func run(_ request: @escaping @MainActor () async -> Void) {
         guard isAvailable, !isBusy else { return }
         isBusy = true
+        let before = applied
         task = Task { @MainActor in
             await request()
             self.isBusy = false
-            self.updateHeartbeat()
-            self.onChange?()
+            // A newly armed heartbeat runs at once: a helper that restarted learns
+            // it owns a SleepDisabled = 1 it didn't set (its watchdog then covers it).
+            if self.updateHeartbeat() { await self.heartbeatNow() }
+            // Only a change reaches the engine; failures retry on its 5 s tick
+            // instead of looping on a helper that fails instantly.
+            if self.applied != before { self.onChange?() }
         }
     }
 
-    private func updateHeartbeat() {
+    /// Returns true when it just armed the timer.
+    @discardableResult
+    private func updateHeartbeat() -> Bool {
         guard applied == true else {
             heartbeatTimer?.invalidate()
             heartbeatTimer = nil
-            return
+            return false
         }
-        guard heartbeatTimer == nil else { return }
+        guard heartbeatTimer == nil else { return false }
         let timer = Timer(timeInterval: Self.heartbeatInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -110,5 +130,6 @@ final class LidController: LidApplying {
         }
         RunLoop.main.add(timer, forMode: .common)
         heartbeatTimer = timer
+        return true
     }
 }

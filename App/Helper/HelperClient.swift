@@ -73,11 +73,8 @@ final class HelperClient {
         }
     }
 
-    /// "Uninstall helper…" (docs/SPEC.md 1.6, layer 4): restores sleep first, then unregisters.
-    func uninstall() async throws {
-        if status == .enabled {
-            try await setLidSleepDisabled(false)
-        }
+    /// Unregisters the helper; `LidController.uninstall()` restores lid sleep first.
+    func unregister() async throws {
         try await service.unregister()
         connection?.invalidate()
         connection = nil

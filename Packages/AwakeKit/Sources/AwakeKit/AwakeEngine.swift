@@ -147,9 +147,12 @@ public final class AwakeEngine {
     public func restore() {
         let current = now()
         let saved = store.load()
-        let kept = LeaseRestore.restorable(saved, now: current, processes: processes)
+        // "Until I open the lid" isn't restored: the lid may have been opened while
+        // Mooring wasn't running, and the session would wait for a close that already happened.
+        let kept = LeaseRestore.restorable(saved, now: current, processes: processes).filter { !$0.endsOnLidOpen }
         for lease in saved where !kept.contains(where: { $0.id == lease.id }) {
-            let cause = lease.isLive(at: current) ? "its watched process is gone or its PID was reused" : "it expired"
+            let cause = lease.endsOnLidOpen ? "lid sessions don't survive a relaunch"
+                : lease.isLive(at: current) ? "its watched process is gone or its PID was reused" : "it expired"
             log.notice("not restoring \(lease.id, privacy: .public) (\(lease.reason, privacy: .public)): \(cause, privacy: .public)")
         }
         let latest = current.addingTimeInterval(Self.maxLeaseLength)

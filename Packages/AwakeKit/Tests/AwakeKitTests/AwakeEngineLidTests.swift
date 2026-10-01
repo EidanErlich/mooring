@@ -94,4 +94,18 @@ struct AwakeEngineLidTests {
         harness.engine.update(thermal: .critical)
         #expect(harness.engine.state.suspensions == [.thermal])
     }
+
+    /// The lid may have been opened while Mooring wasn't running; a restored
+    /// "Until I open the lid" session would wait for a close that already happened.
+    @Test func lidSessionsAreNotRestored() {
+        let harness = EngineHarness()
+        harness.store.toLoad = [
+            Lease(id: AwakeEngine.lidSessionID, owner: .menu, reason: AwakeEngine.lidSessionReason,
+                  level: lidLevel, expiresAt: nil, endsOnLidOpen: true, createdAt: harness.clock),
+            Lease(id: "menu", owner: .menu, reason: "r", level: .system, expiresAt: nil, createdAt: harness.clock)
+        ]
+        harness.engine.restore()
+        #expect(harness.engine.leases.map(\.id) == ["menu"])
+        #expect(harness.lid.requests == [])
+    }
 }

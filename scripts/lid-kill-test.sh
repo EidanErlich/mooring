@@ -6,7 +6,7 @@
 #   scripts/lid-kill-test.sh
 #
 # Needs a signed Debug build, the helper approved and running its stage 1c
-# binary, and AC power (or "Allow lid mode on battery").
+# binary, and AC power (or "Allow lid mode on battery"). The gate is 15 s.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -46,13 +46,15 @@ for _ in $(seq 1 20); do [ "$(sleep_disabled)" = 1 ] && break; sleep 0.5; done
 [ "$(sleep_disabled)" = 1 ] || { echo "FAIL: lid mode never turned on."; exit 1; }
 
 echo "Lid mode is on. Killing Mooring with kill -9."
-kill -9 "$(pgrep -x Mooring)"
+pkill -9 -x Mooring
 start=$(date +%s)
 for _ in $(seq 1 20); do
   sleep 1
   if [ "$(sleep_disabled)" = 0 ]; then
-    echo "PASS: SleepDisabled back to 0 after $(( $(date +%s) - start )) s."
-    exit 0
+    elapsed=$(( $(date +%s) - start ))
+    if [ "$elapsed" -le 15 ]; then echo "PASS: SleepDisabled back to 0 after $elapsed s."; exit 0; fi
+    echo "FAIL: SleepDisabled back to 0, but only after $elapsed s (the gate is 15 s)."
+    exit 1
   fi
 done
 echo "FAIL: SleepDisabled still 1 after 20 s."

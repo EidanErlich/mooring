@@ -16,7 +16,19 @@ struct Watchdog {
         lastHeartbeat = disabled ? now : nil
     }
 
-    mutating func didHeartbeat(at now: Date) { lastHeartbeat = now }
+    /// The app only heartbeats while it has lid mode on, so a heartbeat that finds
+    /// SleepDisabled = 1 hands ownership back to a helper that restarted.
+    mutating func didHeartbeat(at now: Date, sleepDisabled: Bool) {
+        if sleepDisabled { sleepDisabledByUs = true }
+        lastHeartbeat = now
+    }
+
+    /// At launch: a helper that owned SleepDisabled before it stopped (reboot, crash)
+    /// treats the app as gone until it reconnects.
+    mutating func didStart(owningSleep: Bool, at now: Date) {
+        sleepDisabledByUs = owningSleep
+        if owningSleep { orphanedSince = now }
+    }
 
     mutating func connectionOpened() {
         connections += 1
