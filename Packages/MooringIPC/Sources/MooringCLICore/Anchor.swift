@@ -74,7 +74,7 @@ struct AnchoredCommand {
 
     /// The child's exit code; 3 when the app can't be reached (the command never starts), 127 when it can't be spawned.
     func run() async -> Int32 {
-        guard await appIsReachable() else { return CommandRunner(env: env, options: options).unreachable() }
+        if let problem = await unavailability() { return CommandRunner(env: env, options: options).unavailable(problem) }
         let child = AnchorRun(command: command)
         let pid: Int32
         do {
@@ -91,16 +91,17 @@ struct AnchoredCommand {
         }
     }
 
-    /// False only when the app is unreachable; any other failure is left for the acquire to report.
-    private func appIsReachable() async -> Bool {
+    /// Why the app can't be used (not running, not answering or blocked), or nil when it can; any other
+    /// failure is left for the acquire to report.
+    private func unavailability() async -> CLIError? {
         let request = Request(v: WireProtocol.version, id: env.newID(), op: .status, args: .status)
         do {
             _ = try await env.client.send(request, launch: !options.noLaunch)
-            return true
-        } catch CLIError.unreachable {
-            return false
+            return nil
+        } catch let error as CLIError where error.unavailableMessage != nil {
+            return error
         } catch {
-            return true
+            return nil
         }
     }
 
@@ -123,6 +124,10 @@ struct AnchoredCommand {
             problem = error.message
         } catch CLIError.unreachable {
             problem = "Mooring isn't running"
+        } catch CLIError.noAnswer {
+            problem = "Mooring didn't answer"
+        } catch CLIError.blocked {
+            problem = "permission denied"
         } catch {
             problem = "Couldn't talk to Mooring"
         }

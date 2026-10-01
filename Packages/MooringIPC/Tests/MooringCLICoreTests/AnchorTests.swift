@@ -65,6 +65,20 @@ import Testing
         #expect(harness.capture.stderr == "mooring: Mooring isn't running and couldn't be started\n")
     }
 
+    @Test func anchorCommandDoesNotStartWhenTheAppIsNotAnswering() async throws {
+        let folder = try makeTempFolder()
+        defer { try? FileManager.default.removeItem(atPath: folder) }
+        for error in [CLIError.noAnswer, .blocked] {
+            let marker = folder + "/marker-\(error)"
+            let harness = Harness(client: RecordingClient(reply: .failure(error)))
+            #expect(await harness.run(["anchor", "--", "touch", marker]) == 3)
+            try await Task.sleep(for: .milliseconds(200))
+            #expect(!FileManager.default.fileExists(atPath: marker))
+            #expect(harness.client.requests.map(\.op) == [.status])
+            #expect(harness.capture.stderr.hasPrefix("mooring: "))
+        }
+    }
+
     @Test func anchorCommandAcquiresWithTheChildPid() async throws {
         let harness = Harness()
         #expect(await harness.run(["anchor", "--level", "display", "--agent", "Make", "--", "sh", "-c", "exit 5"]) == 5)

@@ -59,7 +59,7 @@ public struct SocketClient: RequestSending, Sendable {
         let timeout = replyTimeout
         let reply = try await onGlobalQueue { try SocketExchange.exchange(line, at: path, timeout: timeout) }
         guard let reply else { return nil }
-        guard let response = try? WireCoding.decodeResponse(reply, op: op) else { throw CLIError.unreachable }
+        guard let response = try? WireCoding.decodeResponse(reply, op: op) else { throw CLIError.noAnswer }
         return response
     }
 
@@ -74,7 +74,8 @@ public struct SocketClient: RequestSending, Sendable {
 /// The blocking POSIX calls behind `SocketClient`.
 private enum SocketExchange {
     /// Sends `line` and reads one reply line, or returns nil when no server is listening at `path`.
-    /// Every other failure, including a timeout, a reply over `WireCoding.maxLineBytes` and EOF before a newline, is `unreachable`.
+    /// A connect refused for permission is `blocked` and any other connect failure is `unreachable`. Once connected,
+    /// a failed write, a timeout, a reply over `WireCoding.maxLineBytes` and EOF before a newline are `noAnswer`.
     static func exchange(_ line: Data, at path: String, timeout: TimeInterval) throws -> Data? {
         guard var address = address(for: path) else { throw CLIError.unreachable }
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -90,6 +91,7 @@ private enum SocketExchange {
         if connected != 0 {
             switch errno {
             case ENOENT, ECONNREFUSED, ENOTSOCK: return nil
+            case EPERM, EACCES: throw CLIError.blocked
             default: throw CLIError.unreachable
             }
         }
@@ -116,7 +118,7 @@ private enum SocketExchange {
                 let written = write(descriptor, base + offset, buffer.count - offset)
                 if written < 0 {
                     if errno == EINTR { continue }
-                    throw CLIError.unreachable
+                    throw CLIError.noAnswer
                 }
                 offset += written
             }
@@ -130,16 +132,16 @@ private enum SocketExchange {
             let count = read(descriptor, &chunk, chunk.count)
             if count < 0 {
                 if errno == EINTR { continue }
-                throw CLIError.unreachable
+                throw CLIError.noAnswer
             }
-            guard count > 0 else { throw CLIError.unreachable }
+            guard count > 0 else { throw CLIError.noAnswer }
             if let newline = chunk[..<count].firstIndex(of: UInt8(ascii: "\n")) {
                 line.append(contentsOf: chunk[..<newline])
-                guard line.count <= WireCoding.maxLineBytes else { throw CLIError.unreachable }
+                guard line.count <= WireCoding.maxLineBytes else { throw CLIError.noAnswer }
                 return line
             }
             line.append(contentsOf: chunk[..<count])
-            guard line.count <= WireCoding.maxLineBytes else { throw CLIError.unreachable }
+            guard line.count <= WireCoding.maxLineBytes else { throw CLIError.noAnswer }
         }
     }
 

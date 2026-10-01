@@ -158,7 +158,7 @@ private let releaseReply = Response.success(id: "t", .release(ReleaseResult(rele
     #expect(counter.calls == 1)
 }
 
-@Test func silentServerTimesOut() async throws {
+@Test func silentServerIsNoAnswer() async throws {
     let folder = try makeTempFolder()
     defer { try? FileManager.default.removeItem(atPath: folder) }
     let server = LineServer(path: folder + "/s.sock", reply: nil)
@@ -168,12 +168,12 @@ private let releaseReply = Response.success(id: "t", .release(ReleaseResult(rele
     let counter = LaunchCounter()
     let client = SocketClient(path: server.path, replyTimeout: 0.5, launcher: { counter.bump() })
     let started = ContinuousClock.now
-    await #expect(throws: CLIError.unreachable) { try await client.send(releaseRequest, launch: true) }
+    await #expect(throws: CLIError.noAnswer) { try await client.send(releaseRequest, launch: true) }
     #expect(ContinuousClock.now - started < .milliseconds(1500))
     #expect(counter.calls == 0)
 }
 
-@Test func garbledReplyIsUnreachable() async throws {
+@Test func garbledReplyIsNoAnswer() async throws {
     let folder = try makeTempFolder()
     defer { try? FileManager.default.removeItem(atPath: folder) }
     let server = LineServer(path: folder + "/s.sock", reply: Data("not json\n".utf8))
@@ -181,10 +181,10 @@ private let releaseReply = Response.success(id: "t", .release(ReleaseResult(rele
     defer { server.stop() }
 
     let client = SocketClient(path: server.path, launcher: {})
-    await #expect(throws: CLIError.unreachable) { try await client.send(releaseRequest, launch: false) }
+    await #expect(throws: CLIError.noAnswer) { try await client.send(releaseRequest, launch: false) }
 }
 
-@Test func overlongReplyIsUnreachable() async throws {
+@Test func overlongReplyIsNoAnswer() async throws {
     let folder = try makeTempFolder()
     defer { try? FileManager.default.removeItem(atPath: folder) }
     let server = LineServer(path: folder + "/s.sock", reply: Data(repeating: UInt8(ascii: "a"), count: WireCoding.maxLineBytes + 10))
@@ -192,10 +192,10 @@ private let releaseReply = Response.success(id: "t", .release(ReleaseResult(rele
     defer { server.stop() }
 
     let client = SocketClient(path: server.path, launcher: {})
-    await #expect(throws: CLIError.unreachable) { try await client.send(releaseRequest, launch: false) }
+    await #expect(throws: CLIError.noAnswer) { try await client.send(releaseRequest, launch: false) }
 }
 
-@Test func endOfFileWithoutALineIsUnreachable() async throws {
+@Test func endOfFileWithoutALineIsNoAnswer() async throws {
     let folder = try makeTempFolder()
     defer { try? FileManager.default.removeItem(atPath: folder) }
     let server = LineServer(path: folder + "/s.sock", reply: Data())
@@ -203,5 +203,22 @@ private let releaseReply = Response.success(id: "t", .release(ReleaseResult(rele
     defer { server.stop() }
 
     let client = SocketClient(path: server.path, launcher: {})
-    await #expect(throws: CLIError.unreachable) { try await client.send(releaseRequest, launch: false) }
+    await #expect(throws: CLIError.noAnswer) { try await client.send(releaseRequest, launch: false) }
+}
+
+@Test func permissionDeniedIsBlocked() async throws {
+    // Root ignores directory modes, so connect would never get EACCES.
+    guard getuid() != 0 else { return }
+    let folder = try makeTempFolder()
+    defer { try? FileManager.default.removeItem(atPath: folder) }
+    let server = LineServer(path: folder + "/s.sock", reply: try WireCoding.encodeLine(releaseReply))
+    try server.start()
+    defer { server.stop() }
+    #expect(chmod(folder, 0o000) == 0)
+    defer { chmod(folder, 0o700) }
+
+    let counter = LaunchCounter()
+    let client = SocketClient(path: server.path, launchWait: 0.5, launcher: { counter.bump() })
+    await #expect(throws: CLIError.blocked) { try await client.send(releaseRequest, launch: true) }
+    #expect(counter.calls == 0)
 }

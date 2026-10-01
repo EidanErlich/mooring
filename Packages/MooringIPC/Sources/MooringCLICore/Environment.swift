@@ -3,15 +3,35 @@ import MooringIPC
 
 /// Sends one request to the running app and returns its reply.
 public protocol RequestSending: Sendable {
-    /// Throws `CLIError.unreachable` when the app can't be reached (after trying to launch it, if `launch`).
+    /// Throws `CLIError.unreachable` when the app isn't there (after trying to launch it, if `launch`),
+    /// `.noAnswer` when it was reached but didn't reply, and `.blocked` when the socket may not be opened.
     func send(_ request: Request, launch: Bool) async throws -> Response
 }
 
 public enum CLIError: Error, Equatable {
     /// The command line was wrong; the message says how.
     case usage(String)
-    /// The app didn't answer and couldn't be started.
+    /// Nothing listens on the socket and the app couldn't be started.
     case unreachable
+    /// The app accepted the connection but didn't give a usable reply; the request may have gone through.
+    case noAnswer
+    /// The system refused access to the socket, as a sandbox does.
+    case blocked
+}
+
+extension CLIError {
+    /// What is printed (and sent as the `--json` error message) when the app can't be used; nil for `.usage`.
+    /// All three are exit code 3 and the `unreachable` error code.
+    var unavailableMessage: String? {
+        switch self {
+        case .usage: nil
+        case .unreachable: "Mooring isn't running and couldn't be started"
+        case .noAnswer: "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`."
+        case .blocked:
+            "Can't reach Mooring's socket (permission denied). "
+                + "If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock"
+        }
+    }
 }
 
 /// Everything a command touches outside its own arguments, so tests can replace it.

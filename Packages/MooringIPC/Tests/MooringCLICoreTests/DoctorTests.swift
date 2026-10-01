@@ -132,6 +132,18 @@ private func runChecks(_ status: StatusResult?, pathEnv: String?, ownBinary: Str
     #expect(down.capture.stdout.contains("not running — Open Mooring\n"))
 }
 
+@Test func doctorNamesWhyTheAppIsDown() async throws {
+    let bin = try BinFolder()
+    let cases: [(CLIError, String)] = [
+        (.unreachable, "not running"), (.noAnswer, "didn't answer"), (.blocked, "permission denied")
+    ]
+    for (error, detail) in cases {
+        let harness = Harness(client: RecordingClient(reply: .failure(error)), ownBinaryPath: bin.binary, pathEnv: bin.path)
+        #expect(await harness.run(["doctor"]) == 1)
+        #expect(harness.capture.stdout.contains("\(detail) — Open Mooring\n"))
+    }
+}
+
 @Test func doctorJSON() async throws {
     let bin = try BinFolder()
     let harness = Harness(

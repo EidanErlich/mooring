@@ -116,8 +116,8 @@ struct CommandRunner {
         do {
             let response = try await env.client.send(request, launch: !options.noLaunch)
             return report(response, to: request)
-        } catch CLIError.unreachable {
-            return unreachable()
+        } catch let error as CLIError where error.unavailableMessage != nil {
+            return unavailable(error)
         } catch CLIError.usage(let message) {
             env.writeError("mooring: \(message)\n")
             return 1
@@ -145,9 +145,10 @@ struct CommandRunner {
         return WireText.exitCode(for: error.code)
     }
 
-    /// Reports that the app can't be reached, as text or `--json`, and returns exit code 3.
-    func unreachable() -> Int32 {
-        let message = "Mooring isn't running and couldn't be started"
+    /// Reports that the app can't be used (`error` is `.unreachable`, `.noAnswer` or `.blocked`), as text or `--json`,
+    /// and returns exit code 3.
+    func unavailable(_ error: CLIError) -> Int32 {
+        let message = error.unavailableMessage ?? CLIError.unreachable.unavailableMessage ?? ""
         if options.json {
             env.write(#"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
         } else {

@@ -163,6 +163,33 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
     #expect(harness.capture.stderr.isEmpty)
 }
 
+@Test func noAnswerPrintsDidntAnswer() async {
+    let message = "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`."
+    let human = Harness(client: RecordingClient(reply: .failure(.noAnswer)))
+    #expect(await human.run(["status"]) == 3)
+    #expect(human.capture.stderr == "mooring: \(message)\n")
+    #expect(human.capture.stdout.isEmpty)
+
+    let json = Harness(client: RecordingClient(reply: .failure(.noAnswer)))
+    #expect(await json.run(["status", "--json"]) == 3)
+    #expect(json.capture.stdout == #"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+    #expect(json.capture.stderr.isEmpty)
+}
+
+@Test func blockedPrintsPermissionDenied() async {
+    let message = "Can't reach Mooring's socket (permission denied). "
+        + "If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock"
+    let human = Harness(client: RecordingClient(reply: .failure(.blocked)))
+    #expect(await human.run(["status"]) == 3)
+    #expect(human.capture.stderr == "mooring: \(message)\n")
+    #expect(human.capture.stdout.isEmpty)
+
+    let json = Harness(client: RecordingClient(reply: .failure(.blocked)))
+    #expect(await json.run(["status", "--json"]) == 3)
+    #expect(json.capture.stdout == #"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+    #expect(json.capture.stderr.isEmpty)
+}
+
 @Test func noLaunchFlagIsPassedThrough() async {
     let harness = Harness()
     _ = await harness.run(["status", "--no-launch"])
