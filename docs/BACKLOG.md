@@ -1,0 +1,88 @@
+# Backlog
+
+Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
+
+## Before or during stage 2b (Claude Code plugin)
+
+- **Misleading "isn't running" error.** Every failure after a connection reads "Mooring isn't running and couldn't be started" (exit 3): a reply timeout, a sandbox refusal, the 16-connection cap. Use a distinct "Mooring didn't answer" message. After an `acquire` timeout, the lease may exist anyway.
+- **`--json` usage errors.** Usage errors print nothing on stdout under `--json`, and parse-time versus execute-time usage errors use two formats. Emit `{"ok":false,"error":{"code":"usage",…}}`. The skill will teach `--json`, so fix this first.
+- **Re-acquire replaces a hold.** Re-acquiring an id replaces its TTL, watch and owner wholesale, so a nested `--ttl 10m` turns a watched hold into a 10-minute unwatched one. Consider keeping an existing watch and never shortening the expiry.
+- **Skill guidance for `--watch-pid auto`:**
+  - always `release`;
+  - call `mooring` directly, not through wrappers, because `timeout`, `xargs`, `make`, `npx` and scripts become the watched process;
+  - an npm-installed Claude shows as "node";
+  - Claude Code's sandbox may need the socket path allowed.
+- **Human output doesn't name the watched process.**
+
+## Before stage 2c (approvals)
+
+- **Policy is advisory.** An agent can skip the named-lease limits (4 h cap, no lid) by calling `mooring on --level lid` or `mooring anchor`, because the client picks the request kind. Decide which of these approvals gate.
+
+## CLI and IPC (stage 2a leftovers)
+
+- **Silent 12 h cap on `on`.** `mooring on --for 24h` caps at 12 h without saying so (`clamped` is always false for `on`). SPEC 1.7 says the clamp is reported. It's a one-line fix in `RequestHandler.turnOn`.
+- **`on` can reply with an expired session.** With no flags, it can reply with a just-expired, not-yet-ticked menu lease, a window of up to 5 s. Filter with `isLive(at:)`.
+- **SPEC 2.2's exit-2 wording** should say "held but paused by a guardrail", not "refused".
+- **`doctor`:**
+  - its "mismatch" fix text is wrong in one direction, and a transient mismatch can show during a helper call;
+  - the Helper check fails for people who never use lid mode;
+  - it shows "not running" when the app answered with an error.
+- **Settings and install:**
+  - A regular file at `~/.local/bin/mooring` reads "Points to <own path>" in Settings; say "Not a link".
+  - `make uninstall` doesn't remove the symlink, though SPEC's Repository setup says it does.
+- **"End my session after the Mac sleeps"** now also ends a CLI `on`, which follows from the one-switch decision. Note it in the release notes.
+- **A Terminal-started menu session** shows the reason "Turned on from the menu bar".
+- **`anchor`:**
+  - Hardening: a microsecond gap between spawn and forwarding (pre-install `SIG_IGN` plus `POSIX_SPAWN_SETSIGDEF`), and a pid-reuse window in `wait()`.
+  - SIGQUIT isn't handled.
+- **Robustness:**
+  - The launch deadline uses the wall clock; use `ContinuousClock`.
+  - Unknown client errors drop the underlying error.
+  - `printJSON` returns 0 after an encode failure.
+- **Display:**
+  - `p_comm` truncates process names to 16 characters.
+  - `status` columns count characters, not display width.
+- **Socket server:**
+  - `withDeadline`'s timer lives the full second on success.
+  - There's no total per-connection deadline after the read.
+  - `accept` spins on `EMFILE`.
+  - There's no `deinit` guard if the server is released without `stop()`.
+- **Wire format:**
+  - `Request` can pair a mismatched op and args.
+  - The `Response` memberwise init allows `ok:true` with no result.
+  - There's an unused date strategy in `decodeRequest`.
+  - There's a `CodingUserInfoKey` force unwrap.
+  - Some SwiftLint disables lack a reason.
+- **Engine and policy:**
+  - A renew no-op looks like a real renewal.
+  - Reserved ids are string literals mirroring the engine constants; add a drift test.
+  - Tests use magic numbers instead of `maxLeaseLength` / `maxNamedLease`.
+- **`scripts/cli-smoke.sh`** has no cleanup trap.
+- **`CLI/main.swift`'s comment** says "flushes"; the writes are unbuffered.
+- **Test gaps:**
+  - shorten to the past followed by a tick;
+  - a TTL round trip;
+  - renewing an expired, not-yet-ticked lease;
+  - an anchor with a TTL;
+  - no flags, no session and a guardrail together;
+  - a dangling or relative symlink, and a parent that is a file;
+  - EOF without a newline, and EAGAIN on write;
+  - several lease-row changes in one sync;
+  - `statusListsOnlyLiveLeases` doesn't prove it uses the injected clock.
+
+## Dropdown menu (from #6)
+
+- **Highlight:** `highlightedID` is shared across submenus, so a submenu closing can leave a stale highlight or wipe it.
+- **Keyboard:** arrow keys stop on switch and lease rows, which draw no highlight. Return on a hosted row does nothing.
+- **Width:** a long "While … run" title can widen the menu past 300 pt, and Awake uses three different text insets.
+- **VoiceOver:** hosted menu items have empty titles, so VoiceOver may read them as blank.
+- **Status header:** it doesn't shrink back when the countdown shortens the line.
+- **Code:**
+  - `show(_:)` has no re-entrancy guard;
+  - the pending lid action isn't cleared when the menu opens;
+  - `StatusItemController.button` is dead code;
+  - the ClickRouter test name is stale;
+  - there's an unused `import SwiftUI` in `DropdownModel.swift`;
+  - lease-row sync has an unreachable "move" branch, and builds and strips "lease." strings.
+- **Tests:** no expiry-while-open test, and the 300 pt check skips the header.
+- **Docs:** the native-menu design spec header still says "awaiting owner review".

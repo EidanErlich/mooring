@@ -88,11 +88,13 @@ public final class AwakeEngine {
         }
 
         let clamped = duration.map { $0 > Self.maxLeaseLength } ?? false
-        let expiresAt = duration.map { current.addingTimeInterval(min($0, Self.maxLeaseLength)) }
+        let granted = duration.map { min($0, Self.maxLeaseLength) }
+        let expiresAt = granted.map { current.addingTimeInterval($0) }
         let existing = leases.firstIndex { $0.id == id }
         let lease = Lease(
             id: id, owner: owner, reason: reason, level: level, expiresAt: expiresAt, watch: watch,
-            endsOnLidOpen: endsOnLidOpen, createdAt: existing.map { leases[$0].createdAt } ?? current
+            endsOnLidOpen: endsOnLidOpen, createdAt: existing.map { leases[$0].createdAt } ?? current,
+            ttl: granted
         )
 
         if let existing {
@@ -113,6 +115,33 @@ public final class AwakeEngine {
         leases[index].level = level
         log.notice("changed level of \(id, privacy: .public): display \(level.display), lid \(level.lid)")
         commit()
+    }
+
+    /// Pushes the lease's expiry out to `ttl` from now (or its last TTL when `ttl` is nil),
+    /// clamped to `maxLeaseLength`. Returns nil when there is no such lease; changes nothing
+    /// when neither TTL is known.
+    @discardableResult
+    public func renew(id: String, ttl: TimeInterval?) -> Lease? {
+        guard let index = leases.firstIndex(where: { $0.id == id }) else { return nil }
+        guard let length = (ttl ?? leases[index].ttl).map({ min($0, Self.maxLeaseLength) }) else {
+            return leases[index]
+        }
+        leases[index].expiresAt = now().addingTimeInterval(length)
+        leases[index].ttl = length
+        log.notice("renewed \(id, privacy: .public)")
+        commit()
+        return leases[index]
+    }
+
+    /// Moves the lease's expiry to `date` if that is earlier than its current one (or it has none).
+    /// Returns false when there is no such lease.
+    @discardableResult
+    public func shorten(id: String, to date: Date) -> Bool {
+        guard let index = leases.firstIndex(where: { $0.id == id }) else { return false }
+        leases[index].expiresAt = min(leases[index].expiresAt ?? date, date)
+        log.notice("shortened \(id, privacy: .public)")
+        commit()
+        return true
     }
 
     public func release(id: String) {

@@ -181,4 +181,79 @@ struct AssertionFailureTests {
         #expect(engine.state.systemAssertion)
         #expect(flaky.calls.count == 2)
     }
+
+    @Test func acquireStoresTheGrantedTTL() throws {
+        let harness = EngineHarness()
+        let plain = try #require(harness.engine.acquire(id: "a", owner: .menu, reason: "r", level: .system, duration: 600))
+        #expect(plain.lease.ttl == 600)
+        let clamped = try #require(harness.engine.acquire(id: "b", owner: .menu, reason: "r", level: .system, duration: 13 * 3600))
+        #expect(clamped.lease.ttl == 43_200)
+        let open = try #require(harness.engine.acquire(id: "c", owner: .menu, reason: "r", level: .system, duration: nil))
+        #expect(open.lease.ttl == nil)
+    }
+
+    @Test func renewReusesTheLastTTL() throws {
+        let harness = EngineHarness()
+        harness.engine.acquire(id: "x", owner: .menu, reason: "r", level: .system, duration: 600)
+        harness.advance(300)
+        let renewed = try #require(harness.engine.renew(id: "x", ttl: nil))
+        #expect(renewed.expiresAt == harness.clock.addingTimeInterval(600))
+        #expect(harness.engine.leases.first == renewed)
+        #expect(harness.store.saved.first == renewed)
+    }
+
+    @Test func renewWithNewTTLReplacesIt() throws {
+        let harness = EngineHarness()
+        let created = harness.clock
+        harness.engine.acquire(id: "x", owner: .menu, reason: "r", level: .system, duration: 600)
+        harness.advance(100)
+        let renewed = try #require(harness.engine.renew(id: "x", ttl: 1800))
+        #expect(renewed.ttl == 1800)
+        #expect(renewed.expiresAt == harness.clock.addingTimeInterval(1800))
+        #expect(renewed.createdAt == created)
+        let clamped = try #require(harness.engine.renew(id: "x", ttl: 20 * 3600))
+        #expect(clamped.ttl == 43_200)
+        #expect(clamped.expiresAt == harness.clock.addingTimeInterval(12 * 3600))
+    }
+
+    @Test func renewWithoutAnyTTLChangesNothing() throws {
+        let harness = EngineHarness()
+        let before = try #require(harness.engine.acquire(id: "x", owner: .menu, reason: "r", level: .system, duration: nil)).lease
+        harness.advance(100)
+        #expect(harness.engine.renew(id: "x", ttl: nil) == before)
+        #expect(harness.engine.leases == [before])
+    }
+
+    @Test func renewOfMissingLeaseReturnsNil() {
+        let harness = EngineHarness()
+        #expect(harness.engine.renew(id: "nope", ttl: 60) == nil)
+    }
+
+    @Test func shortenOnlyMovesExpiryEarlier() throws {
+        let harness = EngineHarness()
+        harness.engine.acquire(id: "x", owner: .menu, reason: "r", level: .system, duration: 600)
+        #expect(harness.engine.shorten(id: "x", to: harness.clock.addingTimeInterval(120)))
+        #expect(harness.engine.leases.first?.expiresAt == harness.clock.addingTimeInterval(120))
+        #expect(harness.store.saved.first?.expiresAt == harness.clock.addingTimeInterval(120))
+        #expect(harness.engine.shorten(id: "x", to: harness.clock.addingTimeInterval(900)))
+        #expect(harness.engine.leases.first?.expiresAt == harness.clock.addingTimeInterval(120))
+
+        harness.engine.acquire(id: "y", owner: .menu, reason: "r", level: .system, duration: nil)
+        #expect(harness.engine.shorten(id: "y", to: harness.clock.addingTimeInterval(60)))
+        #expect(harness.engine.leases.last?.expiresAt == harness.clock.addingTimeInterval(60))
+        #expect(!harness.engine.shorten(id: "nope", to: harness.clock))
+    }
+
+    @Test func oldLeaseFilesDecodeWithoutTTL() throws {
+        let json = """
+        {"createdAt":-977307200,"endsOnLidOpen":false,"expiresAt":-977306600,"id":"old",\
+        "level":{"display":false,"lid":false},"owner":{"agent":{"name":"claude"}},"reason":"r",\
+        "watch":{"pid":42,"startTime":-977307200}}
+        """
+        let lease = try JSONDecoder().decode(Lease.self, from: Data(json.utf8))
+        #expect(lease.ttl == nil)
+        #expect(lease.id == "old")
+        #expect(lease.watch?.pid == 42)
+        #expect(lease.owner == .agent(name: "claude"))
+    }
 }

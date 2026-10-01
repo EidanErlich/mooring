@@ -35,7 +35,12 @@ extension AwakeEngine {
 
     /// A duration (nil = until turned off) replaces any picked apps.
     public func turnOnMenu(duration: TimeInterval?) {
-        let level = sessionLevel ?? settings().clickLevel
+        turnOnMenu(duration: duration, level: nil)
+    }
+
+    /// As above, at `level` when given, else at the session's level, else at the On default.
+    public func turnOnMenu(duration: TimeInterval?, level: AwakeLevel?) {
+        let level = level ?? sessionLevel ?? settings().clickLevel
         sessionApps.forEach { release(id: $0.id) }
         acquireMenu(level: level, duration: duration)
     }
@@ -71,7 +76,7 @@ extension AwakeEngine {
     }
 
     /// Ends the menu session: the `menu` lease and every picked app.
-    func endMenuSession() {
+    public func endMenuSession() {
         release(id: Self.menuLeaseID)
         sessionApps.forEach { release(id: $0.id) }
     }

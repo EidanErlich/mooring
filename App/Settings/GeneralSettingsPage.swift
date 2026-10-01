@@ -8,6 +8,8 @@ struct GeneralSettingsPage: View {
     @Default(.showTimeLeftInMenuBar) private var showTimeLeftInMenuBar
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchError: String?
+    @State private var cliState = CLIInstaller.state(link: CLIInstaller.defaultLink, target: CLIInstaller.bundledBinary)
+    @State private var cliError: String?
 
     var body: some View {
         Form {
@@ -27,9 +29,56 @@ struct GeneralSettingsPage: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            commandLineSection
         }
         .formStyle(.grouped)
+        .onAppear(perform: refreshCLIState)
         .navigationTitle("General")
+    }
+
+    private var commandLineSection: some View {
+        Section("Command-line tool") {
+            LabeledContent("Status") { Text(cliCaption).foregroundStyle(.secondary) }
+            if cliState != .installed {
+                Button(cliState == .missing ? "Install command-line tool" : "Reinstall", action: installCLI)
+            }
+            if let cliError {
+                Text(cliError).font(.caption).foregroundStyle(.red)
+            }
+            Text("If your shell can't find `mooring`, add this line to ~/.zshrc:")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Text(CLIInstaller.pathLine).font(.caption.monospaced()).textSelection(.enabled)
+                Spacer()
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(CLIInstaller.pathLine, forType: .string)
+                }
+            }
+        }
+    }
+
+    private var cliCaption: String {
+        switch cliState {
+        case .installed: "Installed at ~/.local/bin/mooring"
+        case .missing: "Not installed"
+        case .pointsElsewhere(let path): "Points to \(path)"
+        }
+    }
+
+    private func refreshCLIState() {
+        cliState = CLIInstaller.state(link: CLIInstaller.defaultLink, target: CLIInstaller.bundledBinary)
+    }
+
+    private func installCLI() {
+        do {
+            try CLIInstaller.install(link: CLIInstaller.defaultLink, target: CLIInstaller.bundledBinary)
+            cliError = nil
+        } catch {
+            cliError = error.localizedDescription
+        }
+        refreshCLIState()
     }
 
     private func setLaunchAtLogin(_ enabled: Bool) {

@@ -2,6 +2,7 @@ import Foundation
 
 /// Countdown text. Minutes round up, so a live lease never reads "0m".
 public enum DurationText {
+    // Same formatting as `CLIText.remaining` in Packages/MooringIPC/Sources/MooringCLICore/Output.swift; keep them identical.
     /// Negative time (a lease expired but not yet ticked away) reads as "0m".
     public static func remaining(_ seconds: TimeInterval) -> String {
         let minutes = Int((max(0, seconds) / 60).rounded(.up))

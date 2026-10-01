@@ -51,10 +51,14 @@ public struct Lease: Codable, Identifiable, Equatable, Sendable {
     public var watch: WatchedProcess?
     public var endsOnLidOpen: Bool
     public let createdAt: Date
+    /// The length last granted, so a renewal without a new length can reuse it.
+    /// nil for leases without an expiry and for files saved before TTLs were kept.
+    public var ttl: TimeInterval?
 
     public init(
         id: String, owner: LeaseOwner, reason: String, level: AwakeLevel,
-        expiresAt: Date?, watch: WatchedProcess? = nil, endsOnLidOpen: Bool = false, createdAt: Date
+        expiresAt: Date?, watch: WatchedProcess? = nil, endsOnLidOpen: Bool = false, createdAt: Date,
+        ttl: TimeInterval? = nil
     ) {
         self.id = id
         self.owner = owner
@@ -64,6 +68,22 @@ public struct Lease: Codable, Identifiable, Equatable, Sendable {
         self.watch = watch
         self.endsOnLidOpen = endsOnLidOpen
         self.createdAt = createdAt
+        self.ttl = ttl
+    }
+
+    /// Reads `leases.json` files written before `ttl` existed. Encoding stays synthesized,
+    /// which omits `ttl` when it is nil.
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        owner = try container.decode(LeaseOwner.self, forKey: .owner)
+        reason = try container.decode(String.self, forKey: .reason)
+        level = try container.decode(AwakeLevel.self, forKey: .level)
+        expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+        watch = try container.decodeIfPresent(WatchedProcess.self, forKey: .watch)
+        endsOnLidOpen = try container.decode(Bool.self, forKey: .endsOnLidOpen)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        ttl = try container.decodeIfPresent(TimeInterval.self, forKey: .ttl)
     }
 
     public func isLive(at now: Date) -> Bool {
