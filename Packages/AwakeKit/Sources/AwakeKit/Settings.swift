@@ -32,6 +32,47 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
     public var agentWindows = AgentWindowMode.automatic
 
     public init() {}
+
+    // Hand-written so that keys missing from older saved settings fall back to
+    // their defaults instead of failing the whole decode, and so that "Off"
+    // (nil) is written as an explicit null rather than omitted.
+    private enum CodingKeys: String, CodingKey {
+        case clickLevel, clickDuration, endMenuLeaseAfterSleep, allowLidOnBattery
+        case lidBatteryThreshold, allBatteryThreshold, thermalCutoff
+        case agentKeepAwake, agentLid, agentWindows
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = AwakeSettings()
+        func value<T: Decodable>(_ key: CodingKeys, _ fallback: T) throws -> T {
+            container.contains(key) ? try container.decode(T.self, forKey: key) : fallback
+        }
+        clickLevel = try value(.clickLevel, defaults.clickLevel)
+        clickDuration = try value(.clickDuration, defaults.clickDuration)
+        endMenuLeaseAfterSleep = try value(.endMenuLeaseAfterSleep, defaults.endMenuLeaseAfterSleep)
+        allowLidOnBattery = try value(.allowLidOnBattery, defaults.allowLidOnBattery)
+        lidBatteryThreshold = try value(.lidBatteryThreshold, defaults.lidBatteryThreshold)
+        allBatteryThreshold = try value(.allBatteryThreshold, defaults.allBatteryThreshold)
+        thermalCutoff = try value(.thermalCutoff, defaults.thermalCutoff)
+        agentKeepAwake = try value(.agentKeepAwake, defaults.agentKeepAwake)
+        agentLid = try value(.agentLid, defaults.agentLid)
+        agentWindows = try value(.agentWindows, defaults.agentWindows)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(clickLevel, forKey: .clickLevel)
+        try container.encode(clickDuration, forKey: .clickDuration)
+        try container.encode(endMenuLeaseAfterSleep, forKey: .endMenuLeaseAfterSleep)
+        try container.encode(allowLidOnBattery, forKey: .allowLidOnBattery)
+        try container.encode(lidBatteryThreshold, forKey: .lidBatteryThreshold)
+        try container.encode(allBatteryThreshold, forKey: .allBatteryThreshold)
+        try container.encode(thermalCutoff, forKey: .thermalCutoff)
+        try container.encode(agentKeepAwake, forKey: .agentKeepAwake)
+        try container.encode(agentLid, forKey: .agentLid)
+        try container.encode(agentWindows, forKey: .agentWindows)
+    }
 }
 
 /// The durations the menu and Settings offer (Chai's set, plus "Until turned off").

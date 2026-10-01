@@ -13,6 +13,8 @@ import Foundation
     func setLidSleepDisabled(_ disabled: Bool, reply: @escaping @Sendable (NSError?) -> Void)
     /// Reads `SleepDisabled` from `pmset -g`. On failure the Bool is false and the error is set.
     func lidSleepDisabled(reply: @escaping @Sendable (Bool, NSError?) -> Void)
+    /// Sent every 30 s while lid mode is on; replies with the current `SleepDisabled`.
+    func heartbeat(reply: @escaping @Sendable (Bool) -> Void)
     func version(reply: @escaping @Sendable (String) -> Void)
 }
 

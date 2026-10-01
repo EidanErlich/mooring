@@ -2,7 +2,7 @@
 
 Mooring is a free, open-source macOS menu-bar app that keeps your Mac awake, including with the lid closed, without a password prompt after a one-time approval. Scripts and coding agents drive the same engine through a `mooring` command.
 
-> **Status:** early development. Mooring keeps your Mac awake (idle and display sleep) from the menu bar: left-click the anchor to turn it on, right-click for durations, "while an app runs" and the list of what's keeping the Mac awake. Lid-closed mode is in progress. The full design is in [docs/SPEC.md](docs/SPEC.md).
+> **Status:** early development. Mooring keeps your Mac awake (idle and display sleep) from the menu bar: left-click the anchor to turn it on, right-click for durations, "while an app runs" and the list of what's keeping the Mac awake. Lid mode (keep running with the lid closed) works after a one-time approval of Mooring's helper; it pauses itself on low battery or when the Mac runs hot, and if Mooring quits or crashes the helper turns lid sleep back on within a few seconds. The full design is in [docs/SPEC.md](docs/SPEC.md).
 
 ## Build from source
 

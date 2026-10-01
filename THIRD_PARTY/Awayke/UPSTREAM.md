@@ -15,6 +15,11 @@
 | `AwaykeHelper/daemonphantom.Awayke.Helper.plist` | `Helper/dev.mooring.helper.plist` |
 | `Awayke/HelperManager.swift` | `App/Helper/HelperClient.swift` |
 | `Awayke/DisplayWakeKeeper.swift` | `Packages/AwakeKit/Sources/AwakeKit/Assertions.swift` (stage 1b) |
+| `Awayke/LidMonitor.swift` | `Packages/AwakeKit/Sources/AwaykeMonitors/LidMonitor.swift` (stage 1c) |
+| `Awayke/BatteryMonitor.swift` | `Packages/AwakeKit/Sources/AwaykeMonitors/BatteryMonitor.swift` (stage 1c) |
+| `Awayke/LidSessionTracker.swift` | `Packages/AwakeKit/Sources/AwaykeMonitors/LidSessionTracker.swift` (stage 1c) |
+| `Awayke/AutoOffPolicy.swift` | `Packages/AwakeKit/Sources/AwaykeMonitors/AutoOffPolicy.swift` (stage 1c) |
+| `Tests/main.swift` | `Packages/AwakeKit/Tests/AwaykeMonitorsTests/` (ported to Swift Testing, stage 1c) |
 
 ## Modifications
 
@@ -24,3 +29,4 @@
 - `HelperClient`: `@MainActor`, Swift 6 strict concurrency, async calls guarded so each continuation resumes exactly once; a pending approval is not treated as a registration error.
 - The osascript admin-password fallback (`Awayke/PowerManager.swift`) is not carried over.
 - `Assertions.swift` (from `DisplayWakeKeeper`): merged with an idle-system-sleep assertion; both named "Mooring"; creates or releases each only when its desired state changes.
+- `AwaykeMonitors` (stage 1c): the four files are compiled in Swift 5 language mode in their own target. Edits: `public` on the types, initializers and members Mooring uses, and a `public init() {}` on the three classes. `AutoOffPolicy` loses the `overridden` parameter and `shouldKeepOverride` (Mooring has no one-off override); the five override test cases were dropped when porting the tests.

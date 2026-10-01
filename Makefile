@@ -2,7 +2,9 @@
 
 SCHEME      := Mooring
 PROJECT     := Mooring.xcodeproj
-DERIVED     := build/DerivedData
+# Unsigned or CI-style builds must use another DERIVED (e.g. build/Unsigned):
+# this one holds the app whose signed helper is registered with launchd.
+DERIVED     ?= build/DerivedData
 APP         := Mooring.app
 INSTALL_DIR := /Applications
 PACKAGES    := Packages/AwakeKit Packages/MooringIPC

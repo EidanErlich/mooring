@@ -12,6 +12,10 @@
         <key>dev.mooring.helper</key>
         <true/>
     </dict>
+    <!-- Start at boot, so a SleepDisabled left by a reboot or crash during lid mode
+         is restored even if the app never launches (docs/SPEC.md 1.6). -->
+    <key>RunAtLoad</key>
+    <true/>
     <key>AssociatedBundleIdentifiers</key>
     <array>
         <string>dev.mooring.app</string>

@@ -59,4 +59,19 @@ struct StatusTextTests {
         #expect(LeaseText.timeLeft(lease("b"), now: now) == "Until turned off")
         #expect(LeaseText.timeLeft(lease("c", watch: WatchedProcess(pid: 1, startTime: now)), now: now) == "While running")
     }
+
+    @Test func lidModeAppearsInTheStatusLine() {
+        let lidLeases = [lease("menu", AwakeLevel(display: false, lid: true))]
+        let applied = TargetState(systemAssertion: true, displayAssertion: false, lidSleepDisabled: true, suspensions: [])
+        #expect(StatusLine.text(leases: lidLeases, state: applied, now: now) == "On · lid mode · until turned off")
+        let paused = TargetState(systemAssertion: true, displayAssertion: false, lidSleepDisabled: false,
+                                 suspensions: [.lowBatteryLid])
+        #expect(StatusLine.text(leases: lidLeases, state: paused, now: now) == "On · lid mode paused · until turned off")
+    }
+
+    /// A lease that expired while the Mac slept, before the tick removed it, never shows a negative countdown.
+    @Test func expiredCountdownFloorsAtZero() {
+        #expect(DurationText.remaining(-125) == "0m")
+        #expect(LeaseText.timeLeft(lease("a", left: -125), now: now) == "0m left")
+    }
 }

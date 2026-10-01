@@ -172,7 +172,7 @@ struct AssertionFailureTests {
     @Test func failedAssertionIsNotReportedAndIsRetried() {
         let flaky = FlakyAssertions()
         let engine = AwakeEngine(assertions: flaky, store: MemoryLeaseStore(), processes: FakeProcesses(),
-                                 settings: { AwakeSettings() }, now: { Date(timeIntervalSince1970: 1_000_000) })
+                                 lid: FakeLid(), settings: { AwakeSettings() }, now: { Date(timeIntervalSince1970: 1_000_000) })
         engine.acquire(id: "x", owner: .menu, reason: "r", level: .system, duration: nil)
         #expect(!engine.state.systemAssertion)
         engine.tick()

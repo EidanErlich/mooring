@@ -3,7 +3,7 @@ import AwakeKit
 import Defaults
 
 /// Owns Mooring's single menu-bar item: the anchor (filled while anything keeps
-/// the Mac awake) and click routing. Badges arrive in stage 1c.
+/// the Mac awake, with lid, battery and attention badges) and click routing.
 @MainActor
 final class StatusItemController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -38,12 +38,16 @@ final class StatusItemController: NSObject {
 
     /// Redraws the icon and re-arms observation of the engine's state.
     private func refresh() {
-        let isOn = withObservationTracking {
-            engine.state.systemAssertion
+        let icon = withObservationTracking {
+            IconState.from(state: engine.state, wantsLid: engine.wantsLid,
+                           helperEnabled: HelperClient.shared.status == .enabled, power: engine.power)
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
-        statusItem.button?.image = MenuBarIcon.image(filled: isOn)
-        statusItem.button?.setAccessibilityLabel(isOn ? "Mooring, on" : "Mooring, off")
+        statusItem.button?.image = MenuBarIcon.image(for: icon)
+        var label = icon.filled ? "Mooring, on" : "Mooring, off"
+        if icon.badge != .none { label += ", lid mode" }
+        if icon.attention { label += ", needs attention" }
+        statusItem.button?.setAccessibilityLabel(label)
     }
 }

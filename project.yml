@@ -37,6 +37,8 @@ targets:
           destination: executables
       - package: Defaults
       - package: AwakeKit
+      - package: AwakeKit
+        product: AwaykeMonitors
     settings:
       base:
         PRODUCT_NAME: Mooring
@@ -95,6 +97,7 @@ targets:
       - Helper/Tests
       - Helper/Sources/PMSet.swift
       - Helper/Sources/ClientRequirement.swift
+      - Helper/Sources/Watchdog.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.helper.tests

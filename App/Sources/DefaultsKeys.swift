@@ -8,4 +8,6 @@ extension Defaults.Keys {
     static let awake = Key<AwakeSettings>("awake", default: AwakeSettings())
     /// Settings → General: left click opens the dropdown, right click toggles.
     static let swapClickActions = Key<Bool>("swapClickActions", default: false)
+    /// Settings → General: post a notification when a guardrail pauses awake.
+    static let notifyGuardrails = Key<Bool>("notifyGuardrails", default: true)
 }
