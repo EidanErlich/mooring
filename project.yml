@@ -37,6 +37,8 @@ targets:
           destination: executables
       - package: Defaults
       - package: AwakeKit
+      - package: AwakeKit
+        product: AwaykeMonitors
     settings:
       base:
         PRODUCT_NAME: Mooring
