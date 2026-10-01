@@ -18,8 +18,7 @@ public enum DurationText {
 /// The dropdown's first line: "Off", or "On · …" describing the lease that ends last.
 public enum StatusLine {
     public static func text(leases: [Lease], state: TargetState, now: Date) -> String {
-        let live = leases.filter { $0.isLive(at: now) }
-        guard let last = endsLast(live) else { return "Off" }
+        guard let last = LeaseText.endingLast(leases, now: now) else { return "Off" }
         var parts = ["On"]
         if state.displayAssertion { parts.append("screen on") }
         if state.lidSleepDisabled {
@@ -37,10 +36,14 @@ public enum StatusLine {
         }
         return parts.joined(separator: " · ")
     }
+}
 
-    /// Until turned off outlasts a watched process, which outlasts any expiry.
-    /// Ties go to the earliest-created lease.
-    private static func endsLast(_ leases: [Lease]) -> Lease? {
+/// Text for one row of the Anchored list.
+public enum LeaseText {
+    /// The live lease that keeps the Mac awake longest, which the status line and
+    /// the menu-bar icon both describe. Until turned off outlasts a watched process,
+    /// which outlasts any expiry; ties go to the earliest lease.
+    public static func endingLast(_ leases: [Lease], now: Date) -> Lease? {
         func rank(_ lease: Lease) -> (Int, Date) {
             switch (lease.expiresAt, lease.watch) {
             case (nil, nil): (2, .distantFuture)
@@ -48,15 +51,12 @@ public enum StatusLine {
             case (let expiry?, _): (0, expiry)
             }
         }
-        return leases.reduce(nil) { best, lease in
+        return leases.filter { $0.isLive(at: now) }.reduce(nil) { best, lease in
             guard let best else { return lease }
             return rank(lease) > rank(best) ? lease : best
         }
     }
-}
 
-/// Text for one row of the Anchored list.
-public enum LeaseText {
     public static func owner(_ owner: LeaseOwner) -> String {
         switch owner {
         case .menu: "Menu bar"
