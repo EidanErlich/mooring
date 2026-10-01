@@ -9,8 +9,12 @@ struct SettingsPageTests {
     }
 
     @Test func clickLevelOptionsRoundTrip() {
-        #expect(ClickLevelOption.allCases.map(\.title) == ["Keep the Mac awake", "Keep the Mac and screen awake"])
+        #expect(ClickLevelOption.allCases.map(\.title)
+            == ["Keep the Mac awake", "Keep the Mac and screen awake", "Keep the Mac awake with the lid closed"])
         #expect(ClickLevelOption(level: .screenOn) == .screenOn)
         #expect(ClickLevelOption(level: .system) == .system)
+        #expect(ClickLevelOption(level: AwakeLevel(display: false, lid: true)) == .lidClosed)
+        #expect(ClickLevelOption(level: AwakeLevel(display: true, lid: true)) == .lidClosed)
+        #expect(ClickLevelOption.lidClosed.level == AwakeLevel(display: false, lid: true))
     }
 }

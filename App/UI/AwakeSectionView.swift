@@ -1,5 +1,6 @@
 import AppKit
 import AwakeKit
+import Defaults
 import SwiftUI
 
 /// The Awake section (docs/SPEC.md, UX table). Lid rows join in stage 1c.
@@ -42,9 +43,45 @@ struct AwakeSectionView: View {
             .toggleStyle(.switch)
             .padding(.horizontal, 8)
             .padding(.vertical, 2)
+            lidRows
             Divider()
             anchored
         }
+    }
+
+    /// Lid mode needs the approved helper; until then one row walks through approval.
+    @ViewBuilder
+    private var lidRows: some View {
+        if HelperClient.shared.status == .enabled {
+            Toggle(
+                "Allow lid close",
+                isOn: Binding(get: { engine.menuLease?.level.lid ?? false }, set: { enabled in
+                    guard !enabled || confirmLidOnBattery() else { return }
+                    engine.setAllowLidClose(enabled)
+                })
+            )
+            .toggleStyle(.switch)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            MenuRow(title: "Until I open the lid") {
+                guard confirmLidOnBattery() else { return }
+                engine.startLidSession()
+            }
+        } else {
+            MenuRow(title: "Approve lid mode…") {
+                try? HelperClient.shared.register()
+                HelperClient.shared.openLoginItemsSettings()
+            }
+        }
+    }
+
+    /// On battery without the opt-in, asks once. "Only on AC" still turns lid mode on;
+    /// the lidNeedsAC guardrail holds it until the Mac is plugged in.
+    private func confirmLidOnBattery() -> Bool {
+        if LidOptIn.needsConfirmation(power: engine.power, settings: Defaults[.awake]) {
+            _ = LidOptIn.confirm()
+        }
+        return true
     }
 
     private var anchored: some View {

@@ -30,14 +30,15 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
 }
 
-/// What a left click turns On with. The lid option joins in stage 1c.
+/// What a left click turns On with.
 enum ClickLevelOption: CaseIterable {
-    case system, screenOn
+    case system, screenOn, lidClosed
 
     var level: AwakeLevel {
         switch self {
         case .system: .system
         case .screenOn: .screenOn
+        case .lidClosed: AwakeLevel(display: false, lid: true)
         }
     }
 
@@ -45,11 +46,12 @@ enum ClickLevelOption: CaseIterable {
         switch self {
         case .system: "Keep the Mac awake"
         case .screenOn: "Keep the Mac and screen awake"
+        case .lidClosed: "Keep the Mac awake with the lid closed"
         }
     }
 
     init(level: AwakeLevel) {
-        self = level.display ? .screenOn : .system
+        self = level.lid ? .lidClosed : (level.display ? .screenOn : .system)
     }
 }
 
