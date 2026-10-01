@@ -74,8 +74,9 @@ final class EngineHarness {
     let assertions = RecordingAssertions()
     let store = MemoryLeaseStore()
     let processes = FakeProcesses()
+    let lid = FakeLid()
     private(set) lazy var engine = AwakeEngine(
-        assertions: assertions, store: store, processes: processes,
+        assertions: assertions, store: store, processes: processes, lid: lid,
         settings: { [unowned self] in self.settings }, now: { [unowned self] in self.clock }
     )
 
@@ -97,5 +98,32 @@ final class FlakyAssertions: AssertionApplying {
             return HeldAssertions(system: false, display: false)
         }
         return HeldAssertions(system: system, display: display)
+    }
+}
+
+/// A lid controller whose helper calls the test completes by hand.
+@MainActor
+final class FakeLid: LidApplying {
+    var isAvailable = true
+    var applied: Bool? = false
+    var isBusy = false
+    var onChange: (@MainActor () -> Void)?
+    var requests: [Bool] = []
+    var refreshCount = 0
+
+    func apply(_ disabled: Bool) {
+        requests.append(disabled)
+        isBusy = true
+    }
+
+    func refresh() {
+        refreshCount += 1
+    }
+
+    /// The helper confirms the last request.
+    func complete() {
+        applied = requests.last
+        isBusy = false
+        onChange?()
     }
 }

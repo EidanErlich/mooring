@@ -21,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let engine = AwakeEngine(
             assertions: IOPMAssertions(), store: FileLeaseStore(), processes: SystemProcesses(),
-            settings: { Defaults[.awake] }
+            lid: UnavailableLid(), settings: { Defaults[.awake] }
         )
         engine.restore()
         self.engine = engine
@@ -48,4 +48,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = statusItem
         self.dropdown = dropdown
     }
+}
+
+/// Placeholder until LidController (stage 1c, Task 5) is wired in: lid mode is never applied.
+@MainActor
+private final class UnavailableLid: LidApplying {
+    let isAvailable = false
+    let applied: Bool? = false
+    let isBusy = false
+    var onChange: (@MainActor () -> Void)?
+    func apply(_ disabled: Bool) {}
+    func refresh() {}
 }
