@@ -203,14 +203,14 @@ The helper is a launchd daemon registered with `SMAppService.daemon(plistName:)`
 @objc protocol MooringHelperProtocol {
   func setLidSleepDisabled(_ disabled: Bool, reply: @escaping @Sendable (NSError?) -> Void)
   func lidSleepDisabled(reply: @escaping @Sendable (Bool, NSError?) -> Void)  // reads `pmset -g` SleepDisabled; error set if the read fails
-  func heartbeat(reply: @escaping @Sendable () -> Void)   // added in stage 1c: app calls every 30 s while lid mode is on (1.6)
+  func heartbeat(reply: @escaping @Sendable (Bool) -> Void)   // every 30 s while lid mode is on (1.6); replies with the current SleepDisabled
   func version(reply: @escaping @Sendable (String) -> Void)
 }
 ```
 
-Stage 1a ships the three methods other than `heartbeat`, which joins with the watchdog in stage 1c.
+`heartbeat` replies with the real `SleepDisabled`, so the app notices a helper that restarted and lost lid mode, and re-applies it.
 
-It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client reach a shell. Target size is under 250 lines, with no dependencies, so anyone can audit it.
+It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client reach a shell. Target size is under 250 lines of code, not counting comments and blank lines (183 at stage 1c), with no dependencies, so anyone can audit it.
 
 **Caller validation.** Awayke embeds an `SMAuthorizedClients` requirement in the helper's Info.plist but its listener accepts every connection. Mooring enforces it:
 
@@ -224,7 +224,7 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 `disablesleep` survives a crash, so cleanup can't live only in the app. Four layers:
 
 1. **Helper watchdog.** The helper records whether it set `disablesleep 1`. When the app's XPC connection invalidates (quit, crash, force-kill), the helper waits 10 s for a reconnect, then sets it back to 0 on its own.
-2. **App heartbeat.** While lid mode is on, the app pings the helper every 30 s. No ping for 90 s → the helper restores sleep. This catches a hung app whose connection is still open.
+2. **App heartbeat.** While lid mode is on, the app pings the helper every 30 s. No ping for 90 s → the helper restores sleep. This catches a hung app whose connection is still open. Both are checked every 2 s on the helper's serial queue, which also runs every `pmset` write, so a restore never races a client request; the helper only restores sleep it disabled itself (stage 1c).
 3. **Launch reset.** On launch the app asks the helper for the current value and resets it to 0 unless a restored lease needs lid mode (Awayke does the reset unconditionally).
 4. **Quit and uninstall.** `applicationWillTerminate` restores sleep. "Uninstall helper…" in Settings restores sleep before calling `unregister()`.
 
@@ -249,7 +249,7 @@ macOS still forces sleep at critical battery regardless of `disablesleep`; the g
 
 ### 1.9 Settings window
 
-Settings use the sidebar defined in the UX section, with the mapping in Build brief → Engineering decisions → UI details. Level 1 needs: launch at login (`SMAppService.mainApp`), click action and left/right swap, On defaults (level, duration, "End my session after the Mac sleeps"), helper status with approve and uninstall, lid-on-battery opt-in, battery thresholds, thermal cutoff, notification toggles, log level, reveal logs and export diagnostics. Values are stored with the `Defaults` package.
+Settings use the sidebar defined in the UX section, with the mapping in Build brief → Engineering decisions → UI details. Level 1 needs: launch at login (`SMAppService.mainApp`), click action and left/right swap, On defaults (level, duration, "End my session after the Mac sleeps"), helper status with approve and uninstall, lid-on-battery opt-in, battery thresholds, thermal cutoff, notification toggles, log level, reveal logs and export diagnostics. Values are stored with the `Defaults` package. Stage 1c leaves out "log level": `os.Logger` levels are controlled by the system, not the app. "Reveal logs" is an Open Console button.
 
 ### 1.10 Logging and diagnostics
 
@@ -683,7 +683,7 @@ Code is copied without git history, from these exact commits:
 | --- | --- | --- |
 | `Awayke/LidMonitor.swift` | `Packages/AwakeKit/LidMonitor.swift` | None |
 | `Awayke/BatteryMonitor.swift` | `Packages/AwakeKit/BatteryMonitor.swift` | None |
-| `Awayke/AutoOffPolicy.swift` | `Packages/AwakeKit/Guardrails/AutoOffPolicy.swift` | Add thermal input and the battery opt-in |
+| `Awayke/AutoOffPolicy.swift` | `Packages/AwakeKit/Sources/AwaykeMonitors/AutoOffPolicy.swift` | Override removed. The thermal and battery-opt-in rules live in AwakeKit's `target(...)`, which uses this policy for the low-battery hysteresis (stage 1c) |
 | `Awayke/LidSessionTracker.swift` | `Packages/AwakeKit/LidSessionTracker.swift` | None |
 | `Awayke/DisplayWakeKeeper.swift` | `Packages/AwakeKit/Assertions.swift` | Merge with a system-sleep assertion |
 | `Awayke/HelperManager.swift` | `App/Helper/HelperClient.swift` | Add heartbeat and status read |
@@ -788,7 +788,7 @@ struct AwakeSettings: Codable, Equatable {
 }
 ```
 
-- **Suspensions** are engine state; leases are never modified by guardrails. They show as the status line and the attention dot. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%.
+- **Suspensions** are engine state; leases are never modified by guardrails. They show as the status line and the attention dot. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
 - **Guardrail settings:** lid threshold 20% and all-leases threshold 10% by default; each can be set to Off. There is no one-off override beyond these settings and the lid-on-battery opt-in.
 - **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease.
 - **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the `menu` lease whatever its duration and never touches agent leases.
