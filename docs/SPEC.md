@@ -52,7 +52,7 @@ mooring/
   project.yml            # XcodeGen spec (the .xcodeproj is generated, gitignored)
   Makefile
   Config/                # Shared.xcconfig, Local.xcconfig.example (Local.xcconfig gitignored)
-  App/                   # menu-bar app target: Sources/, UI/ (FloatingPanel), Helper/HelperClient.swift, Assets.xcassets, Info.plist
+  App/                   # menu-bar app target: Sources/, UI/ (DropdownMenu), Helper/HelperClient.swift, Assets.xcassets, Info.plist
   Helper/                # privileged launchd daemon: main.swift, Shared/MooringHelperProtocol.swift, plists
   CLI/                   # `mooring` executable, incl. `mooring mcp` (stdio MCP server)
   Packages/
@@ -100,7 +100,7 @@ Mooring is one menu-bar icon: a left click turns On with the user's defaults, a 
 | Left click | Toggle **On** / Off using the configured On defaults (Chai-style one click) |
 | Right click or Control-click | Open the dropdown |
 | Global hotkey (configurable) | Toggle On / Off |
-| ⇧⌘C | Open the dropdown straight to Clipboard |
+| ⇧⌘C | Open the Clipboard popup (Maccy's panel) with search focused |
 
 Settings → General can swap left and right click for people who want the dropdown on click.
 
@@ -116,16 +116,16 @@ Settings → General can swap left and right click for people who want the dropd
 
 Small badges are not used: at menu-bar size they don't read. Settings → General can hide the countdown.
 
-### The dropdown is a custom panel, not a native menu
+### The dropdown is a real menu
 
-Like Maccy, the dropdown is a non-activating floating panel (Maccy's `FloatingPanel`, an `NSPanel` subclass) drawn in SwiftUI, anchored under the icon. That's what allows a live search field, countdowns and ✕ buttons, which native `NSMenu`s can't hold. Each section opens in place, like Control Center modules, with a ‹ back arrow.
+The dropdown is an `NSMenu` opened from the status item. Native items are used where AppKit has the control, and SwiftUI views hosted in menu items (`NSMenuItem.view`) are used for the live rows: switches, ✓ rows, countdowns and ✕ buttons. Each section is a submenu. A real menu is what keeps an auto-hidden menu bar shown while it is open, which a floating panel can't do (decided 2026-10-01). The Clipboard search field moves to the Clipboard popup, which is Maccy's own panel (stage 4).
 
 ```
- ● On · lid mode · 1h 12m left
+ ● On · lid mode · 1h 12m left          hosted, live
  ─────────────────────────────────
- Awake                            ›
- Windows                          ›
- Clipboard                        ›
+ Awake                            ›     submenu
+ Windows                          ›     submenu (stage 3)
+ Clipboard                        ›     submenu (stage 4)
  ─────────────────────────────────
  Settings…                       ⌘,
  Quit Mooring                    ⌘Q
@@ -135,9 +135,11 @@ Like Maccy, the dropdown is a non-activating floating panel (Maccy's `FloatingPa
 | --- | --- |
 | **Awake** | On toggle; durations (30 min, 1 h, 2 h, 4 h, 8 h, until turned off); until I open the lid; while an app is running…; keep screen on; allow lid close (on battery: confirmation the first time); **Anchored** list of every lease with owner, reason, time left and ✕ |
 | **Windows** | The most-used actions with their shortcuts (halves, maximize, centre, next screen), More Actions, saved layouts (later), Window Manager on/off |
-| **Clipboard** | Maccy's full view: search field focused on open, history list, pins, previews; Pause Recording, Ignore Next Copy, Clear History |
+| **Clipboard** | A submenu with recent items, Pause Recording, Ignore Next Copy, Clear, and "Search… ⇧⌘C", which opens the Clipboard popup |
 
-A module that's off shows a single **Turn On…** row that walks through its permission (Accessibility), so the dropdown keeps the same shape.
+A module that's off shows a single **Turn On…** item that walks through its permission (Accessibility), so the dropdown keeps the same shape.
+
+Hosted rows stay 300 pt wide, and clicking one doesn't close the menu, so the ✓ marks, switches and icon update in view. Choosing a native item closes it.
 
 ### Settings window (Loop-style sidebar)
 
@@ -539,13 +541,13 @@ Level 4 vendors Maccy as a `ClipKit` package, off by default, with the same stor
 
 | Feature | Maccy behaviour kept |
 | --- | --- |
-| Popup | ⇧⌘C (configurable) opens the dropdown straight to the Clipboard section, with the search field focused (see UX) |
+| Popup | ⇧⌘C (configurable) opens the Clipboard popup (Maccy's panel) with search focused |
 | Search | Type to filter; exact, fuzzy and regex modes with match highlighting |
 | Copy / paste | Return copies; ⌥Return pastes; ⌥⇧Return pastes without formatting; ⌘/⌥ + number for the first items |
 | Pins | ⌥P pins an item to the top with a permanent shortcut |
 | Content types | Text, rich text, images, files, colours, with the source app's icon |
 | Delete and clear | ⌥⌫ deletes one; "Clear" removes unpinned; Clear with ⌥ removes all |
-| Pause | "Pause Recording" and "Ignore Next Copy" as rows in the Clipboard section (Maccy uses ⌥-click on its own icon for these) |
+| Pause | "Pause Recording" and "Ignore Next Copy" as items in the Clipboard submenu (Maccy uses ⌥-click on its own icon for these) |
 | History size | Default 200 items, adjustable |
 
 ### 4.2 What gets removed from Maccy
@@ -700,7 +702,7 @@ Code is copied without git history, from these exact commits:
 
 **Chai (stage 1):** reimplemented, not copied. Reference `ActivationSpecs.swift` (durations), `PowerAssertion.swift` (assertion calls) and `ChaiApp.swift` (wake handling, launch at login via `SMAppService.mainApp`).
 
-**Maccy, early (stage 1):** copy `FloatingPanel.swift` into `App/UI/` for the dropdown panel.
+**Maccy, stage 4:** copy Maccy's floating panel class into `App/UI/` for the Clipboard popup. The dropdown itself is an `NSMenu`, not a panel.
 
 **Loop → WindowKit (stage 3)**
 
@@ -740,7 +742,7 @@ If anything earlier in this spec conflicts with this subsection, this subsection
 - `Helper/Shared/MooringHelperProtocol.swift` is compiled into both the app and the helper. `MooringIPC` holds only the socket format, so the helper has no dependencies.
 - `scripts/write-helper-requirement.sh` runs as a pre-build phase of `MooringHelper`: it takes the SHA-1 of the signing certificate from `EXPANDED_CODE_SIGN_IDENTITY` and writes `identifier "dev.mooring.app" and certificate leaf = H"<sha1>"` into the helper's `SMAuthorizedClients`, in a plist embedded with `-sectcreate __TEXT __info_plist`. The helper reads it back at launch and passes it to `setConnectionCodeSigningRequirement`; there is no generated Swift constant. Ad-hoc and unsigned builds (CI, `CODE_SIGNING_ALLOWED=NO`) get the placeholder `MOORING_UNSIGNED`, and the helper then refuses every connection, so no compile flag is needed.
 - **Spike fallback (stage 1a, only if `SMAppService` registration fails):** stage 1a also builds a minimal `mooring install-helper` that copies the helper to `/Library/PrivilegedHelperTools/dev.mooring.helper`, writes `/Library/LaunchDaemons/dev.mooring.helper.plist` (same label and Mach service), and runs `launchctl bootstrap system` on it, under `sudo`.
-- **Stage 1a debug control:** in Debug builds only, right-clicking (or Control-clicking) the icon shows a native `NSMenu` with the helper status, "Approve lid mode…" until the helper is enabled, "Disable lid sleep", "Enable lid sleep" and "Read SleepDisabled" (disabled until approval), and Quit. Stage 1b replaces it with the dropdown panel.
+- **Stage 1a debug control:** in Debug builds only, right-clicking (or Control-clicking) the icon shows a native `NSMenu` with the helper status, "Approve lid mode…" until the helper is enabled, "Disable lid sleep", "Enable lid sleep" and "Read SleepDisabled" (disabled until approval), and Quit. Stage 1b replaces it with the dropdown menu.
 
 **Core types (AwakeKit)**
 
@@ -805,15 +807,14 @@ struct AwakeSettings: Codable, Equatable {
 **UI details for stage 1b**
 
 - **Clicks:** set `statusItem.button.sendAction(on: [.leftMouseUp, .rightMouseUp])` and branch on `NSApp.currentEvent`; Control-click counts as right click.
-- **Dropdown panel:** adapted from Maccy's `FloatingPanel.swift`. Remove its `AppState`, `Popup`, `PopupPosition`, preview and Maccy `Defaults` keys. Anchor it under the status item; width 320 pt; height fits content up to 70% of the screen; closes on outside click or Esc.
-- **Dropdown and an auto-hidden menu bar** (decided 2026-10-01): with "Automatically hide and show the menu bar" on, or in a full-screen Space, the bar can hide while the dropdown is open. A non-activating accessory app can't keep it shown (`presentationOptions` apply only to the active app and can hide the bar but not force it to show). The status item's window keeps its frame when the bar hides, but its occlusion state turns not-visible, and that is the signal. When the bar hides and the pointer isn't over the panel, the panel closes. When the pointer is over it, the panel moves up flush with the top of the screen, one level below the menu bar so the returning bar draws over it, and moves back under the bar when the bar returns. macOS reports the bar hidden only after it has slid away, so when "Automatically hide and show the menu bar" is on (`_HIHideMenuBar`) the panel also watches the pointer and acts as soon as it leaves the bar's strip, at the same time as the bar. If the bar is still showing a second later, the panel moves back under it.
+- **Dropdown menu:** an `NSMenu` with hosted SwiftUI rows, 300 pt wide. The status item's `menu` is set only for the click that opens the dropdown and cleared when the menu closes, so a left click still reaches the click handler. Clicks on hosted rows run their action without closing the menu. Disabled items can't be highlighted, so only the pure-text rows are disabled.
 - **"While an app runs…"** lists `NSWorkspace.shared.runningApplications` with `activationPolicy == .regular`, with icons.
 - **Settings window:** plain SwiftUI `NavigationSplitView` with the sidebar from the UX section. Items from 1.9 map to: helper, AC requirement, thresholds, thermal → Awake › Lid & Battery; notifications → General; logs, diagnostics, uninstall → Mooring › Advanced. Luminare is used only for the Windows pages in stage 3.
 - **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
 - **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. The badge symbols and the 5 pt dot described for stages 1b/1c are superseded by the menu-bar icon redesign (2026-10-01).
 - **Stage 1b scope** (decided 2026-09-30):
   - The lid rows ("Until I open the lid", "Allow lid close"), the Lid & Battery and Advanced settings pages ship in stage 1c (icon states were later redesigned, 2026-10-01) with the lid level.
-  - The dropdown's Windows and Clipboard rows appear with stages 3 and 4.
+  - The dropdown's Windows and Clipboard submenus appear with stages 3 and 4.
   - The global on/off hotkey and the Shortcuts page come later (the default is none).
   - The status line reads `Off`, `On · until turned off`, `On · 1h 12m left`, `On · screen on · 1h 12m left` or `On · while Xcode runs`; it describes the lease that ends last. Countdowns round minutes up.
   - Anchored-list owner labels: Menu bar, Terminal, the agent's name, the MCP client's name.
@@ -858,14 +859,14 @@ Each stage is one branch and one pull request titled `Stage N: …`, and ends at
 | --- | --- | --- | --- |
 | 0 Scaffold | Repo, `project.yml`, Makefile, CI, LICENSE, THIRD\_PARTY, README; an empty menu-bar app with the outline anchor | `make bootstrap build test` passes; CI green | Launches the app and sees the icon |
 | 1a Helper spike | Minimal helper: register, set and read `disablesleep`, caller check; a debug menu item to flip it | `pmset -g \| grep SleepDisabled` flips between 1 and 0 | Approves the helper in System Settings. If registration fails, switch to the `sudo mooring install-helper` fallback |
-| 1b Awake engine | Leases, reconciler, assertions, On defaults, the dropdown panel with the Awake section, General and Awake settings | Unit tests; `pmset -g assertions` shows Mooring's assertion; left click toggles | Uses it for a day |
+| 1b Awake engine | Leases, reconciler, assertions, On defaults, the dropdown menu with the Awake section, General and Awake settings | Unit tests; `pmset -g assertions` shows Mooring's assertion; left click toggles | Uses it for a day |
 | 1c Lid and guardrails | Lid level, watchdog, heartbeat, launch reset, battery and thermal guardrails, battery opt-in sheet | Scripted `kill -9` of the app returns SleepDisabled to 0 within 15 s | Closes the lid for 10 min with `ping -i 5 1.1.1.1 > ~/lidtest.log` running, on AC and on battery; checks the log has no gap |
 | 2a IPC and CLI | Socket, all `mooring` commands in 2.2, `doctor`, CLI install | `mooring anchor -- sleep 20` shows in `mooring status --json`; exit codes match 2.2 | None |
 | 2b Claude Code plugin | Hooks, skill, installable marketplace | Sample hook JSON piped to `mooring-hook` acquires, renews and releases a lease | Runs a real Claude Code session with the lid closed |
 | 2c Approvals and MCP | Allow once / Always / Deny notifications; `mooring mcp` awake tools | MCP calls from a test client; the deny path exits 2 | Clicks each notification button |
 | 3a WindowKit | Vendored Loop, radial menu, keybinds, Windows settings, Accessibility flow | With Windows off, no Accessibility prompt and WindowKit not loaded; frame-resolver unit tests | Grants Accessibility; tries the radial menu and keybinds |
 | 3b Agent windows | `mooring win list / arrange / undo / layout`, MCP window tools, skill update | Arranging three TextEdit windows returns `ok` frames; `undo` restores them | Asks Claude for the Chrome / iTerm / Slack layout |
-| 4 ClipKit | Vendored Maccy in the Clipboard section, ⇧⌘C, ignore rules, retention | Unit tests; a test fails the build if any IPC op, MCP tool, intent or URL route touches ClipKit | Copies from 1Password and confirms it isn't recorded |
+| 4 ClipKit | Vendored Maccy: the Clipboard submenu and popup, ⇧⌘C, ignore rules, retention | Unit tests; a test fails the build if any IPC op, MCP tool, intent or URL route touches ClipKit | Copies from 1Password and confirms it isn't recorded |
 | 5 Release | Sparkle appcast, GitHub Release zip, Homebrew tap `EidanErlich/homebrew-tap`, README install docs | Clean install on a second macOS user account | Tags v0.1 |
 
 ### Rules for agents

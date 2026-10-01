@@ -53,9 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let statusItem = StatusItemController(engine: engine)
         let dropdown = DropdownController(engine: engine, openSettings: { SettingsWindowController.shared.show() })
-        statusItem.onOpenPanel = { [weak statusItem] in
-            guard let button = statusItem?.button else { return }
-            dropdown.toggle(below: button)
+        statusItem.onOpenMenu = { [weak statusItem] in
+            statusItem.map(dropdown.open(from:))
         }
         statusItemController = statusItem
         self.dropdown = dropdown

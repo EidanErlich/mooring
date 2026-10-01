@@ -40,4 +40,26 @@ struct MenuRowLayoutTests {
         let textStart = try #require(textColumns.min())
         #expect(iconEnd < textStart)
     }
+
+    /// A highlighted row draws the accent background behind its title.
+    @Test func highlightedRowDrawsTheAccent() throws {
+        func accentPixels(_ highlighted: Bool) throws -> Int {
+            let row = MenuRow(title: "For 1 h", highlighted: highlighted) {}.frame(width: 200)
+                .environment(\.colorScheme, .light)
+            let renderer = ImageRenderer(content: row)
+            renderer.scale = 1
+            let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+            let accent = try #require(NSColor.controlAccentColor.usingColorSpace(.deviceRGB))
+            var count = 0
+            for column in 0..<bitmap.pixelsWide { for line in 0..<bitmap.pixelsHigh {
+                // Read the pixel as rendered: converting it to deviceRGB shifts the blue accent's green by 0.09.
+                guard let pixel = bitmap.colorAt(x: column, y: line) else { continue }
+                if abs(pixel.redComponent - accent.redComponent) < 0.08, abs(pixel.greenComponent - accent.greenComponent) < 0.08,
+                   abs(pixel.blueComponent - accent.blueComponent) < 0.08, pixel.alphaComponent > 0.9 { count += 1 }
+            } }
+            return count
+        }
+        #expect(try accentPixels(true) > 500)
+        #expect(try accentPixels(false) == 0)
+    }
 }
