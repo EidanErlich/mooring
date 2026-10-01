@@ -38,16 +38,13 @@ final class StatusItemController: NSObject {
 
     /// Redraws the icon and re-arms observation of the engine's state.
     private func refresh() {
-        let icon = withObservationTracking {
-            IconState.from(state: engine.state, wantsLid: engine.wantsLid,
-                           helperEnabled: HelperClient.shared.status == .enabled, power: engine.power)
+        let menuState = withObservationTracking {
+            MenuBarState.from(leases: engine.leases, state: engine.state, wantsLid: engine.wantsLid,
+                              helperEnabled: HelperClient.shared.status == .enabled, showTimeLeft: true, now: Date())
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
-        statusItem.button?.image = MenuBarIcon.image(for: icon)
-        var label = icon.filled ? "Mooring, on" : "Mooring, off"
-        if icon.badge != .none { label += ", lid mode" }
-        if icon.attention { label += ", needs attention" }
-        statusItem.button?.setAccessibilityLabel(label)
+        statusItem.button?.image = MenuBarIcon.image(for: menuState)
+        statusItem.button?.setAccessibilityLabel(MenuBarText.accessibilityLabel(for: menuState))
     }
 }
