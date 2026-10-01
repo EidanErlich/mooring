@@ -35,17 +35,31 @@ struct MenuRow: View {
     }
 }
 
-/// A switch row. The switch is the control, so the row has no highlight.
+/// A switch row. The whole row is the click target, since clicking a switch's label
+/// does nothing on macOS. The switch only shows the state: it ignores clicks, so the
+/// button gets every one and the value toggles exactly once.
 struct SwitchRow: View {
     let title: String
     @Binding var isOn: Bool
 
     var body: some View {
-        Toggle(title, isOn: $isOn)
-            .toggleStyle(.switch)
-            .controlSize(.small)
+        Button { isOn.toggle() } label: {
+            HStack {
+                Text(title)
+                Spacer()
+                Toggle(title, isOn: $isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .allowsHitTesting(false)
+            }
             .padding(.horizontal, 14)
             .padding(.vertical, 2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // VoiceOver sees one switch with the title and value, not a button around a switch.
+        .accessibilityRepresentation { Toggle(title, isOn: $isOn) }
     }
 }
 
