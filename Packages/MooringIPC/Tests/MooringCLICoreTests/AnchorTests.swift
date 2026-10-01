@@ -22,6 +22,31 @@ import Testing
         #expect(ContinuousClock.now - started < .milliseconds(1500))
     }
 
+    @Test func interruptIsNotForwardedWhenForeground() async throws {
+        let run = AnchorRun(command: ["sleep", "2"])
+        let pid = try run.start()
+        SignalRelay(child: run, isForegroundOfTerminal: { true }).deliver(SIGINT)
+        try await Task.sleep(for: .milliseconds(300))
+        var status: Int32 = 0
+        #expect(waitpid(pid, &status, WNOHANG) == 0)
+        run.forward(SIGKILL)
+        #expect(run.wait() == 128 + SIGKILL)
+    }
+
+    @Test func interruptIsForwardedWhenNotForeground() throws {
+        let run = AnchorRun(command: ["sleep", "2"])
+        _ = try run.start()
+        SignalRelay(child: run, isForegroundOfTerminal: { false }).deliver(SIGINT)
+        #expect(run.wait() == 130)
+    }
+
+    @Test func terminateIsAlwaysForwarded() throws {
+        let run = AnchorRun(command: ["sleep", "2"])
+        _ = try run.start()
+        SignalRelay(child: run, isForegroundOfTerminal: { true }).deliver(SIGTERM)
+        #expect(run.wait() == 143)
+    }
+
     @Test func missingCommandFailsToStart() {
         let run = AnchorRun(command: ["mooring-test-no-such-command"])
         #expect(throws: (any Error).self) { try run.start() }
@@ -67,6 +92,8 @@ import Testing
         for _ in 0..<200 where !harness.client.requests.contains(where: { $0.op == .acquire }) {
             try await Task.sleep(for: .milliseconds(10))
         }
+        // Without the acquire, nothing is forwarding yet and the TERM would end the whole test run.
+        try #require(harness.client.requests.contains { $0.op == .acquire })
         kill(getpid(), SIGTERM)
         #expect(await code == 128 + SIGTERM)
         #expect(ContinuousClock.now - started < .milliseconds(1500))

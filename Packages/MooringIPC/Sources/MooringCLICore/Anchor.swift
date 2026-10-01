@@ -83,7 +83,7 @@ struct AnchoredCommand {
             env.writeError("mooring: \(command[0]): \(error)\n")
             return 127
         }
-        let forwarding = SignalForwarding(to: child)
+        let forwarding = SignalForwarding(to: SignalRelay(child: child))
         defer { forwarding.stop() }
         await acquire(watching: pid)
         return await withCheckedContinuation { continuation in
@@ -130,6 +130,33 @@ struct AnchoredCommand {
     }
 }
 
+/// Decides, as each signal arrives, whether the child still needs it passed on.
+struct SignalRelay: Sendable {
+    let child: AnchorRun
+    /// True when `mooring`'s process group, which the child shares, is the terminal's foreground group.
+    var isForegroundOfTerminal: @Sendable () -> Bool = SignalRelay.ownsTerminal
+
+    /// TERM always goes on. INT and HUP go on only when the terminal didn't already deliver them to the child,
+    /// so Ctrl-C arrives once. The cost: a `kill -INT <mooring pid>` while mooring is in the foreground isn't forwarded.
+    func deliver(_ signal: Int32) {
+        if signal != SIGTERM && isForegroundOfTerminal() { return }
+        child.forward(signal)
+    }
+
+    /// Whether this process group is the foreground group of the controlling terminal, read from the first of
+    /// stdin, stdout and stderr that is a terminal, or else `/dev/tty`.
+    static func ownsTerminal() -> Bool {
+        var descriptor = [STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO].first { isatty($0) == 1 } ?? -1
+        var opened = false
+        if descriptor < 0 {
+            descriptor = open("/dev/tty", O_RDONLY | O_NOCTTY | O_CLOEXEC)
+            opened = descriptor >= 0
+        }
+        defer { if opened { close(descriptor) } }
+        return descriptor >= 0 && tcgetpgrp(descriptor) == getpgrp()
+    }
+}
+
 /// Passes INT, TERM and HUP on to the child while it runs, instead of letting them end `mooring` first.
 private final class SignalForwarding {
     private static let forwarded = [SIGINT, SIGTERM, SIGHUP]
@@ -137,11 +164,11 @@ private final class SignalForwarding {
     private var sources: [DispatchSourceSignal] = []
     private var previous: [sig_t?] = []
 
-    init(to child: AnchorRun) {
+    init(to relay: SignalRelay) {
         for number in Self.forwarded {
             previous.append(signal(number, SIG_IGN))
             let source = DispatchSource.makeSignalSource(signal: number, queue: queue)
-            source.setEventHandler { child.forward(number) }
+            source.setEventHandler { relay.deliver(number) }
             source.resume()
             sources.append(source)
         }
