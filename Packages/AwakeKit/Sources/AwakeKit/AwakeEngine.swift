@@ -198,7 +198,7 @@ public final class AwakeEngine {
     public func systemDidWake() {
         tick()
         if settings().endMenuLeaseAfterSleep {
-            release(id: Self.menuLeaseID)
+            endMenuSession()
         }
     }
 

@@ -86,4 +86,10 @@ struct StatusTextTests {
         #expect(LeaseText.endingLast([task, forever, timed2h], now: now)?.id == "forever")
         #expect(LeaseText.endingLast([expired], now: now) == nil)
     }
+
+    @Test func severalAppsAreCounted() {
+        let apps = [lease("app-1", watch: WatchedProcess(pid: 1, startTime: now), reason: "While Xcode runs"),
+                    lease("app-2", watch: WatchedProcess(pid: 2, startTime: now), reason: "While Safari runs")]
+        #expect(StatusLine.text(leases: apps, state: stateFor(apps), now: now) == "On · while 2 apps run")
+    }
 }

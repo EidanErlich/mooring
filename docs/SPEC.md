@@ -188,11 +188,11 @@ A lease has an id, an owner, a reason shown in the dropdown, a level, an optiona
 | Menu item | Lease created |
 | --- | --- |
 | Click icon (primary action) | Toggles the "menu" lease at the user's default level and duration |
-| For 30 min / 1 h / 2 h / 4 h / 8 h / Until turned off | `menu` lease with `expiresAt` (Chai's durations) |
+| For 30 min / 1 h / 2 h / 4 h / 8 h / Until turned off | `menu` lease with `expiresAt` (Chai's durations); replaces any picked apps |
 | Until I open the lid | `lid` lease, `endsOnLidOpen = true` (Awayke's `LidSessionTracker`) |
-| While an app runs… | Pick a running app; lease with `watch` |
-| Keep screen on | Toggles `display` on the menu lease |
-| Allow lid close | Toggles `lid` on the menu lease; until the helper is approved, this row is replaced by "Approve lid mode…", which calls register() and then opens Login Items & Extensions |
+| While an app runs… | Pick one or more running apps (✓ marks each; clicking again un-picks); one `app-<pid>` lease with `watch` per app, replacing the duration. The row reads "While Xcode runs", "While Xcode and Safari run" or "While 3 apps run" |
+| Keep screen on | Toggles `display` on the menu session (the `menu` lease or every picked app) |
+| Allow lid close | Toggles `lid` on the menu session; until the helper is approved, this row is replaced by "Approve lid mode…", which calls register() and then opens Login Items & Extensions |
 
 Defaults for a fresh install: click = `system` level, until turned off, lid off. Users who want Awayke-style one-click lid mode set the default level to `lid` in Settings.
 
@@ -251,7 +251,7 @@ macOS still forces sleep at critical battery regardless of `disablesleep`; the g
 
 ### 1.8 System events
 
-- **Wake from sleep:** if "End my session after the Mac sleeps" is on (Chai's "disable after suspend"), end the menu lease. Agent leases are unaffected.
+- **Wake from sleep:** if "End my session after the Mac sleeps" is on (Chai's "disable after suspend"), end the menu session. Agent leases are unaffected.
 - **User switch / screen lock:** leases continue. Screen lock is expected in lid mode.
 - **External display connect/disconnect:** no change needed; clamshell with a display already stays awake, and `disablesleep` covers the no-display case.
 
@@ -798,8 +798,8 @@ struct AwakeSettings: Codable, Equatable {
 
 - **Suspensions** are engine state; leases are never modified by guardrails. They show in the status line and as the orange attention pill. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
 - **Guardrail settings:** lid threshold 20% and all-leases threshold 10% by default; each can be set to Off. There is no one-off override beyond these settings and the lid-on-battery opt-in.
-- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease.
-- **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the `menu` lease whatever its duration and never touches agent leases.
+- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease. The dropdown's *menu session* is either the `menu` lease or one or more `app-<pid>` leases, never both; the On toggle and left click end the whole session.
+- **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the menu session (the `menu` lease whatever its duration, and any picked apps) and never touches agent leases.
 - `leases.json` is written with mode `0600`.
 
 **UI details for stage 1b**

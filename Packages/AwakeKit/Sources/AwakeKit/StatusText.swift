@@ -32,7 +32,8 @@ public enum StatusLine {
         case (nil, nil):
             parts.append("until turned off")
         case (nil, _?):
-            parts.append(last.reason.prefix(1).lowercased() + last.reason.dropFirst())
+            let tasks = leases.filter { $0.isLive(at: now) && $0.expiresAt == nil && $0.watch != nil }.count
+            parts.append(tasks > 1 ? "while \(tasks) apps run" : last.reason.prefix(1).lowercased() + last.reason.dropFirst())
         }
         return parts.joined(separator: " · ")
     }

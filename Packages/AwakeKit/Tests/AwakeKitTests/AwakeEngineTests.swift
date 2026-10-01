@@ -70,16 +70,18 @@ struct AwakeEngineTests {
         #expect(harness.assertions.calls.last == off)
     }
 
-    @Test func wakeEndsMenuLeaseOnlyWhenSettingIsOn() {
+    /// "End my session after the Mac sleeps" ends the whole menu session (timer or
+    /// picked apps), never leases from other callers.
+    @Test func wakeEndsMenuSessionOnlyWhenSettingIsOn() {
         let harness = EngineHarness()
         harness.processes.startTimes[1] = harness.clock
-        harness.engine.toggleMenu()
         harness.engine.anchor(whileAppRuns: 1, appName: "Xcode")
+        harness.engine.acquire(id: "cli", owner: .cli(pid: 9), reason: "r", level: .system, duration: 600)
         harness.engine.systemDidWake()
-        #expect(harness.engine.leases.map(\.id) == ["menu", "app-1"])
+        #expect(harness.engine.leases.map(\.id) == ["app-1", "cli"])
         harness.settings.endMenuLeaseAfterSleep = true
         harness.engine.systemDidWake()
-        #expect(harness.engine.leases.map(\.id) == ["app-1"])
+        #expect(harness.engine.leases.map(\.id) == ["cli"])
     }
 
     @Test func watchedProcessExitReleasesLease() throws {
