@@ -293,7 +293,7 @@ Level 2 exposes the lease engine to scripts and agents, so the Mac stays awake e
 
 ### 2.2 CLI reference
 
-The binary ships at `Mooring.app/Contents/MacOS/mooring`. Settings offers "Install command-line tool", which symlinks it to `/usr/local/bin/mooring` (or `~/.local/bin/mooring` without admin). Homebrew installs the symlink automatically.
+The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with the app. It is not in `Contents/MacOS` because `MacOS/Mooring` and `mooring` are the same file on a case-insensitive volume. Settings offers "Install command-line tool", which symlinks it to `~/.local/bin/mooring` (creating the folder if needed, with no password). That is the only install path. If `~/.local/bin` isn't on the shell's PATH, Settings shows the line to add to `~/.zshrc`, with a Copy button, and `mooring doctor` checks the real PATH. Homebrew installs the symlink automatically (stage 5).
 
 | Command | Does |
 | --- | --- |
@@ -301,16 +301,25 @@ The binary ships at `Mooring.app/Contents/MacOS/mooring`. Settings offers "Insta
 | `mooring off` | End the `cli` lease |
 | `mooring anchor [--level …] [--reason …] -- <command …>` | Lease tied to the child process; exits with the child's exit code |
 | `mooring anchor --pid <pid> [--level …]` | Lease until that process exits |
-| `mooring lease acquire <id> --ttl 15m [--level …] [--watch-pid <pid>\|auto] [--reason …]` | Named lease; re-acquiring an existing id renews it |
-| `mooring lease renew <id> [--ttl …]` | Push the expiry forward |
-| `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period |
-| `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state |
-| `mooring doctor` | Checks app, socket, helper approval, `pmset -g` SleepDisabled, CLI on PATH, Claude plugin installed |
-| `mooring mcp` | Run the MCP server over stdio (2.5) |
+| `mooring lease acquire <id> (--ttl 15m \| --watch-pid <pid>\|auto) [--level …] [--reason …] [--agent "<name>"]` | Named lease; needs `--ttl` or `--watch-pid`; re-acquiring an existing id renews it |
+| `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
+| `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
+| `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]` |
+| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, lid sleep matches what Mooring wants (read through the app and helper; the CLI never runs `pmset`), Claude plugin installed (arrives in 2b). Exits 1 if any check fails |
+| `mooring mcp` | Run the MCP server over stdio (2.5; arrives in 2c) |
 
-**Conventions:** durations accept `90s`, `15m`, `2h`; `--json` on every command; exit codes 0 success, 1 usage error, 2 request refused by a guardrail (the reason is printed), 3 app unreachable. `--watch-pid auto` resolves the nearest ancestor process that isn't a shell, which for a hook is the Claude Code process.
+**Conventions:**
+- **Flags:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`), not before it. `--no-launch` skips starting the app (the hooks use it).
+- **Durations:** `90s`, `15m`, `2h`, `1h30m`. A bare number, zero or an unknown unit is a usage error.
+- **Exit codes:** 0 success; 1 usage error, `bad_request` or `not_found`; 2 request refused by a guardrail or by policy (the reason is printed); 3 app unreachable; 4 `internal`.
+- **Owner label:** "Terminal" by default. With `--watch-pid auto` it is the agent's name (`claude` → "Claude Code", `codex` → "Codex", otherwise the process name). `--agent "<name>"` overrides it.
+- **Watching:** `--watch-pid auto` resolves the nearest ancestor process that isn't a shell, which for a hook or Claude's Bash tool is the Claude Code process.
 
-**Other entry points** that map onto the same operations: a `mooring://on?level=lid&for=30m` URL scheme (for Raycast and Alfred), and App Intents for Shortcuts ("Keep Mac Awake", "Let Mac Sleep", "Get Awake Status"). The App Intents cover awake only; clipboard intents are excluded (Part 4).
+**For agents** (also in `mooring --help`): two patterns, callable from any agent's shell.
+- A whole job: `mooring lease acquire <name> --watch-pid auto --reason "…"` at the start and `mooring lease release <name>` when everything is finished. It also ends if the agent process exits, and has a 4 h cap you can extend with `lease renew`.
+- One long command, including a script that outlives the agent's turn: `mooring anchor -- <command>`. It ends when the command exits and returns its exit code.
+
+**Other entry points** (stage 2c) that map onto the same operations: a `mooring://on?level=lid&for=30m` URL scheme (for Raycast and Alfred), and App Intents for Shortcuts ("Keep Mac Awake", "Let Mac Sleep", "Get Awake Status"). The App Intents cover awake only; clipboard intents are excluded (Part 4).
 
 ### 2.3 Claude Code plugin
 
@@ -393,14 +402,15 @@ The MCP server never has clipboard tools; its window tools arrive with level 3 (
 
 ### 2.6 Policy for non-menu callers
 
-| Rule | Value |
-| --- | --- |
-| Max single agent lease | 4 h, renewable while renewals keep arriving |
-| Until turned off | Menu only |
-| `lid` level for agents | Ask each time by default (see Agent control and approvals) |
-| Max concurrent leases | 32 total; excess requests get exit code 2 |
-| Reason text | Trimmed to 80 characters, control characters stripped before display |
-| Guardrails (1.7) | Always win; the caller is told in the response |
+| Rule | Trusted ops (`on`, `off`, `anchor`) | Named leases (`lease acquire`, `renew`, `release`) |
+| --- | --- | --- |
+| Until turned off | Allowed, like the menu | Not allowed: `--ttl` or `--watch-pid` is required |
+| Max length | Engine max (12 h) | 4 h, including a watched lease with no TTL; renewable while renewals keep arriving |
+| `lid` level | Allowed (guardrails apply), like the menu | Refused (`denied`) until approvals arrive in 2c; then ask each time by default (see Agent control and approvals) |
+| Ids | `cli`, `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`; reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused |
+| Max concurrent leases | 32 live leases; a socket request past that gets exit code 2 (the menu is never refused) | Same |
+| Reason text | Trimmed to 80 characters, control characters stripped before display | Same |
+| Guardrails (1.7) | Always win; the caller is told in the response | Same |
 
 Any process running as the user can take a lease; that's the same trust level as running `caffeinate`, and the menu always shows who holds one.
 
@@ -655,7 +665,7 @@ This section tells a coding agent exactly how to build Mooring. Read the whole s
 ### Repository setup
 
 - **Project generation:** XcodeGen from `project.yml`. The generated `Mooring.xcodeproj` is gitignored, so agents never hand-edit a `.pbxproj`.
-- **Targets:** `Mooring` (app); `MooringHelper` (command-line tool embedded at `Contents/MacOS/dev.mooring.helper`, launchd plist at `Contents/Library/LaunchDaemons/dev.mooring.helper.plist`); `mooring` CLI (embedded at `Contents/MacOS/mooring`); local packages in `Packages/`; unit test targets per package.
+- **Targets:** `Mooring` (app); `MooringHelper` (command-line tool embedded at `Contents/MacOS/dev.mooring.helper`, launchd plist at `Contents/Library/LaunchDaemons/dev.mooring.helper.plist`); `mooring` CLI (target `MooringCLI`, product name `mooring`, embedded at `Contents/Helpers/mooring`; not in `Contents/MacOS`, where it would collide with `Mooring` on case-insensitive volumes); local packages in `Packages/`; unit test targets per package.
 - **Signing config:** `Config/Local.xcconfig` (gitignored) holds `DEVELOPMENT_TEAM`; `Config/Local.xcconfig.example` is committed. A build-phase script writes the helper's allowed-client requirement from the app's signing certificate hash, so no team ID is hardcoded.
 - **Dependencies (Swift Package Manager, pinned):** Defaults, KeyboardShortcuts, Sauce (stage 1–4), Sparkle (stage 5), Luminare and Scribe only if stage 3 keeps them.
 - **CI:** GitHub Actions on a macOS runner: bootstrap, unsigned build (`CODE_SIGNING_ALLOWED=NO`), unit tests. Nothing that needs the helper, lid or permissions runs in CI.
@@ -762,6 +772,7 @@ struct Lease: Codable, Identifiable {
   let id: String; let owner: LeaseOwner; var reason: String; var level: AwakeLevel
   var expiresAt: Date?        // nil = until turned off / released
   var watch: WatchedProcess?
+  var ttl: TimeInterval?      // the TTL last granted, so `renew` without --ttl reuses it; nil in older leases.json files
   var endsOnLidOpen: Bool
   let createdAt: Date
 }
@@ -822,10 +833,12 @@ struct AwakeSettings: Codable, Equatable {
 
 **Stage 2 details**
 
-- **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. An Ask-each-time approval holds the connection open for up to 60 s.
+- **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` and `not_found` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. An Ask-each-time approval holds the connection open for up to 60 s.
 - **Hooks:** `hooks.json` registers every event in the 2.3 table (`UserPromptSubmit`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PermissionRequest`, `Notification`, `Stop`, `StopFailure`, `SessionEnd`). Renewals are `async`; the others time out at 2 s. Hooks never launch the app: if the socket is missing, `mooring-hook` exits 0 immediately, which keeps hook cost under 50 ms. Auto-launch applies only to interactive CLI use.
 - **MCP:** runs inside the CLI (`mooring mcp`); there is no separate server package. The client id is the slugified `clientInfo.name` from the MCP `initialize` request.
-- The `mooring://` URL scheme and the awake App Intents ship in stage 2a.
+- The `mooring://` URL scheme and the awake App Intents ship in stage 2c.
+- **CLI packaging:** the command-line logic lives in the `MooringCLICore` library target of `Packages/MooringIPC` (argument parsing with `swift-argument-parser`, the socket client, `anchor`, `doctor`), so tests drive it without a socket. `CLI/main.swift` is a thin entry point that builds the real environment and exits with the result.
+- **`mooring doctor` and lid sleep:** doctor reads `SleepDisabled` from the app's `status` reply, which asks the helper. The CLI never runs `pmset`.
 - `mooring doctor` records the Claude Code version the plugin was tested with in `plugin.json` and warns when `claude --version` reports a different major version.
 
 **Stage 3 additions to the Loop file map**
@@ -861,9 +874,9 @@ Each stage is one branch and one pull request titled `Stage N: …`, and ends at
 | 1a Helper spike | Minimal helper: register, set and read `disablesleep`, caller check; a debug menu item to flip it | `pmset -g \| grep SleepDisabled` flips between 1 and 0 | Approves the helper in System Settings. If registration fails, switch to the `sudo mooring install-helper` fallback |
 | 1b Awake engine | Leases, reconciler, assertions, On defaults, the dropdown menu with the Awake section, General and Awake settings | Unit tests; `pmset -g assertions` shows Mooring's assertion; left click toggles | Uses it for a day |
 | 1c Lid and guardrails | Lid level, watchdog, heartbeat, launch reset, battery and thermal guardrails, battery opt-in sheet | Scripted `kill -9` of the app returns SleepDisabled to 0 within 15 s | Closes the lid for 10 min with `ping -i 5 1.1.1.1 > ~/lidtest.log` running, on AC and on battery; checks the log has no gap |
-| 2a IPC and CLI | Socket, all `mooring` commands in 2.2, `doctor`, CLI install | `mooring anchor -- sleep 20` shows in `mooring status --json`; exit codes match 2.2 | None |
+| 2a IPC and CLI | Socket, all `mooring` commands in 2.2, `doctor`, CLI install, agent holds (`--watch-pid auto`, the "For agents" patterns), the dropdown lease-row fix (rows update in place by id) | `mooring anchor -- sleep 20` shows in `mooring status --json`; exit codes match 2.2 | None |
 | 2b Claude Code plugin | Hooks, skill, installable marketplace | Sample hook JSON piped to `mooring-hook` acquires, renews and releases a lease | Runs a real Claude Code session with the lid closed |
-| 2c Approvals and MCP | Allow once / Always / Deny notifications; `mooring mcp` awake tools | MCP calls from a test client; the deny path exits 2 | Clicks each notification button |
+| 2c Approvals and MCP | Allow once / Always / Deny notifications; `mooring mcp` awake tools; the `mooring://` URL scheme and awake App Intents | MCP calls from a test client; the deny path exits 2 | Clicks each notification button |
 | 3a WindowKit | Vendored Loop, radial menu, keybinds, Windows settings, Accessibility flow | With Windows off, no Accessibility prompt and WindowKit not loaded; frame-resolver unit tests | Grants Accessibility; tries the radial menu and keybinds |
 | 3b Agent windows | `mooring win list / arrange / undo / layout`, MCP window tools, skill update | Arranging three TextEdit windows returns `ok` frames; `undo` restores them | Asks Claude for the Chrome / iTerm / Slack layout |
 | 4 ClipKit | Vendored Maccy: the Clipboard submenu and popup, ⇧⌘C, ignore rules, retention | Unit tests; a test fails the build if any IPC op, MCP tool, intent or URL route touches ClipKit | Copies from 1Password and confirms it isn't recorded |

@@ -38,6 +38,12 @@ targets:
         link: false
         copy:
           destination: executables
+      - target: MooringCLI
+        embed: true
+        link: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
       - package: Defaults
       - package: AwakeKit
       - package: AwakeKit
@@ -76,6 +82,24 @@ targets:
         OTHER_LDFLAGS: -sectcreate __TEXT __info_plist $(DERIVED_FILE_DIR)/HelperInfo.plist
         SKIP_INSTALL: YES
         ENABLE_USER_SCRIPT_SANDBOXING: NO
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)
+        DEVELOPMENT_TEAM: $(MOORING_TEAM)
+  MooringCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - CLI
+    dependencies:
+      - package: MooringIPC
+        product: MooringCLICore
+    settings:
+      base:
+        PRODUCT_NAME: mooring
+        PRODUCT_MODULE_NAME: MooringCLITool
+        PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.cli
+        SKIP_INSTALL: YES
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_STYLE: Manual
         CODE_SIGN_IDENTITY: $(MOORING_SIGN_IDENTITY)

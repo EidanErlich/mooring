@@ -39,12 +39,12 @@ Everything an agent does for a job runs inside the agent's own process tree: sub
 | --- | --- | --- |
 | Wire format | `Packages/MooringIPC`, target `MooringIPC` (exists; a stub today) | `Request` / `Response` / `WireError` types per Engineering decisions, newline framing (max 64 KiB per line), `DurationText.parse`, level parsing, error code → exit code. Pure. |
 | CLI core | Same package, new target `MooringCLICore`, using `swift-argument-parser` | Subcommands, `--watch-pid auto` (over an injectable process table), owner naming, human and `--json` output, socket client, auto-launch, and `anchor`'s child process and signal forwarding. |
-| `mooring` binary | `CLI/main.swift`, new tool target in `project.yml` | Thin entry point that maps every error to the right exit code. Copied to `Mooring.app/Contents/MacOS/mooring` and signed with the app. |
+| `mooring` binary | `CLI/main.swift`, new tool target in `project.yml` | Thin entry point that maps every error to the right exit code. Copied to `Mooring.app/Contents/Helpers/mooring` and signed with the app. It is not in `Contents/MacOS` because `MacOS/Mooring` and `mooring` collide on case-insensitive volumes. The Xcode target is `MooringCLI` (product name `mooring`). |
 | Socket server | `App/IPC/SocketServer.swift` | See below. |
 | Request handler | `App/IPC/RequestHandler.swift`, `@MainActor` | Turns requests into engine calls through the caller policy and builds responses. |
 | Caller policy | `Packages/AwakeKit`, pure | See Policy. |
 | Lease TTL | `Lease.ttl: TimeInterval?` (AwakeKit) | The TTL last granted, so `renew` without `--ttl` reuses it. Optional; older `leases.json` files decode with nil. |
-| CLI install | Settings → General | "Install command-line tool" symlinks `~/.local/bin/mooring` to the bundled binary, creating the folder if needed. It shows whether the link is installed, missing, or points elsewhere, plus the PATH line with Copy when needed. |
+| CLI install | Settings → General | "Install command-line tool" symlinks `~/.local/bin/mooring` to the bundled binary, creating the folder if needed. It shows whether the link is installed, missing, or points elsewhere, plus the PATH line with a Copy button, always (a GUI app can't see the shell's PATH; `mooring doctor` is the real check). |
 | Lease rows fix | `DropdownMenu`, `LeaseRow` | Rows update in place by id, so renewals and guardrail changes don't rebuild them. `LeaseRow` takes the engine and an id and reads the lease live. |
 
 ### Socket server
@@ -79,6 +79,7 @@ Shared behaviour:
 
 - **Reaching the app:** if the socket doesn't answer, the CLI runs `open -gj -b dev.mooring.app` and waits up to 3 s. Otherwise it prints "Mooring isn't running and couldn't be started" and exits 3. `--no-launch` (used by 2b's hooks) skips the launch.
 - **Waiting for a reply:** 5 s. 2c raises it to 60 s for approvals.
+- **Flag placement:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`).
 - **Output:** human text by default, with errors on stderr as `mooring: <message>`. With `--json`, stdout carries the `result`, or `{"ok":false,"error":{…}}`.
 - **Exit codes:**
   - 0: success;
@@ -117,8 +118,10 @@ Paused: lid mode (battery low)
 
 `--json` returns:
 
+- `summary` (the dropdown's first line, for example "On · lid mode · 1h 12m left");
 - `effective {system, display, lid}`;
 - `systemAssertion`, `displayAssertion` and `lidSleepDisabled` (read through the helper);
+- `helperSleepDisabled` and `wantsLid` (what `doctor` compares);
 - `leases[]`, each with `id`, `owner {kind, name}`, `reason`, `level`, `expiresAt` (ISO 8601 or null), `watchPid` and `ttl`;
 - `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper` and `suspensions[]`.
 
