@@ -8,7 +8,6 @@ import SwiftUI
 struct AwakeSectionView: View {
     let engine: AwakeEngine
     let model: DropdownModel
-    let now: Date
 
     @State private var showingApps = false
 
@@ -17,10 +16,7 @@ struct AwakeSectionView: View {
             MenuRow(title: "Awake", systemImage: "chevron.left") { model.page = .root }
                 .font(.headline)
             Divider()
-            Toggle("On", isOn: Binding(get: { engine.hasMenuSession }, set: { _ in engine.toggleMenu() }))
-                .toggleStyle(.switch)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 2)
+            SwitchRow(title: "On", isOn: Binding(get: { engine.hasMenuSession }, set: { _ in engine.toggleMenu() }))
             ForEach(AwakeDuration.allCases, id: \.self) { duration in
                 MenuRow(title: duration.title, checked: model.lastPick.isChecked(duration, menuLease: engine.menuLease)) {
                     engine.turnOnMenu(duration: duration.interval)
@@ -35,13 +31,10 @@ struct AwakeSectionView: View {
                     AppRow(app: app, picked: isPicked(app)) { togglePick(app) }
                 }
             }
-            Toggle(
-                "Keep screen on",
+            SwitchRow(
+                title: "Keep screen on",
                 isOn: Binding(get: { engine.sessionLevel?.display ?? false }, set: { engine.setKeepScreenOn($0) })
             )
-            .toggleStyle(.switch)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
             lidRows
             Divider()
             anchored
@@ -52,16 +45,13 @@ struct AwakeSectionView: View {
     @ViewBuilder
     private var lidRows: some View {
         if HelperClient.shared.status == .enabled {
-            Toggle(
-                "Allow lid close",
+            SwitchRow(
+                title: "Allow lid close",
                 isOn: Binding(get: { engine.sessionLevel?.lid ?? false }, set: { enabled in
                     guard !enabled || confirmLidOnBattery() else { return }
                     engine.setAllowLidClose(enabled)
                 })
             )
-            .toggleStyle(.switch)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
             MenuRow(title: "Until I open the lid") {
                 guard confirmLidOnBattery() else { return }
                 engine.startLidSession()
@@ -90,19 +80,7 @@ struct AwakeSectionView: View {
                 Text("Nothing anchored").foregroundStyle(.secondary).padding(.horizontal, 8)
             }
             ForEach(engine.leases) { lease in
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(LeaseText.owner(lease.owner)).font(.caption).foregroundStyle(.secondary)
-                        Text(lease.reason).lineLimit(1)
-                    }
-                    Spacer()
-                    Text(LeaseText.timeLeft(lease, now: now)).foregroundStyle(.secondary).monospacedDigit()
-                    Button { engine.release(id: lease.id) } label: { Image(systemName: "xmark.circle.fill") }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .help("End this")
-                }
-                .padding(.horizontal, 8)
+                LeaseRow(engine: engine, model: model, lease: lease)
             }
         }
         .padding(.vertical, 4)
@@ -144,17 +122,5 @@ private struct AppRow: View {
 
     var body: some View {
         MenuRow(title: app.localizedName ?? "App", icon: app.icon, checked: picked, action: action)
-    }
-}
-
-/// The "While an app runs…" row title once apps are picked.
-enum AppSessionText {
-    static func rowTitle(appNames: [String]) -> String {
-        switch appNames.count {
-        case 0: "While an app runs…"
-        case 1: "While \(appNames[0]) runs"
-        case 2: "While \(appNames[0]) and \(appNames[1]) run"
-        default: "While \(appNames.count) apps run"
-        }
     }
 }

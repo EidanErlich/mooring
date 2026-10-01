@@ -12,36 +12,26 @@ struct DropdownView: View {
     @State private var contentHeight: CGFloat = 0
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1, paused: !model.isPresented)) { context in
-            ScrollView {
-                page(now: context.date)
-                    .padding(6)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
-            }
-            .frame(width: PanelPlacement.width, height: min(max(contentHeight, 1), model.maxHeight))
+        ScrollView {
+            page
+                .padding(6)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
         }
+        .frame(width: PanelPlacement.width, height: min(max(contentHeight, 1), model.maxHeight))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
     @ViewBuilder
-    private func page(now: Date) -> some View {
+    private var page: some View {
         switch model.page {
-        case .root: root(now: now)
-        case .awake: AwakeSectionView(engine: engine, model: model, now: now)
+        case .root: root
+        case .awake: AwakeSectionView(engine: engine, model: model)
         }
     }
 
-    private func root(now: Date) -> some View {
+    private var root: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Image(systemName: engine.state.systemAssertion ? "circle.fill" : "circle")
-                    .foregroundStyle(engine.state.systemAssertion ? .green : .secondary)
-                    .imageScale(.small)
-                Text(StatusLine.text(leases: engine.leases, state: engine.state, now: now))
-                    .font(.headline)
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            StatusHeader(engine: engine, model: model)
             Divider()
             MenuRow(title: "Awake", trailing: "›") { model.page = .awake }
             Divider()

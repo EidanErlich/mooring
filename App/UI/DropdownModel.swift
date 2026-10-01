@@ -15,15 +15,30 @@ final class DropdownModel {
     private(set) var isPresented = false
     /// The duration row picked last, for its checkmark.
     var lastPick = DurationPick.none
+    /// Drives the menu's countdown timelines, which are paused while the menu is closed.
+    private(set) var isOpen = false
+    /// The id of the row under the menu's highlight, set from the menu delegate.
+    var highlightedID: String?
+
+    func menuDidOpen() {
+        isOpen = true
+    }
+
+    func menuDidClose() {
+        isOpen = false
+        highlightedID = nil
+    }
 
     func didOpen(maxHeight: CGFloat) {
         self.maxHeight = maxHeight
         page = .root
         isPresented = true
+        isOpen = true
     }
 
     func didClose() {
         isPresented = false
+        isOpen = false
         page = .root
     }
 }
@@ -41,38 +56,5 @@ struct DurationPick: Equatable {
         guard let menuLease else { return false }
         if let duration, expiresAt == menuLease.expiresAt { return row == duration }
         return row == .untilTurnedOff && menuLease.expiresAt == nil
-    }
-}
-
-/// One clickable row in the dropdown, styled like a menu item.
-struct MenuRow: View {
-    let title: String
-    var systemImage: String?
-    var icon: NSImage?
-    var trailing: String?
-    var checked = false
-    let action: () -> Void
-
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark")
-                    .opacity(checked ? 1 : 0)
-                    .frame(width: 12)
-                if let systemImage { Image(systemName: systemImage) }
-                if let icon { Image(nsImage: icon).resizable().frame(width: 16, height: 16) }
-                Text(title)
-                Spacer()
-                if let trailing { Text(trailing).foregroundStyle(.secondary) }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
-            .background(hovering ? Color.accentColor.opacity(0.25) : .clear, in: RoundedRectangle(cornerRadius: 5))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
     }
 }

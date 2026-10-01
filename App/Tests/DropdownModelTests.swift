@@ -17,6 +17,16 @@ struct DropdownModelTests {
         #expect(!model.isPresented)
         #expect(model.page == .root)
     }
+
+    @Test func closingClearsHighlightAndStopsTimelines() {
+        let model = DropdownModel()
+        model.menuDidOpen()
+        #expect(model.isOpen)
+        model.highlightedID = "duration.hour1"
+        model.menuDidClose()
+        #expect(!model.isOpen)
+        #expect(model.highlightedID == nil)
+    }
 }
 
 private let start = Date(timeIntervalSince1970: 1_000_000)
