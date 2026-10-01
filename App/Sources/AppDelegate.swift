@@ -1,10 +1,16 @@
 import AppKit
+@preconcurrency import AwaykeMonitors
 import AwakeKit
 import Defaults
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var engine: AwakeEngine?
+    private var lid: LidController?
+    private let battery = BatteryMonitor()
+    private let lidMonitor = LidMonitor()
+    private var thermalObserver: NSObjectProtocol?
+    private var terminationReplied = false
     private var statusItemController: StatusItemController?
     private var dropdown: DropdownController?
     private var tickTimer: Timer?
@@ -19,12 +25,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A test host must not touch the user's real leases or assertions.
         guard !Self.isHostingTests else { return }
 
+        let lid = LidController(helper: HelperClient.shared)
         let engine = AwakeEngine(
             assertions: IOPMAssertions(), store: FileLeaseStore(), processes: SystemProcesses(),
-            lid: UnavailableLid(), settings: { Defaults[.awake] }
+            lid: lid, settings: { Defaults[.awake] }
         )
-        engine.restore()
+        self.lid = lid
         self.engine = engine
+        startMonitors(engine)
+        engine.restore()
 
         // The reconciler's backstop tick (docs/SPEC.md 1.2): drops expired leases.
         let timer = Timer(timeInterval: 5, repeats: true) { _ in
@@ -48,15 +57,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = statusItem
         self.dropdown = dropdown
     }
-}
 
-/// Placeholder until LidController (stage 1c, Task 5) is wired in: lid mode is never applied.
-@MainActor
-private final class UnavailableLid: LidApplying {
-    let isAvailable = false
-    let applied: Bool? = false
-    let isBusy = false
-    var onChange: (@MainActor () -> Void)?
-    func apply(_ disabled: Bool) {}
-    func refresh() {}
+    /// Battery, lid and thermal state feed the guardrails (docs/SPEC.md 1.7).
+    private func startMonitors(_ engine: AwakeEngine) {
+        battery.onChange = { snapshot in
+            MainActor.assumeIsolated {
+                engine.update(power: PowerSnapshot(onAC: snapshot.onAC, batteryPercent: snapshot.percent))
+            }
+        }
+        battery.start()
+        if let snapshot = battery.currentSnapshot() {
+            engine.update(power: PowerSnapshot(onAC: snapshot.onAC, batteryPercent: snapshot.percent))
+        }
+
+        lidMonitor.onChange = { closed in
+            MainActor.assumeIsolated { engine.update(lidClosed: closed) }
+        }
+        lidMonitor.start()
+        engine.update(lidClosed: lidMonitor.isClosed)
+
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { engine.update(thermal: ProcessInfo.processInfo.thermalState) }
+        }
+        engine.update(thermal: ProcessInfo.processInfo.thermalState)
+    }
+
+    /// Never quit with lid sleep disabled (docs/SPEC.md 1.6, layer 4). The
+    /// helper's watchdog covers the case where this doesn't finish in 3 s.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let lid, lid.applied == true || lid.isBusy else { return .terminateNow }
+        Task { @MainActor in
+            await lid.shutDown()
+            self.replyToTermination()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            MainActor.assumeIsolated { self.replyToTermination() }
+        }
+        return .terminateLater
+    }
+
+    private func replyToTermination() {
+        guard !terminationReplied else { return }
+        terminationReplied = true
+        NSApp.reply(toApplicationShouldTerminate: true)
+    }
 }

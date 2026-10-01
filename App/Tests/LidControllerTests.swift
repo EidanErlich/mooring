@@ -73,3 +73,25 @@ struct LidControllerTests {
         #expect(helper.calls.isEmpty)
     }
 }
+
+@MainActor
+struct LidShutdownTests {
+    /// On quit, lid sleep is restored and the engine can't turn it back off,
+    /// even though the lid lease is kept for the next launch.
+    @Test func shutDownRestoresAndRefusesReenable() async {
+        let helper = FakeLidHelper()
+        let controller = LidController(helper: helper)
+        let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: NoProcesses(),
+                                 lid: controller, settings: { AwakeSettings() })
+        await controller.settle()
+        engine.setAllowLidClose(true)
+        await controller.settle()
+        #expect(helper.sleepDisabled)
+        await controller.shutDown()
+        #expect(helper.sleepDisabled == false)
+        engine.tick()
+        await controller.settle()
+        #expect(helper.sleepDisabled == false)
+        #expect(engine.wantsLid)
+    }
+}

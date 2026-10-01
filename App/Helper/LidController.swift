@@ -27,6 +27,7 @@ final class LidController: LidApplying {
     private let helper: any LidHelper
     private var task: Task<Void, Never>?
     private var heartbeatTimer: Timer?
+    private var isShuttingDown = false
     private let log = Logger(subsystem: "dev.mooring", category: "helper")
 
     init(helper: any LidHelper) {
@@ -43,6 +44,7 @@ final class LidController: LidApplying {
     }
 
     func apply(_ disabled: Bool) {
+        guard !(isShuttingDown && disabled) else { return }
         run { [helper, log] in
             do {
                 try await helper.setLidSleepDisabled(disabled)
@@ -63,6 +65,17 @@ final class LidController: LidApplying {
             applied = actual
             updateHeartbeat()
             onChange?()
+        }
+    }
+
+    /// For quitting: restores lid sleep and refuses to disable it again, so the
+    /// engine's next reconcile can't undo it while leases are kept for relaunch.
+    func shutDown() async {
+        isShuttingDown = true
+        await settle()
+        if applied != false {
+            apply(false)
+            await settle()
         }
     }
 
