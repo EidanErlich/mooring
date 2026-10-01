@@ -3,6 +3,7 @@ import MooringIPC
 
 /// Human-readable text for the CLI's output.
 enum CLIText {
+    // Same formatting as `DurationText.remaining` in Packages/AwakeKit/Sources/AwakeKit/StatusText.swift; keep them identical.
     /// "45m", "2h" or "1h 12m", rounded up to whole minutes; a negative time reads as "0m". Matches the app's `DurationText.remaining`.
     static func remaining(_ seconds: TimeInterval) -> String {
         let minutes = Int((max(0, seconds) / 60).rounded(.up))
