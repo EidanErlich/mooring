@@ -2,6 +2,7 @@ import AppKit
 @preconcurrency import AwaykeMonitors
 import AwakeKit
 import Defaults
+import os
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dropdown: DropdownController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
+    private var socketServer: SocketServer?
 
     /// True when Xcode launched the app only to host unit tests.
     nonisolated static var isHostingTests: Bool {
@@ -37,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.onSuspensionsAdded = { GuardrailNotifier.post($0) }
         startMonitors(engine)
         engine.restore()
+        startSocketServer(engine)
 
         // The reconciler's backstop tick (docs/SPEC.md 1.2): drops expired leases.
         let timer = Timer(timeInterval: 5, repeats: true) { _ in
@@ -84,6 +87,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { engine.update(thermal: ProcessInfo.processInfo.thermalState) }
         }
         engine.update(thermal: ProcessInfo.processInfo.thermalState)
+    }
+
+    /// Serves the `mooring` CLI (docs/SPEC.md 2.1). Failing to listen leaves the menu working.
+    private func startSocketServer(_ engine: AwakeEngine) {
+        let handler = RequestHandler(
+            engine: engine, settings: { Defaults[.awake] },
+            helperStatus: { "\(HelperClient.shared.status)" },
+            // A hung helper mustn't hang `mooring status`.
+            readHelperSleepDisabled: {
+                await withDeadline(.seconds(1)) { @MainActor in try? await HelperClient.shared.lidSleepDisabled() }
+            }
+        )
+        let server = SocketServer(path: SocketServer.defaultPath) { request, caller in
+            await handler.handle(request, from: caller)
+        }
+        do {
+            try server.start()
+            socketServer = server
+        } catch {
+            Logger(subsystem: "dev.mooring", category: "ipc")
+                .error("CLI socket unavailable: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        socketServer?.stop()
     }
 
     /// Never quit with lid sleep disabled (docs/SPEC.md 1.6, layer 4). The
