@@ -10,4 +10,6 @@ extension Defaults.Keys {
     static let swapClickActions = Key<Bool>("swapClickActions", default: false)
     /// Settings → General: post a notification when a guardrail pauses awake.
     static let notifyGuardrails = Key<Bool>("notifyGuardrails", default: true)
+    /// Settings → General: show the countdown ("1:12", "42m") in the menu-bar pill.
+    static let showTimeLeftInMenuBar = Key<Bool>("showTimeLeftInMenuBar", default: true)
 }

@@ -1,4 +1,5 @@
 import AwakeKit
+import Defaults
 import Foundation
 import Testing
 @testable import Mooring
@@ -62,5 +63,9 @@ struct MenuBarStateTests {
         #expect(state([lease("a")], awake(suspensions: [.lidNeedsAC, .thermal, .lowBatteryLid, .lowBatteryAll]))
             == .attention(.suspension(.lowBatteryAll)))
         #expect(state([lease("a")], awake(suspensions: [.lidNeedsAC, .thermal])) == .attention(.suspension(.thermal)))
+    }
+
+    @Test func timeLeftIsShownByDefault() {
+        #expect(Defaults.Keys.showTimeLeftInMenuBar.defaultValue == true)
     }
 }

@@ -2,12 +2,15 @@ import AppKit
 import AwakeKit
 import Defaults
 
-/// Owns Mooring's single menu-bar item: the anchor (filled while anything keeps
-/// the Mac awake, with lid, battery and attention badges) and click routing.
+/// Owns Mooring's single menu-bar item: the icon (see MenuBarIcon) and click routing.
+/// The item is as wide as its content, which only changes when what it shows changes.
 @MainActor
 final class StatusItemController: NSObject {
-    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let engine: AwakeEngine
+    private var shown: String?
+    private var countdown: Timer?
+    private var settingUpdates: Task<Void, Never>?
 
     /// Called for the click that opens the dropdown.
     var onOpenPanel: (() -> Void)?
@@ -21,6 +24,9 @@ final class StatusItemController: NSObject {
         statusItem.button?.action = #selector(handleClick(_:))
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         refresh()
+        settingUpdates = Task { [weak self] in
+            for await _ in Defaults.updates(.showTimeLeftInMenuBar, initial: false) { self?.refresh() }
+        }
     }
 
     @objc private func handleClick(_ sender: NSStatusBarButton) {
@@ -36,15 +42,37 @@ final class StatusItemController: NSObject {
         }
     }
 
-    /// Redraws the icon and re-arms observation of the engine's state.
+    /// Redraws the icon when what it shows changed, and re-arms observation of the engine.
     private func refresh() {
         let menuState = withObservationTracking {
             MenuBarState.from(leases: engine.leases, state: engine.state, wantsLid: engine.wantsLid,
-                              helperEnabled: HelperClient.shared.status == .enabled, showTimeLeft: true, now: Date())
+                              helperEnabled: HelperClient.shared.status == .enabled,
+                              showTimeLeft: Defaults[.showTimeLeftInMenuBar], now: Date())
         } onChange: { [weak self] in
             Task { @MainActor in self?.refresh() }
         }
-        statusItem.button?.image = MenuBarIcon.image(for: menuState)
-        statusItem.button?.setAccessibilityLabel(MenuBarText.accessibilityLabel(for: menuState))
+        // The spoken sentence names everything the image shows, down to the visible minute.
+        let sentence = MenuBarText.accessibilityLabel(for: menuState)
+        if sentence != shown {
+            shown = sentence
+            statusItem.button?.image = MenuBarIcon.image(for: menuState)
+            statusItem.button?.setAccessibilityLabel(sentence)
+        }
+        updateCountdown(for: menuState)
+    }
+
+    /// A visible countdown needs a periodic check; nothing else does.
+    private func updateCountdown(for menuState: MenuBarState) {
+        guard case .awake(_, .timed(_?)) = menuState else {
+            countdown?.invalidate()
+            countdown = nil
+            return
+        }
+        guard countdown == nil else { return }
+        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        countdown = timer
     }
 }

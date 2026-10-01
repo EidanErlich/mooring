@@ -5,6 +5,7 @@ import SwiftUI
 struct GeneralSettingsPage: View {
     @Default(.swapClickActions) private var swapClickActions
     @Default(.notifyGuardrails) private var notifyGuardrails
+    @Default(.showTimeLeftInMenuBar) private var showTimeLeftInMenuBar
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchError: String?
 
@@ -18,6 +19,7 @@ struct GeneralSettingsPage: View {
             }
             Section {
                 Toggle("Notify me when a guardrail pauses awake", isOn: $notifyGuardrails)
+                Toggle("Show time left in the menu bar", isOn: $showTimeLeftInMenuBar)
             }
             Section {
                 Toggle("Swap left and right click", isOn: $swapClickActions)
