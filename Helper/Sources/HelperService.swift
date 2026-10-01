@@ -38,7 +38,7 @@ final class HelperService: NSObject, NSXPCListenerDelegate, MooringHelperProtoco
         }
         termination?.resume()
         timer = DispatchSource.makeTimerSource(queue: queue)
-        timer?.schedule(deadline: .now() + 2, repeating: 2)
+        timer?.schedule(deadline: .now() + Watchdog.checkInterval, repeating: Watchdog.checkInterval)
         timer?.setEventHandler { [weak self] in self?.checkWatchdog() }
         timer?.resume()
     }

@@ -48,7 +48,11 @@ enum HelperClientError: LocalizedError {
 @MainActor
 final class HelperClient {
     static let shared = HelperClient()
-    static let callTimeout: TimeInterval = 10
+    /// A healthy helper answers in milliseconds; this only bounds a broken one.
+    static let callTimeout: TimeInterval = 3
+
+    /// Called when the helper connection drops (helper restart, crash, kickstart).
+    var onConnectionLost: (@MainActor () -> Void)?
 
     private let service = SMAppService.daemon(plistName: MooringHelperConstants.launchdPlistName)
     private let log = Logger(subsystem: "dev.mooring", category: "helper")
@@ -115,7 +119,7 @@ final class HelperClient {
     }
 
     /// One XPC call. It can end through the reply, the proxy's error handler or
-    /// the 10 s timeout, so the continuation is guarded to resume exactly once.
+    /// the timeout, so the continuation is guarded to resume exactly once.
     private func call<T: Sendable>(
         _ body: @escaping (MooringHelperProtocol, @escaping @Sendable (Result<T, Error>) -> Void) -> Void
     ) async throws -> T {
@@ -159,10 +163,12 @@ final class HelperClient {
             Task { @MainActor in
                 guard let self, let current = self.connection, ObjectIdentifier(current) == identity else { return }
                 self.connection = nil
+                self.onConnectionLost?()
             }
         }
-        conn.interruptionHandler = { [log] in
+        conn.interruptionHandler = { [weak self, log] in
             log.notice("helper connection interrupted; keeping it")
+            Task { @MainActor in self?.onConnectionLost?() }
         }
         conn.resume()
         return conn

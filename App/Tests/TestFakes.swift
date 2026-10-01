@@ -9,6 +9,7 @@ final class FakeLidHelper: LidHelper {
     var sleepDisabled = false
     var failNextSet = false
     var calls: [String] = []
+    var onConnectionLost: (@MainActor () -> Void)?
 
     init(sleepDisabled: Bool = false) {
         self.sleepDisabled = sleepDisabled
@@ -44,6 +45,7 @@ final class FakeLidHelper: LidHelper {
 final class BrokenLidHelper: LidHelper {
     var status = HelperStatus.enabled
     var calls = 0
+    var onConnectionLost: (@MainActor () -> Void)?
     func setLidSleepDisabled(_ disabled: Bool) async throws { calls += 1; throw HelperClientError.remote("no") }
     func lidSleepDisabled() async throws -> Bool { calls += 1; throw HelperClientError.remote("no") }
     func heartbeat() async throws -> Bool { calls += 1; throw HelperClientError.remote("no") }

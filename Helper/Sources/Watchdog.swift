@@ -1,9 +1,10 @@
 import Foundation
 
 /// Restores sleep the helper disabled once the app is gone (docs/SPEC.md 1.6):
-/// 10 s after its last connection closes, or 90 s after its last heartbeat.
+/// 3 s after its last connection closes, or 90 s after its last heartbeat.
 struct Watchdog {
-    static let reconnectGrace: TimeInterval = 10
+    static let reconnectGrace: TimeInterval = 3
+    static let checkInterval: TimeInterval = 1
     static let heartbeatTimeout: TimeInterval = 90
 
     private(set) var sleepDisabledByUs = false

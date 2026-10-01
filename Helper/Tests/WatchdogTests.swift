@@ -6,17 +6,24 @@ private let start = Date(timeIntervalSince1970: 0)
 private func at(_ seconds: TimeInterval) -> Date { start.addingTimeInterval(seconds) }
 
 struct WatchdogTests {
+    @Test func timingsAreSnappy() {
+        #expect(Watchdog.reconnectGrace == 3)
+        #expect(Watchdog.checkInterval == 1)
+        #expect(Watchdog.heartbeatTimeout == 90)
+    }
+
     @Test func idleWatchdogNeverRestores() {
         #expect(!Watchdog().shouldRestore(at: at(1000)))
     }
 
-    @Test func restoresTenSecondsAfterLastConnectionCloses() {
+    /// A crashed app is never back within 3 s; it re-applies lid mode itself if it relaunches.
+    @Test func restoresThreeSecondsAfterLastConnectionCloses() {
         var watchdog = Watchdog()
         watchdog.connectionOpened()
         watchdog.didSetSleepDisabled(true, at: start)
         watchdog.connectionClosed(at: at(5))
-        #expect(!watchdog.shouldRestore(at: at(14)))
-        #expect(watchdog.shouldRestore(at: at(15)))
+        #expect(!watchdog.shouldRestore(at: at(7.9)))
+        #expect(watchdog.shouldRestore(at: at(8)))
     }
 
     @Test func reconnectWithinGraceCancelsRestore() {
@@ -25,7 +32,7 @@ struct WatchdogTests {
         watchdog.didSetSleepDisabled(true, at: start)
         watchdog.connectionClosed(at: at(5))
         watchdog.connectionOpened()
-        watchdog.didHeartbeat(at: at(8), sleepDisabled: true)
+        watchdog.didHeartbeat(at: at(7), sleepDisabled: true)
         #expect(!watchdog.shouldRestore(at: at(20)))
     }
 
@@ -78,8 +85,8 @@ struct WatchdogTests {
         watchdog.didHeartbeat(at: start, sleepDisabled: true)
         #expect(watchdog.sleepDisabledByUs)
         watchdog.connectionClosed(at: start)
-        #expect(!watchdog.shouldRestore(at: at(9)))
-        #expect(watchdog.shouldRestore(at: at(10)))
+        #expect(!watchdog.shouldRestore(at: at(2.9)))
+        #expect(watchdog.shouldRestore(at: at(3)))
     }
 
     @Test func heartbeatSeeingEnabledSleepAdoptsNothing() {
@@ -95,13 +102,13 @@ struct WatchdogTests {
     @Test func startingWhileOwningRestoresAfterGraceUnlessAppReconnects() {
         var owning = Watchdog()
         owning.didStart(owningSleep: true, at: start)
-        #expect(!owning.shouldRestore(at: at(9)))
-        #expect(owning.shouldRestore(at: at(10)))
+        #expect(!owning.shouldRestore(at: at(2.9)))
+        #expect(owning.shouldRestore(at: at(3)))
 
         var reconnected = Watchdog()
         reconnected.didStart(owningSleep: true, at: start)
         reconnected.connectionOpened()
-        reconnected.didHeartbeat(at: at(5), sleepDisabled: true)
+        reconnected.didHeartbeat(at: at(2), sleepDisabled: true)
         #expect(!reconnected.shouldRestore(at: at(30)))
 
         var notOwning = Watchdog()

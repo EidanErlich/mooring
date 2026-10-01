@@ -146,3 +146,25 @@ struct LidReviewFixTests {
         #expect(helper.calls <= 3)
     }
 }
+
+@MainActor
+struct LidSnappinessTests {
+    /// A helper that restarts (kickstart, crash) must be re-checked at once, not at
+    /// the next 30 s heartbeat: the stopping helper turned lid sleep back on.
+    @Test func lostConnectionIsRecheckedImmediately() async {
+        let helper = FakeLidHelper()
+        let controller = LidController(helper: helper)
+        await controller.settle()
+        controller.apply(true)
+        await controller.settle()
+        helper.sleepDisabled = false
+        helper.onConnectionLost?()
+        await controller.settle()
+        #expect(controller.applied == false)
+    }
+
+    /// A healthy helper answers in milliseconds; only a broken one ever waits this long.
+    @Test func helperCallsTimeOutQuickly() {
+        #expect(HelperClient.callTimeout == 3)
+    }
+}

@@ -6,6 +6,8 @@ import os
 @MainActor
 protocol LidHelper: AnyObject {
     var status: HelperStatus { get }
+    /// Called when the connection to the helper drops.
+    var onConnectionLost: (@MainActor () -> Void)? { get set }
     func setLidSleepDisabled(_ disabled: Bool) async throws
     func lidSleepDisabled() async throws -> Bool
     func heartbeat() async throws -> Bool
@@ -27,13 +29,25 @@ final class LidController: LidApplying {
 
     private let helper: any LidHelper
     private var task: Task<Void, Never>?
+    private var recheck: Task<Void, Never>?
     private var heartbeatTimer: Timer?
     private var isShuttingDown = false
     private let log = Logger(subsystem: "dev.mooring", category: "helper")
 
     init(helper: any LidHelper) {
         self.helper = helper
+        helper.onConnectionLost = { [weak self] in self?.connectionLost() }
         refresh()
+    }
+
+    /// The helper restarted or crashed. A stopping helper turns lid sleep back on,
+    /// so check now rather than at the next 30 s heartbeat; the engine re-applies.
+    private func connectionLost() {
+        if applied == true {
+            recheck = Task { await self.heartbeatNow() }
+        } else {
+            refresh()
+        }
     }
 
     var isAvailable: Bool { helper.status == .enabled }
@@ -94,6 +108,7 @@ final class LidController: LidApplying {
 
     /// Waits for the request in flight, if any. For tests.
     func settle() async {
+        await recheck?.value
         await task?.value
     }
 
