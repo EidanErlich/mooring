@@ -4,8 +4,8 @@ import Testing
 
 struct SettingsPageTests {
     @Test func pagesAndGroupsMatchSpec() {
-        #expect(SettingsPage.allCases.map(\.title) == ["General", "Keep Awake"])
-        #expect(SettingsPage.allCases.map(\.group) == ["General", "Awake"])
+        #expect(SettingsPage.allCases.map(\.title) == ["General", "Keep Awake", "Lid & Battery", "Advanced"])
+        #expect(SettingsPage.allCases.map(\.group) == ["General", "Awake", "Awake", "Mooring"])
     }
 
     @Test func clickLevelOptionsRoundTrip() {

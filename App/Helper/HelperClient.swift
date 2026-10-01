@@ -73,6 +73,17 @@ final class HelperClient {
         }
     }
 
+    /// "Uninstall helper…" (docs/SPEC.md 1.6, layer 4): restores sleep first, then unregisters.
+    func uninstall() async throws {
+        if status == .enabled {
+            try await setLidSleepDisabled(false)
+        }
+        try await service.unregister()
+        connection?.invalidate()
+        connection = nil
+        log.notice("helper uninstalled")
+    }
+
     func openLoginItemsSettings() {
         SMAppService.openSystemSettingsLoginItems()
     }

@@ -1,10 +1,10 @@
 import AwakeKit
 import SwiftUI
 
-/// The Settings sidebar (docs/SPEC.md, "Settings window"). Stage 1b ships
-/// General › General and Awake › Keep Awake; the other pages arrive with their stages.
+/// The Settings sidebar (docs/SPEC.md, "Settings window"). Windows, Clipboard
+/// and Shortcuts pages arrive with their stages.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, keepAwake
+    case general, keepAwake, lidAndBattery, advanced
 
     var id: String { rawValue }
 
@@ -12,13 +12,16 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .keepAwake: "Keep Awake"
+        case .lidAndBattery: "Lid & Battery"
+        case .advanced: "Advanced"
         }
     }
 
     var group: String {
         switch self {
         case .general: "General"
-        case .keepAwake: "Awake"
+        case .keepAwake, .lidAndBattery: "Awake"
+        case .advanced: "Mooring"
         }
     }
 
@@ -26,6 +29,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: "gearshape"
         case .keepAwake: "sun.max"
+        case .lidAndBattery: "laptopcomputer"
+        case .advanced: "wrench.and.screwdriver"
         }
     }
 }
@@ -56,6 +61,7 @@ enum ClickLevelOption: CaseIterable {
 }
 
 struct SettingsView: View {
+    let engine: AwakeEngine?
     @State private var selection: SettingsPage? = .general
 
     private var groups: [String] {
@@ -78,6 +84,8 @@ struct SettingsView: View {
             switch selection ?? .general {
             case .general: GeneralSettingsPage()
             case .keepAwake: KeepAwakeSettingsPage()
+            case .lidAndBattery: LidBatterySettingsPage()
+            case .advanced: AdvancedSettingsPage(engine: engine)
             }
         }
     }
