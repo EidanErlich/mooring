@@ -1,6 +1,21 @@
 import Foundation
 import MooringIPC
 
+/// The one-line JSON the CLI prints for its own failures (usage errors and an app that can't be used).
+enum CLIJSON {
+    /// `{"ok":false,"error":{"code":…,"message":…}}` and a newline, with `message` escaped.
+    static func errorLine(code: String, message: String) -> String {
+        #"{"ok":false,"error":{"code":"\#(code)","message":\#(quoted(message))}}"# + "\n"
+    }
+
+    private static func quoted(_ text: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        guard let data = try? encoder.encode([text]), let array = String(bytes: data, encoding: .utf8) else { return #""""# }
+        return String(array.dropFirst().dropLast())
+    }
+}
+
 /// Human-readable text for the CLI's output.
 enum CLIText {
     // Same formatting as `DurationText.remaining` in Packages/AwakeKit/Sources/AwakeKit/StatusText.swift; keep them identical.
