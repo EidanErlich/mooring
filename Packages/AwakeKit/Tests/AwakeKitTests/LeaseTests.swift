@@ -53,4 +53,22 @@ struct LeaseTests {
         #expect(AwakeDuration(interval: nil) == .untilTurnedOff)
         #expect(AwakeDuration(interval: 999) == .untilTurnedOff)
     }
+
+    @Test func settingsDecodeMissingKeysToDefaults() throws {
+        #expect(try JSONDecoder().decode(AwakeSettings.self, from: Data("{}".utf8)) == AwakeSettings())
+        let partial = try JSONDecoder().decode(AwakeSettings.self, from: Data(#"{"clickDuration":3600}"#.utf8))
+        var expected = AwakeSettings()
+        expected.clickDuration = 3600
+        #expect(partial == expected)
+    }
+
+    /// "Off" (nil) thresholds must survive a save and load, not fall back to their defaults.
+    @Test func offThresholdsSurviveRoundTrip() throws {
+        var settings = AwakeSettings()
+        settings.lidBatteryThreshold = nil
+        settings.allBatteryThreshold = nil
+        let decoded = try JSONDecoder().decode(AwakeSettings.self, from: JSONEncoder().encode(settings))
+        #expect(decoded.lidBatteryThreshold == nil)
+        #expect(decoded.allBatteryThreshold == nil)
+    }
 }
