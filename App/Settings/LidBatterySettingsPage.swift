@@ -7,6 +7,7 @@ struct LidBatterySettingsPage: View {
     @Default(.awake) private var awake
     @State private var status = HelperClient.shared.status
     @State private var helperError: String?
+    @State private var working: String?
 
     private static let lidThresholds: [Int?] = [nil, 10, 15, 20, 25, 30]
     private static let allThresholds: [Int?] = [nil, 5, 10, 15]
@@ -15,7 +16,12 @@ struct LidBatterySettingsPage: View {
         Form {
             Section("Helper") {
                 LabeledContent("Lid mode helper", value: statusText)
-                if status == .enabled {
+                if let working {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.small)
+                        Text(working).font(.caption).foregroundStyle(.secondary)
+                    }
+                } else if status == .enabled {
                     Button("Uninstall helper…", role: .destructive) { uninstall() }
                 } else {
                     Button("Approve…") {
@@ -59,7 +65,9 @@ struct LidBatterySettingsPage: View {
         threshold.map { "\($0)%" } ?? "Off"
     }
 
+    /// Can take ~10 s when the helper is unreachable: restoring lid sleep times out first.
     private func uninstall() {
+        working = "Turning lid sleep back on, then removing the helper…"
         Task {
             do {
                 try await SettingsWindowController.shared.lid?.uninstall()
@@ -68,6 +76,7 @@ struct LidBatterySettingsPage: View {
                 helperError = error.localizedDescription
             }
             status = HelperClient.shared.status
+            working = nil
         }
     }
 }
