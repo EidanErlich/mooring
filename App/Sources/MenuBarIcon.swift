@@ -75,7 +75,8 @@ enum MenuBarIcon {
     }
 
     private static func attentionImage() -> NSImage {
-        let mark = symbol("exclamationmark", pointSize: 11, weight: .bold)
+        // Heavy and larger: white on orange needs the extra weight to read at menu-bar size.
+        let mark = symbol("exclamationmark", pointSize: 12, weight: .black)
         let image = NSImage(size: NSSize(width: 24, height: height), flipped: false) { rect in
             NSColor.systemOrange.setFill()
             NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()

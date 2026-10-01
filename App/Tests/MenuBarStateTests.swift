@@ -68,4 +68,10 @@ struct MenuBarStateTests {
     @Test func timeLeftIsShownByDefault() {
         #expect(Defaults.Keys.showTimeLeftInMenuBar.defaultValue == true)
     }
+
+    /// Expired but not yet ticked away (up to 5 s): still the countdown, never ∞.
+    @Test func justExpiredLeaseReadsAsTimedNotIndefinite() {
+        #expect(state([lease("a", left: -2)]) == .awake(lid: false, kind: .timed(0)))
+        #expect(state([lease("a", left: -2)], showTimeLeft: false) == .awake(lid: false, kind: .timed(nil)))
+    }
 }

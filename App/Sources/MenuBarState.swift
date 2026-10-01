@@ -38,11 +38,14 @@ enum MenuBarState: Equatable {
                                                               showTimeLeft: showTimeLeft, now: now))
     }
 
+    /// No live lease while still awake means one just expired and the engine's 5 s
+    /// tick hasn't removed it yet: keep reading as the ending countdown, not ∞.
     private static func kind(of lease: Lease?, showTimeLeft: Bool, now: Date) -> AwakeKind {
-        switch (lease?.expiresAt, lease?.watch) {
-        case (let expiry?, _): .timed(showTimeLeft ? expiry.timeIntervalSince(now) : nil)
-        case (nil, _?): .task
-        case (nil, nil): .indefinite
+        guard let lease else { return .timed(showTimeLeft ? 0 : nil) }
+        switch (lease.expiresAt, lease.watch) {
+        case (let expiry?, _): return .timed(showTimeLeft ? expiry.timeIntervalSince(now) : nil)
+        case (nil, _?): return .task
+        case (nil, nil): return .indefinite
         }
     }
 }

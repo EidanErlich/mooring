@@ -243,7 +243,7 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 | Low battery, lid mode | On battery and < 20% | Suspend `lid` (keep `system`), notify; resume when back on AC and ≥ 25% (Awayke's hysteresis) |
 | Low battery, all awake | On battery and < 10% | Suspend all leases, notify |
 | Thermal | `ProcessInfo.thermalState` ≥ `.serious` while lid is closed | Suspend `lid`, notify; resume at `.nominal` |
-| Lid mode on battery | Allowed, opt-in | Until the user opts in, lid mode applies only on AC. The first lid session on battery shows a confirmation sheet (battery drain, heat, keep it out of bags) with "Allow on battery". While it runs on battery, the icon carries a battery badge. |
+| Lid mode on battery | Allowed, opt-in | Until the user opts in, lid mode applies only on AC. The first lid session on battery shows a confirmation sheet (battery drain, heat, keep it out of bags) with "Allow on battery". While it runs on battery the icon shows the normal LID pill (battery state is left to macOS's battery icon; menu-bar icon redesign, 2026-10-01). |
 | Max lease length | 12 h for any lease with an expiry; "Until turned off" allowed only from the menu | Longer requests are clamped and the clamp is reported to the caller |
 | Agent cap | 4 h per agent lease, renewable | See Part 2 |
 
@@ -446,7 +446,7 @@ Dependencies kept: `Defaults` (shared with Maccy and level 1), `Scribe` (logging
 
 ### 3.3 Permissions
 
-Window management needs **Accessibility** (`AXIsProcessTrusted`). Mooring requests it only when the user turns on Windows, never at first launch, with a sheet explaining why and a button to open **Privacy & Security → Accessibility**. Levels 1 and 2 never need it. If permission is later revoked, Windows switches itself off and the icon shows the attention dot.
+Window management needs **Accessibility** (`AXIsProcessTrusted`). Mooring requests it only when the user turns on Windows, never at first launch, with a sheet explaining why and a button to open **Privacy & Security → Accessibility**. Levels 1 and 2 never need it. If permission is later revoked, Windows switches itself off and the icon shows the orange attention pill (stage 3 adds a "permission missing" reason to it).
 
 Maccy's paste action (level 4) needs the same permission, so granting it once covers both.
 
@@ -796,7 +796,7 @@ struct AwakeSettings: Codable, Equatable {
 }
 ```
 
-- **Suspensions** are engine state; leases are never modified by guardrails. They show as the status line and the attention dot. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
+- **Suspensions** are engine state; leases are never modified by guardrails. They show in the status line and as the orange attention pill. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
 - **Guardrail settings:** lid threshold 20% and all-leases threshold 10% by default; each can be set to Off. There is no one-off override beyond these settings and the lid-on-battery opt-in.
 - **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease.
 - **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the `menu` lease whatever its duration and never touches agent leases.
@@ -811,7 +811,7 @@ struct AwakeSettings: Codable, Equatable {
 - **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
 - **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. The badge symbols and the 5 pt dot described for stages 1b/1c are superseded by the menu-bar icon redesign (2026-10-01).
 - **Stage 1b scope** (decided 2026-09-30):
-  - The lid rows ("Until I open the lid", "Allow lid close"), the icon badges, the attention dot and the Lid & Battery and Advanced settings pages ship in stage 1c with the lid level.
+  - The lid rows ("Until I open the lid", "Allow lid close"), the Lid & Battery and Advanced settings pages ship in stage 1c (icon states were later redesigned, 2026-10-01) with the lid level.
   - The dropdown's Windows and Clipboard rows appear with stages 3 and 4.
   - The global on/off hotkey and the Shortcuts page come later (the default is none).
   - The status line reads `Off`, `On · until turned off`, `On · 1h 12m left`, `On · screen on · 1h 12m left` or `On · while Xcode runs`; it describes the lease that ends last. Countdowns round minutes up.
