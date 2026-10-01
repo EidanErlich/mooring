@@ -74,4 +74,22 @@ struct StatusTextTests {
         #expect(DurationText.remaining(-125) == "0m")
         #expect(LeaseText.timeLeft(lease("a", left: -125), now: now) == "0m left")
     }
+
+    @Test func endingLastPrefersIndefiniteThenTaskThenLatestExpiry() {
+        let timed1h = lease("timed1h", left: 3600)
+        let timed2h = lease("timed2h", left: 7200)
+        let task = lease("task", watch: WatchedProcess(pid: 1, startTime: now))
+        let forever = lease("forever")
+        let expired = lease("expired", left: -5)
+        #expect(LeaseText.endingLast([timed1h, timed2h], now: now)?.id == "timed2h")
+        #expect(LeaseText.endingLast([timed2h, task], now: now)?.id == "task")
+        #expect(LeaseText.endingLast([task, forever, timed2h], now: now)?.id == "forever")
+        #expect(LeaseText.endingLast([expired], now: now) == nil)
+    }
+
+    @Test func severalAppsAreCounted() {
+        let apps = [lease("app-1", watch: WatchedProcess(pid: 1, startTime: now), reason: "While Xcode runs"),
+                    lease("app-2", watch: WatchedProcess(pid: 2, startTime: now), reason: "While Safari runs")]
+        #expect(StatusLine.text(leases: apps, state: stateFor(apps), now: now) == "On · while 2 apps run")
+    }
 }

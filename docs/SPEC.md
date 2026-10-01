@@ -106,7 +106,15 @@ Settings → General can swap left and right click for people who want the dropd
 
 **What On means** is set in Settings → Awake → "When I click the icon": level (system, screen on, or lid), duration (until turned off, or 30 min to 8 h), and "end after the Mac sleeps". Defaults: system level, until turned off.
 
-**Icon states:** off (anchor outline), on (anchor filled), on + lid mode (filled anchor with a small closed-lid badge), lid mode on battery (battery badge), attention (dot: helper needs approval, guardrail paused lid mode, or permission missing).
+**Icon states** (redesigned 2026-10-01; full design in `docs/superpowers/specs/2026-10-01-menu-bar-icon-design.md`):
+
+| State | Icon |
+| --- | --- |
+| Off | Dimmed outline anchor |
+| Awake | Solid pill: anchor, an inverted **LID** tag while lid sleep is actually disabled, and one kind label for the lease that ends last: `1:12` / `42m` (timed), ▶ (a task: an app, command or agent), ∞ (until turned off) |
+| Attention | Orange pill with a white **!**: a guardrail paused something, or lid mode waits on helper approval |
+
+Small badges are not used: at menu-bar size they don't read. Settings → General can hide the countdown.
 
 ### The dropdown is a custom panel, not a native menu
 
@@ -180,11 +188,11 @@ A lease has an id, an owner, a reason shown in the dropdown, a level, an optiona
 | Menu item | Lease created |
 | --- | --- |
 | Click icon (primary action) | Toggles the "menu" lease at the user's default level and duration |
-| For 30 min / 1 h / 2 h / 4 h / 8 h / Until turned off | `menu` lease with `expiresAt` (Chai's durations) |
+| For 30 min / 1 h / 2 h / 4 h / 8 h / Until turned off | `menu` lease with `expiresAt` (Chai's durations); replaces any picked apps |
 | Until I open the lid | `lid` lease, `endsOnLidOpen = true` (Awayke's `LidSessionTracker`) |
-| While an app runs… | Pick a running app; lease with `watch` |
-| Keep screen on | Toggles `display` on the menu lease |
-| Allow lid close | Toggles `lid` on the menu lease; until the helper is approved, this row is replaced by "Approve lid mode…", which calls register() and then opens Login Items & Extensions |
+| While an app runs… | Pick one or more running apps (✓ marks each; clicking again un-picks); one `app-<pid>` lease with `watch` per app, replacing the duration. The row reads "While Xcode runs", "While Xcode and Safari run" or "While 3 apps run" |
+| Keep screen on | Toggles `display` on the menu session (the `menu` lease or every picked app) |
+| Allow lid close | Toggles `lid` on the menu session; until the helper is approved, this row is replaced by "Approve lid mode…", which calls register() and then opens Login Items & Extensions |
 
 Defaults for a fresh install: click = `system` level, until turned off, lid off. Users who want Awayke-style one-click lid mode set the default level to `lid` in Settings.
 
@@ -235,7 +243,7 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 | Low battery, lid mode | On battery and < 20% | Suspend `lid` (keep `system`), notify; resume when back on AC and ≥ 25% (Awayke's hysteresis) |
 | Low battery, all awake | On battery and < 10% | Suspend all leases, notify |
 | Thermal | `ProcessInfo.thermalState` ≥ `.serious` while lid is closed | Suspend `lid`, notify; resume at `.nominal` |
-| Lid mode on battery | Allowed, opt-in | Until the user opts in, lid mode applies only on AC. The first lid session on battery shows a confirmation sheet (battery drain, heat, keep it out of bags) with "Allow on battery". While it runs on battery, the icon carries a battery badge. |
+| Lid mode on battery | Allowed, opt-in | Until the user opts in, lid mode applies only on AC. The first lid session on battery shows a confirmation sheet (battery drain, heat, keep it out of bags) with "Allow on battery". While it runs on battery the icon shows the normal LID pill (battery state is left to macOS's battery icon; menu-bar icon redesign, 2026-10-01). |
 | Max lease length | 12 h for any lease with an expiry; "Until turned off" allowed only from the menu | Longer requests are clamped and the clamp is reported to the caller |
 | Agent cap | 4 h per agent lease, renewable | See Part 2 |
 
@@ -243,7 +251,7 @@ macOS still forces sleep at critical battery regardless of `disablesleep`; the g
 
 ### 1.8 System events
 
-- **Wake from sleep:** if "End my session after the Mac sleeps" is on (Chai's "disable after suspend"), end the menu lease. Agent leases are unaffected.
+- **Wake from sleep:** if "End my session after the Mac sleeps" is on (Chai's "disable after suspend"), end the menu session. Agent leases are unaffected.
 - **User switch / screen lock:** leases continue. Screen lock is expected in lid mode.
 - **External display connect/disconnect:** no change needed; clamshell with a display already stays awake, and `disablesleep` covers the no-display case.
 
@@ -438,7 +446,7 @@ Dependencies kept: `Defaults` (shared with Maccy and level 1), `Scribe` (logging
 
 ### 3.3 Permissions
 
-Window management needs **Accessibility** (`AXIsProcessTrusted`). Mooring requests it only when the user turns on Windows, never at first launch, with a sheet explaining why and a button to open **Privacy & Security → Accessibility**. Levels 1 and 2 never need it. If permission is later revoked, Windows switches itself off and the icon shows the attention dot.
+Window management needs **Accessibility** (`AXIsProcessTrusted`). Mooring requests it only when the user turns on Windows, never at first launch, with a sheet explaining why and a button to open **Privacy & Security → Accessibility**. Levels 1 and 2 never need it. If permission is later revoked, Windows switches itself off and the icon shows the orange attention pill (stage 3 adds a "permission missing" reason to it).
 
 Maccy's paste action (level 4) needs the same permission, so granting it once covers both.
 
@@ -707,7 +715,7 @@ Code is copied without git history, from these exact commits:
 
 ### Menu-bar icon
 
-- An anchor: outline when off, filled when on; badges and the attention dot as in the UX section.
+- Off is a dimmed outline anchor; awake is a solid template pill (anchor, LID tag, kind label cut out); attention is an orange "!" pill. See the UX section's Icon states.
 - If SF Symbols on macOS 26 includes an anchor, use it and its `.fill` variant. Otherwise draw an original vector: `MenubarAnchor` and `MenubarAnchorFill` in `Assets.xcassets`, 18 × 18 pt, rendered as template images.
 - App icon: a placeholder anchor on a rounded square until a designed icon exists.
 
@@ -788,22 +796,23 @@ struct AwakeSettings: Codable, Equatable {
 }
 ```
 
-- **Suspensions** are engine state; leases are never modified by guardrails. They show as the status line and the attention dot. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
+- **Suspensions** are engine state; leases are never modified by guardrails. They show in the status line and as the orange attention pill. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
 - **Guardrail settings:** lid threshold 20% and all-leases threshold 10% by default; each can be set to Off. There is no one-off override beyond these settings and the lid-on-battery opt-in.
-- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease.
-- **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the `menu` lease whatever its duration and never touches agent leases.
+- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `cli` (`mooring on`, one shared id), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease. The dropdown's *menu session* is either the `menu` lease or one or more `app-<pid>` leases, never both; the On toggle and left click end the whole session.
+- **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the menu session (the `menu` lease whatever its duration, and any picked apps) and never touches agent leases.
 - `leases.json` is written with mode `0600`.
 
 **UI details for stage 1b**
 
 - **Clicks:** set `statusItem.button.sendAction(on: [.leftMouseUp, .rightMouseUp])` and branch on `NSApp.currentEvent`; Control-click counts as right click.
 - **Dropdown panel:** adapted from Maccy's `FloatingPanel.swift`. Remove its `AppState`, `Popup`, `PopupPosition`, preview and Maccy `Defaults` keys. Anchor it under the status item; width 320 pt; height fits content up to 70% of the screen; closes on outside click or Esc.
+- **Dropdown and an auto-hidden menu bar** (decided 2026-10-01): with "Automatically hide and show the menu bar" on, or in a full-screen Space, the bar can hide while the dropdown is open. A non-activating accessory app can't keep it shown (`presentationOptions` apply only to the active app and can hide the bar but not force it to show). The status item's window keeps its frame when the bar hides, but its occlusion state turns not-visible, and that is the signal. When the bar hides and the pointer isn't over the panel, the panel closes. When the pointer is over it, the panel moves up flush with the top of the screen, one level below the menu bar so the returning bar draws over it, and moves back under the bar when the bar returns. macOS reports the bar hidden only after it has slid away, so when "Automatically hide and show the menu bar" is on (`_HIHideMenuBar`) the panel also watches the pointer and acts as soon as it leaves the bar's strip, at the same time as the bar. If the bar is still showing a second later, the panel moves back under it.
 - **"While an app runs…"** lists `NSWorkspace.shared.runningApplications` with `activationPolicy == .regular`, with icons.
 - **Settings window:** plain SwiftUI `NavigationSplitView` with the sidebar from the UX section. Items from 1.9 map to: helper, AC requirement, thresholds, thermal → Awake › Lid & Battery; notifications → General; logs, diagnostics, uninstall → Mooring › Advanced. Luminare is used only for the Windows pages in stage 3.
 - **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
-- **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. Badges are small symbols composited at the bottom right: `laptopcomputer` (lid mode), `battery.25` (on battery), a 5 pt dot (attention).
+- **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. The badge symbols and the 5 pt dot described for stages 1b/1c are superseded by the menu-bar icon redesign (2026-10-01).
 - **Stage 1b scope** (decided 2026-09-30):
-  - The lid rows ("Until I open the lid", "Allow lid close"), the icon badges, the attention dot and the Lid & Battery and Advanced settings pages ship in stage 1c with the lid level.
+  - The lid rows ("Until I open the lid", "Allow lid close"), the Lid & Battery and Advanced settings pages ship in stage 1c (icon states were later redesigned, 2026-10-01) with the lid level.
   - The dropdown's Windows and Clipboard rows appear with stages 3 and 4.
   - The global on/off hotkey and the Shortcuts page come later (the default is none).
   - The status line reads `Off`, `On · until turned off`, `On · 1h 12m left`, `On · screen on · 1h 12m left` or `On · while Xcode runs`; it describes the lease that ends last. Countdowns round minutes up.

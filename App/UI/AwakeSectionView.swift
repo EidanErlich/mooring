@@ -3,7 +3,8 @@ import AwakeKit
 import Defaults
 import SwiftUI
 
-/// The Awake section (docs/SPEC.md, UX table). Lid rows join in stage 1c.
+/// The Awake section (docs/SPEC.md, UX table). The menu session is either a duration
+/// or the picked apps; the rows show which one is active.
 struct AwakeSectionView: View {
     let engine: AwakeEngine
     let model: DropdownModel
@@ -16,7 +17,7 @@ struct AwakeSectionView: View {
             MenuRow(title: "Awake", systemImage: "chevron.left") { model.page = .root }
                 .font(.headline)
             Divider()
-            Toggle("On", isOn: Binding(get: { engine.menuLease != nil }, set: { _ in engine.toggleMenu() }))
+            Toggle("On", isOn: Binding(get: { engine.hasMenuSession }, set: { _ in engine.toggleMenu() }))
                 .toggleStyle(.switch)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
@@ -27,18 +28,16 @@ struct AwakeSectionView: View {
                 }
             }
             Divider()
-            MenuRow(title: "While an app runs…", trailing: showingApps ? "⌄" : "›") { showingApps.toggle() }
+            MenuRow(title: AppSessionText.rowTitle(appNames: pickedAppNames), trailing: showingApps ? "⌄" : "›",
+                    checked: !engine.sessionApps.isEmpty) { showingApps.toggle() }
             if showingApps {
                 ForEach(runningApps(), id: \.processIdentifier) { app in
-                    AppRow(app: app) {
-                        engine.anchor(whileAppRuns: app.processIdentifier, appName: app.localizedName ?? "App")
-                        showingApps = false
-                    }
+                    AppRow(app: app, picked: isPicked(app)) { togglePick(app) }
                 }
             }
             Toggle(
                 "Keep screen on",
-                isOn: Binding(get: { engine.menuLease?.level.display ?? false }, set: { engine.setKeepScreenOn($0) })
+                isOn: Binding(get: { engine.sessionLevel?.display ?? false }, set: { engine.setKeepScreenOn($0) })
             )
             .toggleStyle(.switch)
             .padding(.horizontal, 8)
@@ -55,7 +54,7 @@ struct AwakeSectionView: View {
         if HelperClient.shared.status == .enabled {
             Toggle(
                 "Allow lid close",
-                isOn: Binding(get: { engine.menuLease?.level.lid ?? false }, set: { enabled in
+                isOn: Binding(get: { engine.sessionLevel?.lid ?? false }, set: { enabled in
                     guard !enabled || confirmLidOnBattery() else { return }
                     engine.setAllowLidClose(enabled)
                 })
@@ -109,6 +108,28 @@ struct AwakeSectionView: View {
         .padding(.vertical, 4)
     }
 
+    /// Names of the picked apps, from the running app when possible.
+    private var pickedAppNames: [String] {
+        engine.sessionApps.map { lease in
+            lease.watch.flatMap { NSRunningApplication(processIdentifier: $0.pid)?.localizedName }
+                ?? String(lease.reason.dropFirst("While ".count).dropLast(" runs".count))
+        }
+    }
+
+    private func isPicked(_ app: NSRunningApplication) -> Bool {
+        engine.sessionApps.contains { $0.watch?.pid == app.processIdentifier }
+    }
+
+    /// Picking adds the app to the session (replacing a duration); picking again removes it.
+    private func togglePick(_ app: NSRunningApplication) {
+        if isPicked(app) {
+            engine.release(id: "app-\(app.processIdentifier)")
+        } else {
+            engine.anchor(whileAppRuns: app.processIdentifier, appName: app.localizedName ?? "App")
+            model.lastPick = .none
+        }
+    }
+
     private func runningApps() -> [NSRunningApplication] {
         NSWorkspace.shared.runningApplications
             .filter { $0.activationPolicy == .regular && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
@@ -118,9 +139,22 @@ struct AwakeSectionView: View {
 
 private struct AppRow: View {
     let app: NSRunningApplication
+    let picked: Bool
     let action: () -> Void
 
     var body: some View {
-        MenuRow(title: app.localizedName ?? "App", icon: app.icon, action: action)
+        MenuRow(title: app.localizedName ?? "App", icon: app.icon, checked: picked, action: action)
+    }
+}
+
+/// The "While an app runs…" row title once apps are picked.
+enum AppSessionText {
+    static func rowTitle(appNames: [String]) -> String {
+        switch appNames.count {
+        case 0: "While an app runs…"
+        case 1: "While \(appNames[0]) runs"
+        case 2: "While \(appNames[0]) and \(appNames[1]) run"
+        default: "While \(appNames.count) apps run"
+        }
     }
 }

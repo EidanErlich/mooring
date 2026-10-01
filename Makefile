@@ -28,8 +28,11 @@ generate:
 build: generate
 	$(XCODEBUILD) -configuration Debug build $(XCODEBUILD_FLAGS)
 
+# Waits for the old instance to exit: opening while it is still quitting just
+# re-activates the dying process, leaving nothing running.
 run: build
 	-pkill -x Mooring
+	@for _ in 1 2 3 4 5 6 7 8 9 10; do pgrep -x Mooring >/dev/null || break; sleep 0.5; done
 	open $(DERIVED)/Build/Products/Debug/$(APP)
 
 test: generate
