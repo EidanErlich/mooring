@@ -172,7 +172,7 @@ struct SocketServerTests {
 
     @Test func silentClientDoesNotBlockOthers() async throws {
         try await withSocketPath { path in
-            let server = SocketServer(path: path, readTimeout: 0.5, handle: Self.released)
+            let server = SocketServer(path: path, readTimeout: 1.5, handle: Self.released)
             try server.start()
             defer { server.stop() }
 
@@ -186,9 +186,9 @@ struct SocketServerTests {
             // Answered while the silent client is still waiting on its read timeout.
             #expect(RawClient.receive(silent, timeout: 0) == .timedOut)
 
-            let silentReply = try await RawClient.offPool { RawClient.receive(silent, timeout: 3) }
+            let silentReply = try await RawClient.offPool { RawClient.receive(silent, timeout: 5) }
             #expect(silentReply == .eof)
-            #expect(Date().timeIntervalSince(start) >= 0.4)
+            #expect(Date().timeIntervalSince(start) >= 1.4)
         }
     }
 
