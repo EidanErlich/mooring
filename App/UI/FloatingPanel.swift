@@ -12,13 +12,18 @@ import SwiftUI
 //
 // With an auto-hidden menu bar (or a full-screen Space), the status item's window
 // stops being visible when the bar hides; its frame doesn't change, so occlusion is
-// the signal. See PanelPlacement.response for what the panel does then.
+// the signal. See PanelPlacement.response for what the panel does then. That signal
+// arrives only after the bar has slid away, so with auto-hide on the panel also
+// watches the pointer and acts as it leaves the bar (PanelPlacement.predictedChange).
 final class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
     private(set) var isPresented = false
     private weak var statusBarButton: NSStatusBarButton?
     private let onClose: @MainActor () -> Void
     private var menuBarShown = true
     private var occlusionObserver: NSObjectProtocol?
+    private var pointerMonitors: [Any] = []
+    /// How long a predicted hide waits for macOS to confirm it before moving back.
+    private static var hideConfirmation: TimeInterval { 1 }
 
     init(onClose: @escaping @MainActor () -> Void, content: () -> Content) {
         self.onClose = onClose
@@ -48,6 +53,7 @@ final class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
         statusBarButton = button
         setMenuBarShown(button.window?.occlusionState.contains(.visible) ?? true)
         observeMenuBar(button.window)
+        watchPointer()
         contentViewController?.view.layoutSubtreeIfNeeded()
         reposition()
         orderFrontRegardless()
@@ -84,12 +90,53 @@ final class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
     private func stopObservingMenuBar() {
         if let occlusionObserver { NotificationCenter.default.removeObserver(occlusionObserver) }
         occlusionObserver = nil
+        pointerMonitors.forEach(NSEvent.removeMonitor)
+        pointerMonitors = []
+    }
+
+    /// "Automatically hide and show the menu bar" set to Always (or On desktop only).
+    private var menuBarAutoHides: Bool {
+        UserDefaults.standard.bool(forKey: "_HIHideMenuBar")
+    }
+
+    private func watchPointer() {
+        guard menuBarAutoHides else { return }
+        acceptsMouseMovedEvents = true
+        let moved: @MainActor () -> Void = { [weak self] in self?.pointerMoved() }
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved, handler: { _ in
+            MainActor.assumeIsolated { moved() }
+        }) { pointerMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved, handler: { event in
+            MainActor.assumeIsolated { moved() }
+            return event
+        }) { pointerMonitors.append(local) }
+    }
+
+    private func pointerMoved() {
+        guard isPresented, let buttonWindow = statusBarButton?.window,
+              let change = PanelPlacement.predictedChange(
+                  pointer: NSEvent.mouseLocation, barBottom: buttonWindow.frame.minY, panelFrame: frame,
+                  menuBarShown: menuBarShown, autoHides: true)
+        else { return }
+        apply(change, menuBarShown: false)
+        guard change == .moveFlush else { return }
+        // If the bar stayed (the pointer went back up in time), move back under it.
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.hideConfirmation) { [weak self] in
+            guard let self, isPresented, !menuBarShown,
+                  statusBarButton?.window?.occlusionState.contains(.visible) == true else { return }
+            apply(.moveUnderBar, menuBarShown: true)
+        }
     }
 
     private func menuBarVisibilityChanged() {
         guard isPresented, let shown = statusBarButton?.window?.occlusionState.contains(.visible),
               shown != menuBarShown else { return }
-        switch PanelPlacement.response(menuBarShown: shown, pointerInPanel: frame.contains(NSEvent.mouseLocation)) {
+        apply(PanelPlacement.response(menuBarShown: shown, pointerInPanel: frame.contains(NSEvent.mouseLocation)),
+              menuBarShown: shown)
+    }
+
+    private func apply(_ change: PanelPlacement.MenuBarChange, menuBarShown shown: Bool) {
+        switch change {
         case .close:
             close()
         case .moveFlush, .moveUnderBar:

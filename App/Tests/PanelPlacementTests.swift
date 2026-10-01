@@ -57,4 +57,18 @@ struct PanelPlacementTests {
         #expect(PanelPlacement.response(menuBarShown: true, pointerInPanel: false) == .moveUnderBar)
         #expect(PanelPlacement.response(menuBarShown: true, pointerInPanel: true) == .moveUnderBar)
     }
+
+    @Test func pointerLeavingAnAutoHidingBarActsAtOnce() {
+        let panelFrame = NSRect(x: 1180, y: 730, width: 320, height: 400)
+        func predict(_ pointer: NSPoint, shown: Bool = true, autoHides: Bool = true) -> PanelPlacement.MenuBarChange? {
+            PanelPlacement.predictedChange(pointer: pointer, barBottom: 1130, panelFrame: panelFrame,
+                                           menuBarShown: shown, autoHides: autoHides)
+        }
+        #expect(predict(NSPoint(x: 1200, y: 1140)) == nil)
+        #expect(predict(NSPoint(x: 1200, y: 1130)) == nil)
+        #expect(predict(NSPoint(x: 1200, y: 1000)) == .moveFlush)
+        #expect(predict(NSPoint(x: 600, y: 1000)) == .close)
+        #expect(predict(NSPoint(x: 600, y: 1000), autoHides: false) == nil)
+        #expect(predict(NSPoint(x: 600, y: 1000), shown: false) == nil)
+    }
 }

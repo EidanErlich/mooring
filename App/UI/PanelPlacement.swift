@@ -36,4 +36,13 @@ enum PanelPlacement {
         if menuBarShown { return .moveUnderBar }
         return pointerInPanel ? .moveFlush : .close
     }
+
+    /// macOS reports the bar hidden only after it has slid away, so with auto-hide on
+    /// the panel acts as soon as the pointer leaves the bar's strip, together with
+    /// the bar. Nil means wait for macOS.
+    static func predictedChange(pointer: NSPoint, barBottom: CGFloat, panelFrame: NSRect,
+                                menuBarShown: Bool, autoHides: Bool) -> MenuBarChange? {
+        guard autoHides, menuBarShown, pointer.y < barBottom else { return nil }
+        return response(menuBarShown: false, pointerInPanel: panelFrame.contains(pointer))
+    }
 }
