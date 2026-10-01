@@ -172,6 +172,7 @@ struct RequestHandlerOpsTests {
             Issue.record("expected a status result, got \(response)")
             return
         }
+        #expect(status.summary == "On · screen on · lid mode paused · until turned off")
         #expect(status.effective == LevelInfo(system: true, display: true, lid: false))
         #expect(status.systemAssertion)
         #expect(status.displayAssertion)
@@ -207,11 +208,24 @@ struct RequestHandlerOpsTests {
             Issue.record("expected a status result, got \(response)")
             return
         }
+        #expect(status.summary == "Off")
         #expect(status.helperSleepDisabled == nil)
         #expect(status.leases.isEmpty)
         #expect(status.thermal == "nominal")
         #expect(status.lidClosed == nil)
         #expect(status.suspensions.isEmpty)
         #expect(status.effective == LevelInfo(system: false, display: false, lid: false))
+    }
+
+    @Test func statusListsOnlyLiveLeases() async {
+        let fixture = RequestFixture()
+        fixture.engine.acquire(id: "job", owner: .cli(pid: 5), reason: "x", level: .system, duration: 60)
+        fixture.knobs.clock = fixture.clock.addingTimeInterval(120)
+        let response = await fixture.send(.status)
+        guard case .status(let status)? = response.result else {
+            Issue.record("expected a status result, got \(response)")
+            return
+        }
+        #expect(status.leases.isEmpty)
     }
 }

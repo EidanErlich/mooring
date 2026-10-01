@@ -183,12 +183,17 @@ final class RequestHandler {
     // MARK: - status
 
     private func status() async -> StatusResult {
+        // The helper read suspends, so take it first and read the engine in one synchronous stretch.
+        let helperSleepDisabled = await readHelperSleepDisabled()
+        let current = now()
         let state = engine.state
+        let live = engine.leases.filter { $0.isLive(at: current) }
         return StatusResult(
+            summary: StatusLine.text(leases: engine.leases, state: state, now: current),
             effective: LevelInfo(system: state.systemAssertion, display: state.displayAssertion, lid: state.lidSleepDisabled),
             systemAssertion: state.systemAssertion, displayAssertion: state.displayAssertion,
-            lidSleepDisabled: state.lidSleepDisabled, helperSleepDisabled: await readHelperSleepDisabled(),
-            wantsLid: engine.wantsLid, leases: engine.leases.map(LeaseInfo.init),
+            lidSleepDisabled: state.lidSleepDisabled, helperSleepDisabled: helperSleepDisabled,
+            wantsLid: engine.wantsLid, leases: live.map(LeaseInfo.init),
             power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
             thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
             suspensions: state.suspensions.map { String(describing: $0) }.sorted()

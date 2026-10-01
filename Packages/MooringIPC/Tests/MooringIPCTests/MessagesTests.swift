@@ -114,7 +114,8 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
 }
 
 @Test func statusResultRoundTripsWithDates() throws {
-    let status = StatusResult(effective: LevelInfo(system: true, display: true, lid: false), systemAssertion: true,
+    let status = StatusResult(summary: "On · screen on · 1h left", effective: LevelInfo(system: true, display: true, lid: false),
+        systemAssertion: true,
         displayAssertion: true, lidSleepDisabled: false, helperSleepDisabled: nil, wantsLid: false,
         leases: [sampleLease(), sampleLease(expiresAt: nil)], power: PowerInfo(onAC: false, batteryPercent: nil),
         thermal: "nominal", lidClosed: nil, helper: "notRegistered", suspensions: ["battery"])
@@ -123,6 +124,7 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
     let text = try #require(String(bytes: line, encoding: .utf8))
     #expect(text.contains(#""expiresAt":"2027-01-15T08:00:00Z""#))
     let result = try #require(try object(line)["result"] as? [String: Any])
+    #expect(result["summary"] as? String == "On · screen on · 1h left")
     for key in ["helperSleepDisabled", "lidClosed"] { #expect(result[key] is NSNull, "\(key) should be an explicit null") }
     #expect((result["power"] as? [String: Any])?["batteryPercent"] is NSNull)
     let leases = try #require(result["leases"] as? [[String: Any]])

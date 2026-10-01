@@ -93,6 +93,8 @@ public struct PowerInfo: Codable, Sendable, Equatable {
 
 /// The app's whole state for `mooring status`. `helperSleepDisabled` and `lidClosed` are explicit `null` when unknown.
 public struct StatusResult: Codable, Sendable, Equatable {
+    /// The dropdown's first line, for example "On · lid mode · 1h 12m left".
+    public var summary: String
     public var effective: LevelInfo
     public var systemAssertion: Bool
     public var displayAssertion: Bool
@@ -106,9 +108,10 @@ public struct StatusResult: Codable, Sendable, Equatable {
     public var helper: String
     public var suspensions: [String]
 
-    public init(effective: LevelInfo, systemAssertion: Bool, displayAssertion: Bool, lidSleepDisabled: Bool,
+    public init(summary: String, effective: LevelInfo, systemAssertion: Bool, displayAssertion: Bool, lidSleepDisabled: Bool,
                 helperSleepDisabled: Bool?, wantsLid: Bool, leases: [LeaseInfo], power: PowerInfo, thermal: String,
                 lidClosed: Bool?, helper: String, suspensions: [String]) {
+        self.summary = summary
         self.effective = effective
         self.systemAssertion = systemAssertion
         self.displayAssertion = displayAssertion
@@ -125,6 +128,7 @@ public struct StatusResult: Codable, Sendable, Equatable {
 
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(summary, forKey: .summary)
         try container.encode(effective, forKey: .effective)
         try container.encode(systemAssertion, forKey: .systemAssertion)
         try container.encode(displayAssertion, forKey: .displayAssertion)
