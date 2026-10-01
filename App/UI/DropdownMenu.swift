@@ -216,17 +216,34 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         for (offset, item) in lidItems().enumerated() { awake.insertItem(item, at: start + 1 + offset) }
     }
 
-    /// One item per lease after the caption, or "Nothing anchored".
+    /// One item per lease after the caption, in engine order, or "Nothing anchored". It
+    /// only adds and removes the items that changed: a renewed lease keeps its row, so a
+    /// click is never delivered to a view that is about to be replaced.
     private func syncLeaseItems() {
         guard let caption = index(of: "anchoredCaption", in: awake) else { return }
-        while awake.items.count > caption + 1 { awake.removeItem(at: caption + 1) }
-        if engine.leases.isEmpty {
-            awake.addItem(hosted(id: "nothingAnchored", enabled: false) {
-                Text("Nothing anchored").foregroundStyle(.secondary).padding(.horizontal, 14)
-            })
+        let wanted = engine.leases.map { "lease.\($0.id)" }
+        let keep = Set(wanted + (wanted.isEmpty ? ["nothingAnchored"] : []))
+        for item in awake.items.suffix(from: caption + 1).reversed() where !keep.contains(item.identifier?.rawValue ?? "") {
+            awake.removeItem(item)
         }
-        for lease in engine.leases {
-            awake.addItem(hosted(id: "lease.\(lease.id)") { LeaseRow(engine: self.engine, model: self.model, lease: lease) })
+        if wanted.isEmpty {
+            if index(of: "nothingAnchored", in: awake) == nil {
+                awake.addItem(hosted(id: "nothingAnchored", enabled: false) {
+                    Text("Nothing anchored").foregroundStyle(.secondary).padding(.horizontal, 14)
+                })
+            }
+            return
+        }
+        for (position, id) in wanted.enumerated() {
+            let target = caption + 1 + position
+            if target < awake.items.count, awake.items[target].identifier?.rawValue == id { continue }
+            if let existing = awake.items.first(where: { $0.identifier?.rawValue == id }) {
+                awake.removeItem(existing)
+                awake.insertItem(existing, at: target)
+            } else {
+                let leaseID = String(id.dropFirst("lease.".count))
+                awake.insertItem(hosted(id: id) { LeaseRow(engine: self.engine, model: self.model, id: leaseID) }, at: target)
+            }
         }
     }
 

@@ -77,6 +77,44 @@ struct DropdownMenuTests {
         #expect(ids(menu.awake).suffix(2) == ["anchoredCaption", "lease.menu"])
     }
 
+    @Test func renewalKeepsTheSameRowView() async {
+        let (menu, engine) = makeMenuAndEngine()
+        menu.menuWillOpen(menu.root)
+        engine.acquire(id: "job", owner: .cli(pid: 1), reason: "r", level: .system, duration: 600)
+        for _ in 0..<5 { await Task.yield() }
+        let before = menu.awake.items.first { $0.identifier?.rawValue == "lease.job" }?.view
+        engine.acquire(id: "job", owner: .cli(pid: 1), reason: "r", level: .system, duration: 1200)
+        for _ in 0..<5 { await Task.yield() }
+        let after = menu.awake.items.first { $0.identifier?.rawValue == "lease.job" }?.view
+        #expect(before != nil && before === after)
+    }
+
+    @Test func addingAndReleasingChangeOneRowEach() async {
+        let (menu, engine) = makeMenuAndEngine()
+        menu.menuWillOpen(menu.root)
+        engine.acquire(id: "a", owner: .cli(pid: 1), reason: "r", level: .system, duration: 600)
+        for _ in 0..<5 { await Task.yield() }
+        let viewA = menu.awake.items.first { $0.identifier?.rawValue == "lease.a" }?.view
+        engine.acquire(id: "b", owner: .cli(pid: 1), reason: "r", level: .system, duration: 600)
+        for _ in 0..<5 { await Task.yield() }
+        #expect(ids(menu.awake).suffix(3) == ["anchoredCaption", "lease.a", "lease.b"])
+        engine.release(id: "b")
+        for _ in 0..<5 { await Task.yield() }
+        #expect(ids(menu.awake).suffix(2) == ["anchoredCaption", "lease.a"])
+        #expect(menu.awake.items.first { $0.identifier?.rawValue == "lease.a" }?.view === viewA)
+    }
+
+    @Test func guardrailChangeLeavesLeaseRowsAlone() async {
+        let (menu, engine) = makeMenuAndEngine()
+        menu.menuWillOpen(menu.root)
+        engine.acquire(id: "a", owner: .cli(pid: 1), reason: "r", level: AwakeLevel(display: false, lid: true), duration: 600)
+        for _ in 0..<5 { await Task.yield() }
+        let before = menu.awake.items.first { $0.identifier?.rawValue == "lease.a" }?.view
+        engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 5))
+        for _ in 0..<5 { await Task.yield() }
+        #expect(menu.awake.items.first { $0.identifier?.rawValue == "lease.a" }?.view === before)
+    }
+
     @Test func appRowsAreRebuiltWhenTheSubmenuOpens() {
         var running: [NSRunningApplication] = []
         let menu = makeMenu(runningApps: { running })

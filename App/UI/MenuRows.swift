@@ -84,26 +84,32 @@ struct StatusHeader: View {
 }
 
 /// One anchored lease: who holds it, why, how long is left, and a button to end it.
+/// It reads the lease by id in its body, so a renewed lease updates the same row. The
+/// row can outlive its lease for a moment, until the menu syncs.
 struct LeaseRow: View {
     let engine: AwakeEngine
     let model: DropdownModel
-    let lease: Lease
+    let id: String
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1, paused: !model.isOpen)) { context in
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(LeaseText.owner(lease.owner)).font(.caption).foregroundStyle(.secondary)
-                    Text(lease.reason).lineLimit(1)
+        if let lease = engine.leases.first(where: { $0.id == id }) {
+            TimelineView(.animation(minimumInterval: 1, paused: !model.isOpen)) { context in
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(LeaseText.owner(lease.owner)).font(.caption).foregroundStyle(.secondary)
+                        Text(lease.reason).lineLimit(1)
+                    }
+                    Spacer()
+                    Text(LeaseText.timeLeft(lease, now: context.date)).foregroundStyle(.secondary).monospacedDigit()
+                    Button { engine.release(id: id) } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                        .help("End this")
                 }
-                Spacer()
-                Text(LeaseText.timeLeft(lease, now: context.date)).foregroundStyle(.secondary).monospacedDigit()
-                Button { engine.release(id: lease.id) } label: { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("End this")
+                .padding(.horizontal, 14)
             }
-            .padding(.horizontal, 14)
+        } else {
+            EmptyView()
         }
     }
 }
