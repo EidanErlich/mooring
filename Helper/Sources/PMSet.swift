@@ -28,21 +28,17 @@ enum PMSet {
     /// Runs pmset and returns stdout; throws `PMSetError` on a non-zero exit.
     static func run(_ arguments: [String]) throws -> String {
         let process = Process()
+        let (stdout, stderr) = (Pipe(), Pipe())
         process.executableURL = executableURL
         process.arguments = arguments
-        let stdout = Pipe()
-        let stderr = Pipe()
         process.standardOutput = stdout
         process.standardError = stderr
-
         try process.run()
         let output = stdout.fileHandleForReading.readDataToEndOfFile()
         let errorOutput = stderr.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-
         guard process.terminationStatus == 0 else {
-            let message = String(data: errorOutput, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let message = (String(data: errorOutput, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             throw PMSetError(status: process.terminationStatus, message: message.isEmpty ? "pmset failed" : message)
         }
         return String(data: output, encoding: .utf8) ?? ""
