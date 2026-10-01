@@ -71,11 +71,18 @@ struct Harness {
     let capture = Capture()
     let table: FakeProcessTable
     let parentPID: Int32
+    let ownBinaryPath: String
+    let pathEnv: String?
 
-    init(client: RecordingClient = RecordingClient(), table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100) {
+    init(
+        client: RecordingClient = RecordingClient(), table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100,
+        ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil
+    ) {
         self.client = client
         self.table = table
         self.parentPID = parentPID
+        self.ownBinaryPath = ownBinaryPath
+        self.pathEnv = pathEnv
     }
 
     func run(_ arguments: [String]) async -> Int32 {
@@ -83,7 +90,7 @@ struct Harness {
         let environment = CLIEnvironment(
             client: client, processes: table, ownPID: 500, parentPID: parentPID,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
-            newID: { "req-1" }, now: { fixedNow }
+            newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv
         )
         return await MooringCLI.run(arguments, environment: environment)
     }

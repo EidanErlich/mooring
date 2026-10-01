@@ -81,8 +81,16 @@ struct Anchor: ParsableCommand, CLICommand {
     }
 
     func execute(_ env: CLIEnvironment) async -> Int32 {
-        await CommandRunner(env: env, options: output).run {
-            if !command.isEmpty { throw CLIError.usage("Running a command isn't wired up yet") }
+        if !command.isEmpty {
+            guard pid == nil else {
+                env.writeError("mooring: Use either --pid or -- <command>\n")
+                return 1
+            }
+            return await AnchoredCommand(
+                env: env, options: output, command: command, level: level, reason: reason, agent: agent
+            ).run()
+        }
+        return await CommandRunner(env: env, options: output).run {
             guard let watched = try CLIParse.pid(pid, flag: "--pid") else {
                 throw CLIError.usage("Give --pid <pid> or -- <command>")
             }

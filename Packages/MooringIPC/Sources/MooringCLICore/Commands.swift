@@ -57,7 +57,7 @@ struct MooringCommand: ParsableCommand {
             mooring anchor -- <command>
         """,
         version: "mooring 0.2.0-dev",
-        subcommands: [OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self]
+        subcommands: [OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self]
     )
 }
 
@@ -145,7 +145,8 @@ struct CommandRunner {
         return WireText.exitCode(for: error.code)
     }
 
-    private func unreachable() -> Int32 {
+    /// Reports that the app can't be reached, as text or `--json`, and returns exit code 3.
+    func unreachable() -> Int32 {
         let message = "Mooring isn't running and couldn't be started"
         if options.json {
             env.write(#"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")

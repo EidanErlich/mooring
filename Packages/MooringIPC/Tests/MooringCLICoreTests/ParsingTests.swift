@@ -135,8 +135,6 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
     #expect(await harness.run(["anchor"]) == 1)
     #expect(harness.capture.stderr.contains("Give --pid <pid> or -- <command>"))
     #expect(await harness.run(["anchor", "--pid", "0"]) == 1)
-    #expect(await harness.run(["anchor", "--", "sleep", "1"]) == 1)
-    #expect(harness.capture.stderr.contains("Running a command isn't wired up yet"))
     #expect(harness.client.requests.isEmpty)
 }
 
