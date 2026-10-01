@@ -13,12 +13,15 @@ struct DropdownMenuTests {
     private func makeMenuAndEngine(
         helperEnabled: @escaping () -> Bool = { true },
         runningApps: @escaping () -> [NSRunningApplication] = { [] },
-        model: DropdownModel = DropdownModel()
+        model: DropdownModel = DropdownModel(),
+        needsLidConfirmation: @escaping () -> Bool = { false },
+        confirmLidOnBattery: @escaping () -> Void = {}
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
         let menu = DropdownMenu(engine: engine, model: model, helperEnabled: helperEnabled,
-                                runningApps: runningApps, openSettings: {})
+                                runningApps: runningApps, openSettings: {},
+                                needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery)
         return (menu, engine)
     }
 
@@ -127,5 +130,42 @@ struct DropdownMenuTests {
         #expect(menu.awake.items.contains { $0.identifier?.rawValue == "untilLidOpens" })
         #expect(menu.root.items.first { $0.identifier?.rawValue == "header" }?.isEnabled == false)
         #expect(menu.awake.items.first { $0.identifier?.rawValue == "anchoredCaption" }?.isEnabled == false)
+    }
+
+    @Test func headerGrowsWithItsText() {
+        let (menu, engine) = makeMenuAndEngine()
+        let header = menu.root.items.first { $0.identifier?.rawValue == "header" }!.view!
+        let before = header.frame.height
+        engine.acquire(id: "app-999999", owner: .menu, reason: "While Visual Studio Code and Microsoft Teams run",
+                       level: .screenOn, duration: nil, watchPID: 999_999)
+        // The hosting view only re-renders on run loop turns, even off screen.
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        #expect(header.fittingSize.height > before)
+        #expect(header.frame.height == before)  // the stale height the fix replaces
+        menu.menuWillOpen(menu.root)
+        #expect(header.frame.height == header.fittingSize.height)
+        #expect(header.frame.height > before)
+        #expect(header.frame.width == 300)
+    }
+
+    @Test func lidConfirmationWaitsForTheMenuToClose() async {
+        var confirms = 0
+        var ran = 0
+        let menu = makeMenuAndEngine(needsLidConfirmation: { true }, confirmLidOnBattery: { confirms += 1 }).0
+        menu.menuWillOpen(menu.root)
+        menu.requestLid { ran += 1 }
+        #expect(confirms == 0 && ran == 0)
+        menu.menuDidClose(menu.root)
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(confirms == 1 && ran == 1)
+    }
+
+    @Test func lidRequestWithoutConfirmationActsImmediately() {
+        var confirms = 0
+        var ran = 0
+        let menu = makeMenuAndEngine(needsLidConfirmation: { false }, confirmLidOnBattery: { confirms += 1 }).0
+        menu.menuWillOpen(menu.root)
+        menu.requestLid { ran += 1 }
+        #expect(confirms == 0 && ran == 1)
     }
 }

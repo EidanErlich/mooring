@@ -21,16 +21,25 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private let helperEnabled: () -> Bool
     private let runningApps: () -> [NSRunningApplication]
     private let openSettings: () -> Void
+    private let needsLidConfirmation: (PowerSnapshot) -> Bool
+    private let confirmLidOnBattery: () -> Void
     private let appsItem = NSMenuItem()
     private var observing = false
+    private var headerItem: NSMenuItem?
+    /// A lid action waiting for the menu to close so its confirmation can run.
+    private var pendingLidAction: (() -> Void)?
 
     init(engine: AwakeEngine, model: DropdownModel, helperEnabled: @escaping () -> Bool,
-         runningApps: @escaping () -> [NSRunningApplication], openSettings: @escaping () -> Void) {
+         runningApps: @escaping () -> [NSRunningApplication], openSettings: @escaping () -> Void,
+         needsLidConfirmation: @escaping (PowerSnapshot) -> Bool = { LidOptIn.needsConfirmation(power: $0, settings: Defaults[.awake]) },
+         confirmLidOnBattery: @escaping () -> Void = { _ = LidOptIn.confirm() }) {
         self.engine = engine
         self.model = model
         self.helperEnabled = helperEnabled
         self.runningApps = runningApps
         self.openSettings = openSettings
+        self.needsLidConfirmation = needsLidConfirmation
+        self.confirmLidOnBattery = confirmLidOnBattery
         super.init()
         for menu in [root, awake, apps] {
             menu.delegate = self
@@ -47,6 +56,26 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         appsItem.title = AppSessionText.rowTitle(appNames: Self.pickedAppNames(engine))
         appsItem.state = engine.sessionApps.isEmpty ? .off : .on
         syncLeaseItems()
+        if let headerItem { resizeToFit(headerItem) }
+    }
+
+    /// A hosted item keeps the height it was built with, so the header (whose line can
+    /// wrap or shrink as the state and leases change) is resized by hand.
+    private func resizeToFit(_ item: NSMenuItem) {
+        guard let view = item.view else { return }
+        view.frame.size = NSSize(width: Self.width, height: view.fittingSize.height)
+    }
+
+    /// Runs a lid-mode action. On battery without the opt-in it first needs the
+    /// confirmation alert, which can't run inside menu tracking, so the action waits
+    /// for the menu to close.
+    func requestLid(_ action: @escaping () -> Void) {
+        guard needsLidConfirmation(engine.power) else {
+            action()
+            return
+        }
+        pendingLidAction = action
+        root.cancelTracking()
     }
 
     // MARK: Delegate
@@ -62,6 +91,13 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         guard menu === root else { return }
         model.menuDidClose()
         onClose?()
+        guard let action = pendingLidAction else { return }
+        pendingLidAction = nil
+        // "Only on AC" still turns lid mode on; the lidNeedsAC guardrail holds it until AC.
+        DispatchQueue.main.async { [confirmLidOnBattery] in
+            confirmLidOnBattery()
+            action()
+        }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -87,6 +123,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         observing = true
         withObservationTracking {
             _ = engine.leases
+            _ = engine.state
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -101,7 +138,9 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     // MARK: Building
 
     private func buildRoot() {
-        root.addItem(hosted(id: "header", enabled: false) { StatusHeader(engine: self.engine, model: self.model) })
+        let header = hosted(id: "header", enabled: false) { StatusHeader(engine: self.engine, model: self.model) }
+        headerItem = header
+        root.addItem(header)
         root.addItem(.separator())
         let awakeItem = NSMenuItem(title: "Awake", action: nil, keyEquivalent: "")
         awakeItem.identifier = NSUserInterfaceItemIdentifier("awake")
@@ -152,14 +191,16 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
                 SwitchRow(title: "Allow lid close", isOn: Binding(
                     get: { self.engine.sessionLevel?.lid ?? false },
                     set: { enabled in
-                        guard !enabled || Self.confirmLidOnBattery(self.engine) else { return }
-                        self.engine.setAllowLidClose(enabled)
+                        if enabled {
+                            self.requestLid { self.engine.setAllowLidClose(true) }
+                        } else {
+                            self.engine.setAllowLidClose(false)
+                        }
                     }))
             },
             hosted(id: "untilLidOpens") {
                 MenuRow(title: "Until I open the lid", highlighted: self.isHighlighted("untilLidOpens")) {
-                    guard Self.confirmLidOnBattery(self.engine) else { return }
-                    self.engine.startLidSession()
+                    self.requestLid { self.engine.startLidSession() }
                 }
             }
         ]
@@ -240,15 +281,6 @@ extension DropdownMenu {
             engine.anchor(whileAppRuns: app.processIdentifier, appName: app.localizedName ?? "App")
             model.lastPick = .none
         }
-    }
-
-    /// On battery without the opt-in, asks once. "Only on AC" still turns lid mode on;
-    /// the lidNeedsAC guardrail holds it until the Mac is plugged in.
-    static func confirmLidOnBattery(_ engine: AwakeEngine) -> Bool {
-        if LidOptIn.needsConfirmation(power: engine.power, settings: Defaults[.awake]) {
-            _ = LidOptIn.confirm()
-        }
-        return true
     }
 
     /// The apps a session can wait on: regular apps other than Mooring, by name.
