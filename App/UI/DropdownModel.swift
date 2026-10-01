@@ -7,12 +7,6 @@ import SwiftUI
 @MainActor
 @Observable
 final class DropdownModel {
-    enum Page { case root, awake }
-
-    var page = Page.root
-    var maxHeight: CGFloat = 600
-    /// Drives the countdown timeline, which is paused while the panel is hidden.
-    private(set) var isPresented = false
     /// The duration row picked last, for its checkmark.
     var lastPick = DurationPick.none
     /// Drives the menu's countdown timelines, which are paused while the menu is closed.
@@ -27,19 +21,6 @@ final class DropdownModel {
     func menuDidClose() {
         isOpen = false
         highlightedID = nil
-    }
-
-    func didOpen(maxHeight: CGFloat) {
-        self.maxHeight = maxHeight
-        page = .root
-        isPresented = true
-        isOpen = true
-    }
-
-    func didClose() {
-        isPresented = false
-        isOpen = false
-        page = .root
     }
 }
 

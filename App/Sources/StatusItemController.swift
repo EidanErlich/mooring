@@ -14,8 +14,8 @@ final class StatusItemController: NSObject {
     /// How many engine observations have been armed; one at a time. For tests.
     private(set) var observationsArmed = 0
 
-    /// Called for the click that opens the dropdown.
-    var onOpenPanel: (() -> Void)?
+    /// Called for the click that opens the dropdown menu.
+    var onOpenMenu: (() -> Void)?
 
     var button: NSStatusBarButton? { statusItem.button }
 
@@ -40,8 +40,20 @@ final class StatusItemController: NSObject {
         )
         switch action {
         case .toggle: engine.toggleMenu()
-        case .openPanel: onOpenPanel?()
+        case .openMenu: onOpenMenu?()
         }
+    }
+
+    /// Opens `menu` under the icon. The menu is attached only while it is open: with one
+    /// attached, AppKit takes over every click on the item and `handleClick` never runs.
+    func show(_ menu: NSMenu) {
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+    }
+
+    /// Detaches the menu so the next click reaches `handleClick` again.
+    func clearMenu() {
+        statusItem.menu = nil
     }
 
     /// Arms one observation of the engine and redraws. Only an engine change re-arms,

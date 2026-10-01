@@ -5,19 +5,6 @@ import Testing
 
 @MainActor
 struct DropdownModelTests {
-    /// The countdown timeline only runs while the panel is visible, and a
-    /// closed panel always reopens at the root page.
-    @Test func closingPausesTimelineAndResetsPage() {
-        let model = DropdownModel()
-        model.didOpen(maxHeight: 500)
-        #expect(model.isPresented)
-        #expect(model.maxHeight == 500)
-        model.page = .awake
-        model.didClose()
-        #expect(!model.isPresented)
-        #expect(model.page == .root)
-    }
-
     @Test func closingClearsHighlightAndStopsTimelines() {
         let model = DropdownModel()
         model.menuDidOpen()

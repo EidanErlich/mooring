@@ -7,12 +7,12 @@ struct ClickRouterTests {
     }
 
     @Test func rightOrControlClickOpensPanel() {
-        #expect(ClickRouter.action(isRightMouse: true, controlDown: false, swapped: false) == .openPanel)
-        #expect(ClickRouter.action(isRightMouse: false, controlDown: true, swapped: false) == .openPanel)
+        #expect(ClickRouter.action(isRightMouse: true, controlDown: false, swapped: false) == .openMenu)
+        #expect(ClickRouter.action(isRightMouse: false, controlDown: true, swapped: false) == .openMenu)
     }
 
     @Test func swappingFlipsBoth() {
-        #expect(ClickRouter.action(isRightMouse: false, controlDown: false, swapped: true) == .openPanel)
+        #expect(ClickRouter.action(isRightMouse: false, controlDown: false, swapped: true) == .openMenu)
         #expect(ClickRouter.action(isRightMouse: true, controlDown: false, swapped: true) == .toggle)
     }
 }
