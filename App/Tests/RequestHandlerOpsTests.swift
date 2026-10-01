@@ -137,13 +137,15 @@ struct RequestHandlerOpsTests {
 
     // MARK: - guardrails
 
+    private static let onSuffix = ". Mooring is on and applies when that clears; run `mooring off` to end it."
+
     @Test func guardrailHoldsBackLidButKeepsTheLease() async {
         let fixture = RequestFixture()
         fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 5))
 
         let response = await fixture.acquire(.on, level: "lid")
 
-        #expect(wireFailure(response) == WireError(code: .guardrail, message: "Paused: battery low"))
+        #expect(wireFailure(response) == WireError(code: .guardrail, message: "Paused: battery low\(Self.onSuffix)"))
         #expect(fixture.lease("menu") != nil)
     }
 
@@ -151,18 +153,18 @@ struct RequestHandlerOpsTests {
         let battery = RequestFixture()
         battery.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 15))
         let batteryReply = await battery.acquire(.on, level: "lid")
-        #expect(wireFailure(batteryReply) == WireError(code: .guardrail, message: "Lid mode paused: battery low"))
+        #expect(wireFailure(batteryReply) == WireError(code: .guardrail, message: "Lid mode paused: battery low\(Self.onSuffix)"))
 
         let needsPower = RequestFixture()
         needsPower.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 50))
         let needsPowerReply = await needsPower.acquire(.on, level: "lid")
-        #expect(wireFailure(needsPowerReply) == WireError(code: .guardrail, message: "Lid mode paused: needs power"))
+        #expect(wireFailure(needsPowerReply) == WireError(code: .guardrail, message: "Lid mode paused: needs power\(Self.onSuffix)"))
 
         let hot = RequestFixture()
         hot.engine.update(lidClosed: true)
         hot.engine.update(thermal: .serious)
         let hotReply = await hot.acquire(.on, level: "lid")
-        #expect(wireFailure(hotReply) == WireError(code: .guardrail, message: "Lid mode paused: Mac too warm"))
+        #expect(wireFailure(hotReply) == WireError(code: .guardrail, message: "Lid mode paused: Mac too warm\(Self.onSuffix)"))
     }
 
     @Test func lidGuardrailsDoNotHoldBackAPlainLease() async {
@@ -179,8 +181,31 @@ struct RequestHandlerOpsTests {
         let fixture = RequestFixture()
         fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 5))
         let response = await fixture.acquire(.lease, id: "job", ttl: 60)
-        #expect(wireFailure(response) == WireError(code: .guardrail, message: "Paused: battery low"))
+        #expect(wireFailure(response)?.code == .guardrail)
         #expect(fixture.lease("job") != nil)
+    }
+
+    @Test func leaseGuardrailMessageSaysItIsHeld() async {
+        let fixture = RequestFixture()
+        fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 5))
+
+        let response = await fixture.acquire(.lease, id: "job", ttl: 60)
+
+        let expected = "Paused: battery low. Lease job is held and applies when that clears; "
+            + "run `mooring lease release job` to end it."
+        #expect(wireFailure(response) == WireError(code: .guardrail, message: expected))
+        #expect(fixture.lease("job") != nil)
+    }
+
+    @Test func anchorGuardrailMessageSaysItApplies() async {
+        let fixture = RequestFixture()
+        fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 5))
+
+        let response = await fixture.acquire(.anchor, watchPid: 5)
+
+        let expected = "Paused: battery low. The anchor applies when that clears."
+        #expect(wireFailure(response) == WireError(code: .guardrail, message: expected))
+        #expect(fixture.lease("anchor-5") != nil)
     }
 
     // MARK: - status

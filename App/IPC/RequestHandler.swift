@@ -96,7 +96,7 @@ final class RequestHandler {
         }
         // The engine reconciles inside `acquire`, so its suspensions already account for this lease.
         if let message = guardrailMessage(holdingBack: outcome.lease.level) {
-            throw WireError(code: .guardrail, message: message)
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
         }
         let cutShort = plan.ttl.map { requested in granted.map { $0 < requested } ?? false } ?? false
         return MooringIPC.AcquireResult(lease: LeaseInfo(outcome.lease), clamped: outcome.wasClamped || cutShort)
@@ -123,7 +123,7 @@ final class RequestHandler {
             throw WireError(code: .internal, message: "Couldn't turn on")
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: message)
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id))
         }
         return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: false)
     }
@@ -160,6 +160,16 @@ final class RequestHandler {
         case .success(let granted): return granted
         case .failure(.badRequest(let message)): throw WireError(code: .badRequest, message: message)
         case .failure(.denied(let message)): throw WireError(code: .denied, message: message)
+        }
+    }
+
+    /// The guardrail `message` plus what the caller must know: the lease exists even though the
+    /// reply is a refusal, so it applies later and, for `on` and `lease`, still needs ending.
+    private static func holdNotice(_ message: String, kind: AcquireKind, id: String) -> String {
+        switch kind {
+        case .lease: "\(message). Lease \(id) is held and applies when that clears; run `mooring lease release \(id)` to end it."
+        case .on: "\(message). Mooring is on and applies when that clears; run `mooring off` to end it."
+        case .anchor: "\(message). The anchor applies when that clears."
         }
     }
 
