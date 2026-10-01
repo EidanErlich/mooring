@@ -32,7 +32,10 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         self.runningApps = runningApps
         self.openSettings = openSettings
         super.init()
-        [root, awake, apps].forEach { $0.delegate = self }
+        for menu in [root, awake, apps] {
+            menu.delegate = self
+            menu.autoenablesItems = false
+        }
         buildRoot()
         buildAwake()
         sync()
@@ -98,7 +101,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     // MARK: Building
 
     private func buildRoot() {
-        root.addItem(hosted(id: "header") { StatusHeader(engine: self.engine, model: self.model) })
+        root.addItem(hosted(id: "header", enabled: false) { StatusHeader(engine: self.engine, model: self.model) })
         root.addItem(.separator())
         let awakeItem = NSMenuItem(title: "Awake", action: nil, keyEquivalent: "")
         awakeItem.identifier = NSUserInterfaceItemIdentifier("awake")
@@ -132,7 +135,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
                 get: { self.engine.sessionLevel?.display ?? false }, set: { self.engine.setKeepScreenOn($0) }))
         })
         awake.addItem(.separator())
-        awake.addItem(hosted(id: "anchoredCaption") {
+        awake.addItem(hosted(id: "anchoredCaption", enabled: false) {
             Text("Anchored").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14)
         })
     }
@@ -177,7 +180,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         guard let caption = index(of: "anchoredCaption", in: awake) else { return }
         while awake.items.count > caption + 1 { awake.removeItem(at: caption + 1) }
         if engine.leases.isEmpty {
-            awake.addItem(hosted(id: "nothingAnchored") {
+            awake.addItem(hosted(id: "nothingAnchored", enabled: false) {
                 Text("Nothing anchored").foregroundStyle(.secondary).padding(.horizontal, 14)
             })
         }
@@ -195,9 +198,11 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     }
 
     /// Hosts a SwiftUI row in a menu item. The content closure runs in a view body, so
-    /// whatever it reads from the engine or the model keeps the row up to date.
-    private func hosted(id: String, @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
+    /// whatever it reads from the engine or the model keeps the row up to date. Menus
+    /// don't highlight disabled items, so only the pure-text rows are disabled.
+    private func hosted(id: String, enabled: Bool = true, @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
         let item = NSMenuItem()
+        item.isEnabled = enabled
         item.identifier = NSUserInterfaceItemIdentifier(id)
         let host = NSHostingView(rootView: LiveContent(content: content).frame(width: Self.width, alignment: .leading))
         host.frame = NSRect(origin: .zero, size: host.fittingSize)

@@ -112,4 +112,20 @@ struct DropdownMenuTests {
             #expect(item.view!.frame.height > 0)
         }
     }
+
+    @Test func actionRowsAreEnabledAfterUpdate() {
+        let menu = makeMenu(runningApps: { [NSRunningApplication.current] })
+        menu.menuNeedsUpdate(menu.apps)
+        [menu.root, menu.awake, menu.apps].forEach { $0.update() }
+        let actionIDs = ["on", "keepScreenOn", "allowLidClose", "untilLidOpens"]
+        for item in menu.awake.items + menu.apps.items {
+            guard let id = item.identifier?.rawValue else { continue }
+            if id.hasPrefix("duration.") || id.hasPrefix("app.") || actionIDs.contains(id) {
+                #expect(item.isEnabled, "\(id) should be enabled")
+            }
+        }
+        #expect(menu.awake.items.contains { $0.identifier?.rawValue == "untilLidOpens" })
+        #expect(menu.root.items.first { $0.identifier?.rawValue == "header" }?.isEnabled == false)
+        #expect(menu.awake.items.first { $0.identifier?.rawValue == "anchoredCaption" }?.isEnabled == false)
+    }
 }
