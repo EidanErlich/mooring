@@ -45,7 +45,8 @@ final class FloatingPanel<Content: View>: NSPanel, NSWindowDelegate {
         orderFrontRegardless()
         makeKey()
         isPresented = true
-        button.isHighlighted = true
+        // Deferred, as upstream does: the button's own click tracking would undo it.
+        DispatchQueue.main.async { button.isHighlighted = true }
     }
 
     /// Keeps the top edge under the icon when the content changes height.

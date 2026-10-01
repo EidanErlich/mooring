@@ -2,8 +2,9 @@ import Foundation
 
 /// Countdown text. Minutes round up, so a live lease never reads "0m".
 public enum DurationText {
+    /// Negative time (a lease expired but not yet ticked away) reads as "0m".
     public static func remaining(_ seconds: TimeInterval) -> String {
-        let minutes = Int((seconds / 60).rounded(.up))
+        let minutes = Int((max(0, seconds) / 60).rounded(.up))
         let hours = minutes / 60
         let rest = minutes % 60
         switch (hours, rest) {
@@ -21,6 +22,11 @@ public enum StatusLine {
         guard let last = endsLast(live) else { return "Off" }
         var parts = ["On"]
         if state.displayAssertion { parts.append("screen on") }
+        if state.lidSleepDisabled {
+            parts.append("lid mode")
+        } else if !state.suspensions.isDisjoint(with: [.lidNeedsAC, .lowBatteryLid, .thermal]) {
+            parts.append("lid mode paused")
+        }
         switch (last.expiresAt, last.watch) {
         case (let expiry?, _):
             parts.append("\(DurationText.remaining(expiry.timeIntervalSince(now))) left")
