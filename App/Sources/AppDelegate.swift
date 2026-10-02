@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var socketServer: SocketServer?
     private let approvals = LidApprovalCenter()
     private var notificationResponder: NotificationResponder?
+    private var lidSettingUpdates: Task<Void, Never>?
 
     /// True when Xcode launched the app only to host unit tests.
     nonisolated static var isHostingTests: Bool {
@@ -124,6 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             notificationStatus: { [approvals] in await approvals.notificationStatus() }
         )
+        // Never, or session lid switched off, takes lid mode back from live agent leases right away.
+        lidSettingUpdates = Task {
+            for await _ in Defaults.updates(.awake, initial: false) { handler.applyLidSettings() }
+        }
         let server = SocketServer(path: SocketServer.defaultPath) { request, caller in
             await handler.handle(request, from: caller)
         }

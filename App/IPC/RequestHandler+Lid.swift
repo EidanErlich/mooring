@@ -56,13 +56,52 @@ extension RequestHandler {
         guard let request else { return try acquire(true) }
         switch lidStep(request) {
         case .grant:
-            return try acquire(true)
+            return noteGrant(try acquire(true), for: request)
         case .refuse(let message):
-            _ = try acquire(false)
+            // Acquiring again merges in the existing level, so lid is taken off afterwards: the reply is the outcome.
+            droppingLid(try acquire(false))
             throw WireError(code: .denied, message: message)
         case .ask(let agent):
             // If the CLI disconnects meanwhile, the ask still runs its course and an Allow still adds lid.
-            return try await ask(agent, about: try acquire(false))
+            return try await ask(agent, about: droppingLid(try acquire(false)))
+        }
+    }
+
+    /// Records who `lease`'s lid mode belongs to after `request` was granted. Lid an agent added is recorded, so the
+    /// settings can take it back; a person's request, or lid a person's lease already had, is never recorded.
+    @discardableResult
+    func noteGrant(_ lease: Lease, for request: LidRequest) -> Lease {
+        agentLid = agentLid.filter { id, created in engine.leases.first { $0.id == id }?.createdAt == created }
+        guard request.agent != nil else {
+            agentLid[lease.id] = nil
+            return lease
+        }
+        let personsLid = request.existing.map { $0.level.lid && agentLid[$0.id] != $0.createdAt } ?? false
+        if lease.level.lid && !personsLid { agentLid[lease.id] = lease.createdAt }
+        return lease
+    }
+
+    /// `lease` at its level without lid mode, and no longer recorded as an agent's.
+    @discardableResult
+    func droppingLid(_ lease: Lease) -> Lease {
+        agentLid[lease.id] = nil
+        guard lease.level.lid else { return lease }
+        engine.setLevel(lease.level.withoutLid, forLease: lease.id)
+        return engine.leases.first { $0.id == lease.id } ?? lease
+    }
+
+    /// Takes lid mode back from live leases that got it on an agent's behalf once the settings no longer allow it:
+    /// Never takes it from every agent lease, "Keep working with the lid closed" off from Claude Code sessions.
+    func applyLidSettings() {
+        let current = settings()
+        let never = current.agentLidApproval == .never
+        guard never || !current.agentSessionLid else { return }
+        for (id, created) in agentLid where never || id.hasPrefix(Self.sessionLeasePrefix) {
+            guard let lease = engine.leases.first(where: { $0.id == id }), lease.createdAt == created else {
+                agentLid[id] = nil
+                continue
+            }
+            droppingLid(lease)
         }
     }
 
@@ -106,6 +145,7 @@ extension RequestHandler {
             }
             guard Self.endsAsTold(current, asked: lease) else { throw WireError(code: .denied, message: LidMessage.changed) }
             engine.setLevel(current.level.union(AwakeLevel(display: false, lid: true)), forLease: current.id)
+            agentLid[current.id] = current.createdAt
             return liveLease(lease.id) ?? current
         case .deny:
             if let current, current.createdAt == lease.createdAt { deniedLid[current.id] = current.createdAt }

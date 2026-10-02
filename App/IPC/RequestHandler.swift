@@ -45,6 +45,8 @@ final class RequestHandler {
     var deniedLid: [String: Date] = [:]
     /// Leases with an ask under way, from before its first suspension until it's answered: at most one ask per lease.
     var asking: Set<String> = []
+    /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
+    var agentLid: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
     /// The id `mooring on` used before it became the menu's On switch.
     private static let legacyCLILeaseID = "cli"
@@ -148,7 +150,8 @@ final class RequestHandler {
         let plan = try plan(for: args, from: caller)
         let request = plan.level.lid ? lidRequest(for: plan, agent: agent) : nil
         let step = request.map(lidStep) ?? .grant
-        let lease = try grant(args, plan: step == .grant ? plan : plan.withoutLid()).lease
+        var lease = try grant(args, plan: step == .grant ? plan : plan.withoutLid()).lease
+        if let request { lease = step == .grant ? noteGrant(lease, for: request) : droppingLid(lease) }
         if case .ask(let agent) = step {
             // Marked now, not when the task starts, so the session's next hook event isn't asked again.
             asking.insert(lease.id)
