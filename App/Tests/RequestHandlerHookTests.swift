@@ -80,6 +80,53 @@ struct RequestHandlerHookTests {
         #expect(abs(try expiry(fixture) - 900) < 0.001)
     }
 
+    @Test func shortToolEventDoesNotCutALongBashHold() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+        // A parallel short tool finishes while the long call runs: the hold stays where it was.
+        fixture.advance(5)
+        let response = await fixture.hook("PostToolUse")
+        #expect(hookAction(response) == "renew")
+        #expect(abs(try expiry(fixture) - 1255) < 0.001)
+    }
+
+    @Test func renewExtendsWhenShorter() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        fixture.advance(600)
+        // 300 s are left, so a 15 minute renew extends the hold.
+        _ = await fixture.hook("PostToolUse")
+        #expect(abs(try expiry(fixture) - 900) < 0.001)
+        // A Bash timeout shorter than 15 minutes (+1 min) also extends from a shorter remainder.
+        fixture.advance(800)
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+    }
+
+    @Test func waitingStillResets() async throws {
+        let fixture = RequestFixture()
+        fixture.knobs.settings.agentWaitingTimeout = 600
+        _ = await fixture.hook("UserPromptSubmit")
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+        let response = await fixture.hook("PermissionRequest")
+        #expect(hookAction(response) == "waiting")
+        #expect(abs(try expiry(fixture) - 600) < 0.001)
+    }
+
+    @Test func stopAfterLongHoldStillReleasesIn2Minutes() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        fixture.advance(30)
+        _ = await fixture.hook("PostToolUse")
+        let response = await fixture.hook("Stop")
+        #expect(hookAction(response) == "releaseAfter")
+        #expect(abs(try expiry(fixture) - 120) < 0.001)
+    }
+
     @Test func longBashCallWithoutLeaseAcquiresForItsTimeout() async throws {
         let fixture = RequestFixture()
         _ = await fixture.hook("PreToolUse", toolTimeout: 1200)

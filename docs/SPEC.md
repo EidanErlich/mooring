@@ -356,6 +356,8 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.j
 | `SessionEnd` | Release now. |
 | `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
+Renewals only ever extend: a renew sets the expiry to the later of its current value and its new one, so a short tool event never cuts a long Bash hold. Only the waiting timeout and the `Stop` grace set the expiry outright.
+
 Pressing Esc to interrupt fires no `Stop`, so an interrupted turn keeps its lease for up to 15 min (up to the waiting timeout after Esc at a permission prompt) before the expiry ends it. If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
 
 **Hook rules** so Mooring can never break a Claude session:

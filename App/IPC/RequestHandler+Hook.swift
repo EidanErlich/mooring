@@ -18,8 +18,14 @@ extension RequestHandler {
         case .acquire:
             try acquireSessionLease(id: id, ttl: HookPolicy.activeTTL, hook: args, from: caller)
         case .renew:
-            engine.renew(id: id, ttl: HookPolicy.activeTTL)
-        case .renewFor(let seconds), .setExpiry(let seconds):
+            extend(id: id, by: HookPolicy.activeTTL, at: current)
+        case .renewFor(let seconds):
+            if exists {
+                extend(id: id, by: seconds, at: current)
+            } else {
+                try acquireSessionLease(id: id, ttl: seconds, hook: args, from: caller)
+            }
+        case .setExpiry(let seconds):
             if exists {
                 engine.renew(id: id, ttl: seconds)
             } else {
@@ -33,6 +39,15 @@ extension RequestHandler {
             break
         }
         return HookResult(action: action.wireName)
+    }
+
+    /// Renews to `now + ttl` unless the lease already runs longer, so a short tool event never cuts a long hold.
+    private func extend(id: String, by ttl: TimeInterval, at current: Date) {
+        if let expiresAt = engine.leases.first(where: { $0.id == id })?.expiresAt,
+           expiresAt > current.addingTimeInterval(ttl) {
+            return
+        }
+        engine.renew(id: id, ttl: ttl)
     }
 
     /// Acquires the session's lease through the same path as `mooring lease acquire`, so re-acquiring merges.

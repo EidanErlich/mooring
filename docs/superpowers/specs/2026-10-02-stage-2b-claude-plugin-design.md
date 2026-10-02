@@ -78,6 +78,7 @@ One lease per session, `claude-<session_id>`:
 | `SessionEnd` | Release now. |
 | `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
+- **Renewals only ever extend:** a renew sets the expiry to the later of its current value and its new one, so a short tool event never cuts a long Bash hold. Only the waiting timeout and the `Stop` grace set the expiry outright.
 - **"Only when asked":** every hook request is acknowledged and does nothing. Agent holds and `mooring anchor` still work.
 - **Crashes:** if Claude dies, the watched pid exits and the lease ends at once. If the pid can't be resolved, the 15 min expiry is the backstop.
 - The owner approved the background-task `Stop` rule on 2026-10-02. The internal-agent rule was a controller ruling.
