@@ -18,9 +18,17 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **The waiting picker** shows no selection for odd stored values (for example after `defaults write`).
 - **`findClaude` and `runBounded` in the CLI are untested.**
 
-## Before stage 2c (approvals)
+## Lid approvals (2c-1 leftovers)
 
-- **Policy is advisory.** An agent can skip the named-lease limits (4 h cap, no lid) by calling `mooring on --level lid` or `mooring anchor`, because the client picks the request kind. Decide which of these approvals gate.
+- **Authorized but alerts off** isn't treated as unavailable: the ask posts nothing visible and runs out its 60 s.
+- **A failed notification post** (`center.add` throws) means a timeout instead of "unavailable".
+- **`GuardrailNotifier` asks only for alert permission,** so approval notifications may lack sound if it asked first.
+- **Stale approval notifications survive a quit,** and their buttons do nothing.
+- **An unwatched hook session under Always ask** can be falsely refused ("the request changed") when it renews during the ask, because "expiry no later" fails after a renewal.
+- **Compare the whole watch** (pid and start time) when checking that the request is unchanged, not just the pid.
+- **Under Never,** an agent's refused `on --level lid` downgrades a person's lid session.
+- **Session acquires on battery** log a guardrail notice.
+- **The decision tests** are tables, not a full exhaustive product of every input.
 
 ## CLI and IPC (stage 2a leftovers)
 

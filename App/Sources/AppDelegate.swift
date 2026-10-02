@@ -59,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let statusItem = StatusItemController(engine: engine)
-        let dropdown = DropdownController(engine: engine, openSettings: { SettingsWindowController.shared.show() })
+        let dropdown = DropdownController(engine: engine, approvals: approvals, openSettings: { SettingsWindowController.shared.show() })
         statusItem.onOpenMenu = { [weak statusItem] in
             statusItem.map(dropdown.open(from:))
         }

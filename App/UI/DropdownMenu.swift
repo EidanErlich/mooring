@@ -21,6 +21,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private let helperEnabled: () -> Bool
     private let runningApps: () -> [NSRunningApplication]
     private let openSettings: () -> Void
+    private let pendingApproval: (String) -> Bool
     private let needsLidConfirmation: (PowerSnapshot) -> Bool
     private let confirmLidOnBattery: () -> Void
     private let appsItem = NSMenuItem()
@@ -31,6 +32,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
 
     init(engine: AwakeEngine, model: DropdownModel, helperEnabled: @escaping () -> Bool,
          runningApps: @escaping () -> [NSRunningApplication], openSettings: @escaping () -> Void,
+         pendingApproval: @escaping (String) -> Bool = { _ in false },
          needsLidConfirmation: @escaping (PowerSnapshot) -> Bool = { LidOptIn.needsConfirmation(power: $0, settings: Defaults[.awake]) },
          confirmLidOnBattery: @escaping () -> Void = { _ = LidOptIn.confirm() }) {
         self.engine = engine
@@ -38,6 +40,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         self.helperEnabled = helperEnabled
         self.runningApps = runningApps
         self.openSettings = openSettings
+        self.pendingApproval = pendingApproval
         self.needsLidConfirmation = needsLidConfirmation
         self.confirmLidOnBattery = confirmLidOnBattery
         super.init()
@@ -242,7 +245,10 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
                 awake.insertItem(existing, at: target)
             } else {
                 let leaseID = String(id.dropFirst("lease.".count))
-                awake.insertItem(hosted(id: id) { LeaseRow(engine: self.engine, model: self.model, id: leaseID) }, at: target)
+                let row = hosted(id: id) {
+                    LeaseRow(engine: self.engine, model: self.model, id: leaseID, pendingApproval: self.pendingApproval)
+                }
+                awake.insertItem(row, at: target)
             }
         }
     }

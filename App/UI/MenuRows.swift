@@ -90,6 +90,13 @@ struct LeaseRow: View {
     let engine: AwakeEngine
     let model: DropdownModel
     let id: String
+    /// Whether a lid-mode approval is pending for a lease id; read in the body, so the row follows it.
+    var pendingApproval: (String) -> Bool = { _ in false }
+
+    /// The time text, or the approval wait that replaces it.
+    static func trailingText(for lease: Lease, pending: Bool, now: Date) -> String {
+        pending ? "waiting for your approval" : LeaseText.timeLeft(lease, now: now)
+    }
 
     var body: some View {
         if let lease = engine.leases.first(where: { $0.id == id }) {
@@ -100,7 +107,8 @@ struct LeaseRow: View {
                         Text(lease.reason).lineLimit(1)
                     }
                     Spacer()
-                    Text(LeaseText.timeLeft(lease, now: context.date)).foregroundStyle(.secondary).monospacedDigit()
+                    Text(Self.trailingText(for: lease, pending: pendingApproval(id), now: context.date))
+                        .foregroundStyle(.secondary).monospacedDigit()
                     Button { engine.release(id: id) } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.plain)
                         .foregroundStyle(.secondary)

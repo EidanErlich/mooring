@@ -24,6 +24,8 @@ mooring lease acquire job-<slug> --watch-pid auto --reason "migrating the databa
 mooring lease release job-<slug>
 ```
 
+To keep the Mac awake with the lid closed, prefer a hold, `mooring lease acquire job-<slug> --level lid --watch-pid auto`, which needs no approval. `mooring on --level lid` with no end time asks the user first and may be declined (exit 2).
+
 ## Rules
 
 - Call `mooring` directly. Never run it through `timeout`, `xargs`, `npx` or a wrapper script: the wrapper would become the process Mooring watches and the hold would end with it.

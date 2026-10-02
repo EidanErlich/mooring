@@ -45,7 +45,10 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
   - "Lid mode not approved (denied)";
   - "… (no answer in 60 s)";
   - "… (lid mode for agents is set to Never)";
-  - "Turn on notifications for Mooring in System Settings to approve lid mode".
+  - "Turn on notifications for Mooring in System Settings to approve lid mode";
+  - "Lid mode not approved (waiting for your answer to an earlier request)", for a second request while an ask for the same lease is open (one ask per lease);
+  - "Lid mode not approved (the request changed while you were deciding)", when an Allow arrives but the lease's lifetime or end changed. Watched leases are compared by their watched process; unwatched leases by "expiry no later".
+- **For `on`,** an existing lid session counts as already approved only when it is itself open-ended. A bounded lid session doesn't let `on` become open-ended without asking.
 - **After approval,** the battery guardrails apply as today: lid mode needs AC until the opt-in, pauses below 20%, and everything pauses below 10%.
 - **Policy changes from stage 2a:**
   - `CallerPolicy` no longer refuses lid for named leases outright; `LidApproval` decides. Under the default, named leases with lid are allowed, since they always have an end.
@@ -62,7 +65,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
 - **The notification** uses `UNUserNotificationCenter`, with category `mooring.lid-approval` and three actions:
   - title: "<Agent> wants to keep your Mac awake with the lid closed";
   - body: "<reason> · <with no end time | for 30m | while <process> runs>";
-  - actions: **Allow once**, **Always allow <Agent>** and **Deny**;
+  - actions: **Allow once**, **Always allow this agent** and **Deny**. Category actions are static, so the title can't name the agent; the agent's name leads the body instead ("<Agent> · <reason> · <end>");
   - the request id goes in `userInfo`.
 - **Clicking the notification body** opens Settings → Agents and counts as no answer.
 - **Permission:** requested the first time an approval is needed. If it's denied or off, the request is refused immediately with the notifications message.
@@ -70,7 +73,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
   - The request handler awaits the decision for up to 60 s.
   - Socket connections are independent, so other requests aren't blocked.
   - Two pending requests show two notifications.
-  - The CLI's reply timeout is 65 s for any request that asks for lid level (`--level lid` on `on`, `anchor` or `lease acquire`), and 5 s otherwise.
+  - The CLI's reply timeout is 65 s for any request that asks for lid level (`--level lid` on `on`, `anchor` or `lease acquire`), a plain `mooring on` included, and 5 s otherwise.
   - SPEC.md already reserves the op name `approve.wait`. It isn't needed as a separate op, because the acquire itself waits. The name stays reserved.
 - **"Always allow <Agent>"** appends the agent name to `AwakeSettings.agentLidAlwaysAllowed: [String]`.
 - **Pending state:** while a lease waits, its row and `mooring status` show "waiting for your approval". `LeaseInfo` gains `pendingApproval: Bool`. The menu shows the same in the Anchored row.

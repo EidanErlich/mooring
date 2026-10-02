@@ -44,6 +44,29 @@ struct AgentsSettingsPage: View {
                 Text("Keeps your Mac awake while Claude Code works. Installs Mooring's plugin into Claude Code.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Lid mode") {
+                Toggle("Keep working with the lid closed", isOn: $awake.agentSessionLid)
+                Text("Claude Code sessions keep the Mac awake with the lid closed while they work.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Picker("Lid mode for agents", selection: $awake.agentLidApproval) {
+                    ForEach(AgentLidApproval.allCases, id: \.self) { Text(Self.label(for: $0)).tag($0) }
+                }
+                if !awake.agentLidAlwaysAllowed.isEmpty {
+                    LabeledContent("Always allowed") {
+                        VStack(alignment: .trailing) {
+                            ForEach(awake.agentLidAlwaysAllowed, id: \.self) { agent in
+                                HStack {
+                                    Text(agent)
+                                    Button("Remove") { awake.agentLidAlwaysAllowed.removeAll { $0 == agent } }
+                                }
+                            }
+                        }
+                    }
+                }
+                Text("Battery guardrails always apply: lid mode needs power until you allow it on battery, "
+                    + "and pauses when the battery is low.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Agents") {
                 Picker("Keep awake while agents work", selection: $awake.agentKeepAwake) {
                     Text("Automatic").tag(AgentMode.automatic)
@@ -59,6 +82,15 @@ struct AgentsSettingsPage: View {
         .formStyle(.grouped)
         .navigationTitle("Agents")
         .task { await refresh() }
+    }
+
+    nonisolated static func label(for approval: AgentLidApproval) -> String {
+        switch approval {
+        case .askWhenOpenEnded: "Ask only when it has no end"
+        case .alwaysAsk: "Always ask"
+        case .alwaysAllow: "Always allow"
+        case .never: "Never"
+        }
     }
 
     private var statusText: String {
