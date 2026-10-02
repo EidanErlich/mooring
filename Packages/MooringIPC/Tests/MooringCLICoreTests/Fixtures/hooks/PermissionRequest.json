@@ -1,0 +1,24 @@
+{
+  "cwd": "/Users/test/project",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PermissionRequest",
+  "permission_mode": "default",
+  "permission_suggestions": [
+    {
+      "destination": "session",
+      "mode": "acceptEdits",
+      "type": "setMode"
+    }
+  ],
+  "prompt_id": "c4fa8472-1004-4b6d-b758-901b037be589",
+  "scratchpad_dir": "/Users/test/scratch",
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "tool_input": {
+    "content": "hi\n",
+    "file_path": "/Users/test/project/note.txt"
+  },
+  "tool_name": "Write",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/00000000-0000-0000-0000-000000000001.jsonl"
+}

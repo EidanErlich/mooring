@@ -1,0 +1,35 @@
+{
+  "cwd": "/Users/test/project",
+  "hook_event_name": "PostToolBatch",
+  "permission_mode": "default",
+  "prompt_id": "5f05ea2a-8fdd-4fc7-ba07-9266dab9d1eb",
+  "scratchpad_dir": "/Users/test/scratch",
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "tool_calls": [
+    {
+      "tool_input": {
+        "command": "ls",
+        "description": "List files in current directory"
+      },
+      "tool_name": "Bash",
+      "tool_response": "one.txt\ntwo.txt",
+      "tool_use_id": "toolu_01BzxyEFiWkhfryMGkyxTWcP"
+    },
+    {
+      "tool_input": {
+        "description": "Count lines in one.txt",
+        "prompt": "Count the number of lines in one.txt in the current working directory and report only the number.",
+        "subagent_type": "general-purpose"
+      },
+      "tool_name": "Agent",
+      "tool_response": [
+        {
+          "text": "Async agent launched successfully. (This tool result is internal metadata \u2014 never quote or paste any part of it, including the agentId below, into a user-facing reply.)\nagentId: a1d0a20d24960c95b (internal ID - do not mention to user. Use SendMessage with to: 'a1d0a20d24960c95b', summary: '<5-10 word recap>' to continue this agent.)\nThe agent is working in the background. You will be notified automatically when it completes. You know nothing about its results until that notification arrives \u2014 do not report, assume, or predict them; continue other work or respond to the user in the meantime.\nDo not duplicate this agent's work \u2014 avoid working with the same files or topics it is using.\noutput_file: /Users/test/scratch",
+          "type": "text"
+        }
+      ],
+      "tool_use_id": "toolu_01MKqHRnCt6wftC3jfsrwzUw"
+    }
+  ],
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/00000000-0000-0000-0000-000000000001.jsonl"
+}

@@ -28,18 +28,33 @@ This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--wat
 
 ## Facts that shape the design
 
-- **Hook events in the current docs:** `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `SubagentStop`, `Notification`, `Stop`, `SessionStart`, `SessionEnd` and `PreCompact`.
-  - Missing from the docs: `PostToolBatch`, `SubagentStart`, `PermissionRequest` and `StopFailure`, all of which SPEC 2.3 assumed.
-  - Docs can lag releases, so task 1 records real payloads from the installed Claude Code (2.1.284) before anything relies on a field.
-- **Hooks run outside Claude's Bash sandbox,** so they can always reach the socket. Commands Claude runs itself (holds, `anchor`) can be sandboxed; the user allows `~/Library/Application Support/Mooring/mooring.sock` with `sandbox.network.allowUnixSockets`.
-- **Hook stdout is parsed by Claude Code,** so a hook must print nothing. Exit 0 with no output never affects Claude.
-- **Hook timeouts are in seconds,** and `"async": true` runs a hook in the background.
-- **Process tree:** hooks are spawned through a shell by the `claude` process, so `--watch-pid auto` resolves Claude itself.
-- **Installing from the command line:**
+**Recorded from Claude Code 2.1.285 on 2026-10-02.** The fixtures live in `Packages/MooringIPC/Tests/MooringCLICoreTests/Fixtures/hooks/`.
+
+- **Events that fire:**
+  - `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `Notification`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `Stop` and `SessionEnd`.
+  - `PreCompact` is documented.
+  - `StopFailure` didn't occur in the test, so it is ignored if it exists.
+  - The docs were wrong to omit `PostToolBatch`, `SubagentStart` and `PermissionRequest`.
+- **Fields on every event:** `session_id`, `cwd`, `hook_event_name`, `transcript_path`, `prompt_id`, and usually `permission_mode`.
+- **Per-event fields:**
+  - `UserPromptSubmit`: `prompt`. It is never used.
+  - `Notification`: `notification_type` (`permission_prompt` observed) and `message`.
+  - `SessionEnd`: `reason` (`prompt_input_exit`, `other`).
+  - Subagent events: `agent_id` and `agent_type`.
+  - `Stop` and `SubagentStop`: `background_tasks`, an array of `{id, type, status, description}`.
+- **Subagents can run in the background.** Then `Stop` fires while they still run, with `background_tasks` listing them as `running`. When they finish, Claude gets a synthetic `UserPromptSubmit` (a `<task-notification>`) and a second `Stop` with an empty list.
+- **An internal helper agent runs after `Stop`:** Claude's prompt-suggestion agent. It carries an `agent_id` with an **empty `agent_type`**, and no `SubagentStart` comes before it.
+- **The idle notification:** no `idle_prompt` fired in 90 s of idling. It is documented, and it is ignored either way.
+- **Process chain:** `zsh → claude → /bin/sh (hook command) → script`. The hook's parent is the `claude` process, so `--watch-pid auto` resolves it directly.
+- **The sandbox:** hooks run outside Claude's Bash sandbox, so they can always reach the socket. Commands Claude runs itself (holds, `anchor`) can be sandboxed; the user allows `~/Library/Application Support/Mooring/mooring.sock` with `sandbox.network.allowUnixSockets`.
+- **Hook output:** stdout is parsed by Claude Code, so a hook must print nothing. Exit 0 with no output never affects Claude.
+- **Hook options:** timeouts are in seconds, and `"async": true` runs a hook in the background.
+- **The `claude` command line:**
   - `claude plugin marketplace add <path|owner/repo> -y`
   - `claude plugin install <plugin>@<marketplace> -y`
-  - `claude plugin list --json` reports `id`, `version`, `enabled` and `installPath`.
-  - `claude --version` prints `2.1.284 (Claude Code)`.
+  - `claude plugin list --json` reports `id`, `version`, `enabled` and `installPath`
+  - `claude --version` prints `2.1.285 (Claude Code)`
+  - `claude --plugin-dir <dir>` loads a plugin for one session
 
 ## Lease lifecycle
 
@@ -52,24 +67,25 @@ One lease per session, `claude-<session_id>`:
 
 | Event | Action |
 | --- | --- |
+| Any event with an `agent_id` and an empty `agent_type` | **Ignored.** It's an internal helper agent, such as prompt suggestions after `Stop`. Counting it would keep the Mac awake for 15 min after every turn. |
 | `UserPromptSubmit` | Acquire: watched, expiry 15 min. Re-acquire merging applies, so it never shortens an existing lease. |
-| `PreToolUse`, `PostToolUse`, `SubagentStop`, `PreCompact` | Renew: expiry = now + 15 min. If the lease is gone, acquire it as for `UserPromptSubmit`. |
-| `Notification` for a permission prompt | Expiry = now + the waiting timeout (Settings, default 30 min). |
-| `Notification` for an idle prompt | **Ignored.** Claude sends it after finishing a turn, while it waits for the next message. Counting it as waiting would keep the Mac awake for 30 min after every turn. |
-| `Notification` of any other type | Ignored. |
-| `Stop` | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
+| `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PreCompact` | Renew: expiry = now + 15 min. If the lease is gone, acquire it as for `UserPromptSubmit`. |
+| `PermissionRequest`, and `Notification` with `notification_type` `permission_prompt` | Expiry = now + the waiting timeout (Settings, default 30 min). Both fire for one prompt; the second is a no-op. |
+| `Notification` of any other type (including `idle_prompt`) | **Ignored.** Claude sends the idle prompt after finishing a turn, while it waits for the next message. Counting it as waiting would keep the Mac awake for 30 min after every turn. |
+| `Stop` with any `background_tasks` entry whose `status` is `running` | Renew, as for tool events. Claude is still working in the background. |
+| `Stop` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
 | `SessionEnd` | Release now. |
-| `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
+| `SessionStart`, `StopFailure` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
 - **"Only when asked":** every hook request is acknowledged and does nothing. Agent holds and `mooring anchor` still work.
 - **Crashes:** if Claude dies, the watched pid exits and the lease ends at once. If the pid can't be resolved, the 15 min expiry is the backstop.
-- **Task 1 confirms the exact event names, notification type values and field names.** If they differ from this table, the owner reviews the change before it's built.
+- The owner approved the background-task `Stop` rule on 2026-10-02. The internal-agent rule was a controller ruling.
 
 ## Components
 
 | Piece | Where | Does |
 | --- | --- | --- |
-| Hook wire op | `MooringIPC`: `Op.hook`, `HookArgs { event, sessionId, cwd, notificationType?, watchPid? }`, `HookResult { action }` | Additive to protocol v1. Unknown fields are ignored. |
+| Hook wire op | `MooringIPC`: `Op.hook`, `HookArgs { event, sessionId, cwd, notificationType?, agentID?, agentType?, runningBackgroundTasks?, watchPid? }`, `HookResult { action }` | Additive to protocol v1. Unknown fields are ignored. |
 | `HookPolicy` | AwakeKit, pure | `(event, notificationType, settings, leaseExists) → HookAction`, where the action is `acquire`, `renew`, `setExpiry(seconds)`, `releaseAfter(seconds)`, `releaseNow` or `ignore`. |
 | Agent settings | `AwakeSettings` (AwakeKit) plus the Defaults key `awake` | `agentsAutomatic: Bool = true` and `agentWaitingTimeout: TimeInterval = 1800`. Both decode from older saved settings with these defaults. |
 | Request handler | `App/IPC/RequestHandler.swift` | Handles `op: hook`: builds the session lease, applies the `HookPolicy` action through the existing engine API (acquire with merge, `renew`, `shorten`, `release`), and replies `HookResult`. Caller policy applies as for named leases (reserved ids, the 4 h cap, the 32-lease limit). |

@@ -1,0 +1,8 @@
+{
+  "cwd": "/Users/test/project",
+  "hook_event_name": "SessionStart",
+  "scratchpad_dir": "/Users/test/scratch",
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "source": "startup",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/00000000-0000-0000-0000-000000000001.jsonl"
+}
