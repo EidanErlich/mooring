@@ -16,6 +16,17 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## CLI and IPC (stage 2a leftovers)
 
+- **Re-acquire edge cases (from the 2b-prep fixes):**
+  - re-acquiring a lease whose watched process just died fails with "Process N isn't running", even when only `--ttl` was given;
+  - re-acquiring an expired, not-yet-ticked lease silently revives its old watch, level and reason;
+  - a raw wire client can re-acquire a watched lease without `ttl` or `watchPid`, because the merged watch satisfies the policy check (the CLI blocks this);
+  - a pre-`ttl` lease re-acquired with `--ttl 60` gets a 60 s renew length.
+- **Connect failures from a full backlog** (`ECONNREFUSED` or `EAGAIN` at the 16-connection cap) still say "isn't running" rather than "didn't answer".
+- **Small code and test leftovers:**
+  - `Plan.reasonGiven` duplicates the handler's `cleaned(_:)`;
+  - the `blocked` socket test returns early as root instead of using `.enabled(if:)`;
+  - there's no test for `anchor -- cmd --json` keeping anchor's own errors human, or for the ttl after a longer re-acquire.
+
 - **Silent 12 h cap on `on`.** `mooring on --for 24h` caps at 12 h without saying so (`clamped` is always false for `on`). SPEC 1.7 says the clamp is reported. It's a one-line fix in `RequestHandler.turnOn`.
 - **`on` can reply with an expired session.** With no flags, it can reply with a just-expired, not-yet-ticked menu lease, a window of up to 5 s. Filter with `isLive(at:)`.
 - **SPEC 2.2's exit-2 wording** should say "held but paused by a guardrail", not "refused".
