@@ -39,7 +39,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.engine = engine
         SettingsWindowController.shared.engine = engine
         SettingsWindowController.shared.lid = lid
-        engine.onSuspensionsAdded = { GuardrailNotifier.post($0) }
+        engine.onSuspensionsAdded = { [weak engine] added in
+            let current = Date()
+            let lidLeaseIDs = engine?.leases.filter { $0.level.lid && $0.isLive(at: current) }.map(\.id) ?? []
+            GuardrailNotifier.post(added, lidLeaseIDs: lidLeaseIDs)
+        }
         startNotificationResponses()
         startMonitors(engine)
         engine.restore()

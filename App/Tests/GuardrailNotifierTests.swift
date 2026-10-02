@@ -17,4 +17,26 @@ struct GuardrailNotifierTests {
             #expect(!message.title.isEmpty && !message.body.isEmpty)
         }
     }
+
+    // MARK: - who a lid guardrail is for
+
+    @Test func sessionOnlyLidDoesNotNotifyNeedsPower() {
+        let sessions = ["claude-s1", "claude-s2"]
+        #expect(!GuardrailNotifier.shouldNotify(.lidNeedsAC, lidLeaseIDs: sessions))
+        #expect(!GuardrailNotifier.shouldNotify(.lowBatteryLid, lidLeaseIDs: sessions))
+    }
+
+    @Test func otherLidLeaseStillNotifies() {
+        for ids in [["claude-s1", "job-x"], ["menu"], ["lid-session"], ["anchor-4242"]] {
+            #expect(GuardrailNotifier.shouldNotify(.lidNeedsAC, lidLeaseIDs: ids))
+            #expect(GuardrailNotifier.shouldNotify(.lowBatteryLid, lidLeaseIDs: ids))
+        }
+    }
+
+    @Test func lowBatteryAllAlwaysNotifies() {
+        for ids in [[], ["claude-s1"], ["job-x"]] {
+            #expect(GuardrailNotifier.shouldNotify(.lowBatteryAll, lidLeaseIDs: ids))
+            #expect(GuardrailNotifier.shouldNotify(.thermal, lidLeaseIDs: ids))
+        }
+    }
 }
