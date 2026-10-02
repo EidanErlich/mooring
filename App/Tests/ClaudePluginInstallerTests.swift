@@ -236,6 +236,18 @@ struct ClaudePluginInstallerTests {
         #expect(error?.message.hasPrefix("xxx") == true)
     }
 
+    @Test func aFailureWithNoStderrReportsTheExitStatus() {
+        for blank in ["", "  \n\t"] {
+            let runner = FakeRunner([ToolResult(status: 3, stderr: blank)])
+            #expect(failure(install(runner)) == .command("Failed (exit 3)"))
+        }
+    }
+
+    @Test func aTimeoutWithNoStderrSaysTimedOut() {
+        let runner = FakeRunner([Self.otherMarketplaces, ToolResult(status: 124, stderr: " \n")])
+        #expect(failure(install(runner)) == .command("Timed out"))
+    }
+
     @Test func installStopsWhenAListFails() {
         let runner = FakeRunner([ToolResult(status: 1, stderr: "boom\n")])
         #expect(failure(install(runner)) == .command("boom"))

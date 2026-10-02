@@ -214,7 +214,10 @@ enum ClaudePluginInstaller {
         func run(_ argv: [String]) -> Result<Data, InstallError> {
             let result = runner.run(argv)
             guard result.status == 0 else {
-                return .failure(.command(String(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))))
+                let message = String(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))
+                // Never leave the page's error line blank. 124 is the runner's timeout status.
+                if !message.isEmpty { return .failure(.command(message)) }
+                return .failure(.command(result.status == 124 ? "Timed out" : "Failed (exit \(result.status))"))
             }
             return .success(result.stdout)
         }

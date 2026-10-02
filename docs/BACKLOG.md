@@ -3,8 +3,6 @@
 Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
 ## Claude Code plugin (2b leftovers)
-- A failing `claude` step with empty stderr (e.g. a runner timeout) shows a blank red line on the Agents page; say "timed out" or the exit status instead.
-
 - **An npm-installed Claude shows as "node"** for leases the skill creates (`LeaseCommands.swift` `agentName`). Hook leases are fine, because the owner is passed explicitly.
 - **Async renew after the sync `Stop`.** An async `PostToolUse`, `PostToolBatch` or `SubagentStop` can land after the sync `Stop` for a very short final reply, which turns the 2 min grace into 15 min.
 - **"Only when asked" mid-session** also skips the `Stop` and `SessionEnd` releases, so a lease made just before the switch lives out its expiry.
