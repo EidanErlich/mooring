@@ -59,6 +59,33 @@ struct ClaudePluginFilesTests {
         }
     }
 
+    /// Every file under `folder` as a path relative to it, with its bytes. `.DS_Store` is Finder noise and never counts.
+    private func contents(of folder: URL) throws -> [String: Data] {
+        let enumerator = try #require(FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]))
+        var files: [String: Data] = [:]
+        for case let url as URL in enumerator {
+            guard url.lastPathComponent != ".DS_Store", (try url.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true
+            else { continue }
+            files[String(url.path.dropFirst(folder.path.count + 1))] = try Data(contentsOf: url)
+        }
+        return files
+    }
+
+    @Test func bundledPluginMatchesTheSource() throws {
+        let bundled = try #require(Bundle.main.resourceURL).appendingPathComponent("ClaudePlugin")
+        let bundledPlugin = try contents(of: bundled.appendingPathComponent("mooring"))
+        let source = try contents(of: plugin)
+        #expect(!source.isEmpty)
+        #expect(Set(bundledPlugin.keys) == Set(source.keys))
+        for (path, data) in source {
+            #expect(bundledPlugin[path] == data, "\(path) differs")
+        }
+        let script = bundled.appendingPathComponent("mooring/scripts/mooring-hook").path
+        #expect(FileManager.default.isExecutableFile(atPath: script))
+        let marketplace = try Data(contentsOf: bundled.appendingPathComponent(".claude-plugin/marketplace.json"))
+        #expect(marketplace == (try Data(contentsOf: root.appendingPathComponent("Integrations/app-marketplace.json"))))
+    }
+
     @Test func marketplacesAreValid() throws {
         let repo = try json(root.appendingPathComponent(".claude-plugin/marketplace.json"))
         #expect(repo["name"] as? String == "mooring")

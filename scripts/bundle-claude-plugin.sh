@@ -15,3 +15,5 @@ mkdir -p "$dest/.claude-plugin"
 # ditto keeps the executable bit and copies dotfiles such as .claude-plugin.
 ditto "$src" "$dest/mooring"
 cp "$template" "$dest/.claude-plugin/marketplace.json"
+# Finder litter in the source folder is never part of the plugin.
+find "$dest" -name .DS_Store -delete
