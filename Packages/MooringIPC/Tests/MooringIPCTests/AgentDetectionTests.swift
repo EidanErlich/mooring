@@ -65,3 +65,23 @@ private struct FakeTable: ProcessTable {
     #expect(AgentDetection.agent(for: 100, in: FakeTable([])) == nil)
     #expect(AgentDetection.agent(for: 1, in: FakeTable([proc(1, 0, "claude")])) == nil)
 }
+
+@Test func agentProcessGivesTheAgentsPid() {
+    let table = FakeTable([proc(100, 90, "zsh"), proc(90, 80, "node"), proc(80, 1, "claude")])
+    let agent = AgentDetection.agentProcess(for: 100, in: table)
+    #expect(agent?.name == "Claude Code")
+    #expect(agent?.pid == 80)
+    #expect(AgentDetection.agentProcess(for: 100, in: FakeTable([proc(100, 1, "zsh")])) == nil)
+}
+
+@Test func descendsWalksUpFromTheWatchedPid() {
+    let table = FakeTable([proc(300, 200, "sleep"), proc(200, 80, "mooring"), proc(80, 70, "claude"), proc(70, 1, "zsh")])
+    #expect(AgentDetection.descends(300, from: 80, in: table))
+    #expect(AgentDetection.descends(80, from: 80, in: table))
+    // The agent's own ancestors, launchd and pids missing from the table don't run below it.
+    #expect(!AgentDetection.descends(70, from: 80, in: table))
+    #expect(!AgentDetection.descends(1, from: 80, in: table))
+    #expect(!AgentDetection.descends(4242, from: 80, in: table))
+    // A cycle ends rather than spins.
+    #expect(!AgentDetection.descends(10, from: 80, in: FakeTable([proc(10, 11, "sh"), proc(11, 10, "sh")])))
+}

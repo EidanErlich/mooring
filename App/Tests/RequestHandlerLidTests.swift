@@ -5,9 +5,12 @@ import Testing
 @testable import Mooring
 
 extension RequestFixture {
-    /// A fixture whose caller (pid 200) runs under `claude`, so it counts as Claude Code.
-    static func agent() -> RequestFixture {
-        RequestFixture(table: FakeProcessTable([(200, "sh"), (100, "claude")]), callerPID: 200)
+    /// A fixture whose caller (pid 200) runs under `claude` (pid 100), so it counts as Claude Code. `children` are
+    /// processes the caller started.
+    static func agent(children: [Int32] = []) -> RequestFixture {
+        var table = FakeProcessTable([(200, "sh"), (100, "claude")])
+        for pid in children { table.entries[pid] = ProcessEntry(pid: pid, parent: 200, name: "sleep") }
+        return RequestFixture(table: table, callerPID: 200)
     }
 
     /// Waits until `condition` holds (or about 2 s pass), for work a request starts in the background.
@@ -61,7 +64,7 @@ struct RequestHandlerLidTests {
     }
 
     @Test func boundedNamedLidLeaseIsAllowedWithoutAsking() async throws {
-        let fixture = RequestFixture.agent()
+        let fixture = RequestFixture.agent(children: [4343])
 
         let lease = await fixture.acquire(.lease, id: "job-x", level: "lid", ttl: 1800, watchPid: 4242)
         let anchor = await fixture.acquire(.anchor, level: "lid", watchPid: 4343)
@@ -70,6 +73,60 @@ struct RequestHandlerLidTests {
         #expect(anchor.ok)
         #expect(try #require(fixture.lease("job-x")).level == lidOnly)
         #expect(try #require(fixture.lease("anchor-4343")).level == lidOnly)
+        #expect(fixture.approver.calls.isEmpty)
+    }
+
+    // MARK: - what a watch is worth
+
+    @Test func agentAnchorOnUnrelatedPidAsks() async throws {
+        let fixture = RequestFixture.agent()
+        fixture.approver.answers = [.deny]
+
+        let response = await fixture.acquire(.anchor, level: "lid", watchPid: 1)
+
+        #expect(wireFailure(response) == denied("Lid mode not approved (denied)"))
+        #expect(fixture.approver.calls.map(\.leaseID) == ["anchor-1"])
+        #expect(try #require(fixture.lease("anchor-1")).level == .system)
+
+        let never = RequestFixture.agent()
+        never.knobs.settings.agentLidApproval = .never
+        let refused = await never.acquire(.anchor, level: "lid", watchPid: 4242)
+        #expect(wireFailure(refused) == denied("Lid mode not approved (lid mode for agents is set to Never)"))
+    }
+
+    @Test func agentAnchorOnItsOwnChildIsBounded() async throws {
+        // `anchor -- <cmd>` watches a child of `mooring`, which runs under the agent; `--watch-pid auto` the agent itself.
+        let fixture = RequestFixture.agent(children: [300])
+
+        let child = await fixture.acquire(.anchor, level: "lid", watchPid: 300)
+        let agent = await fixture.acquire(.anchor, level: "lid", watchPid: 100)
+
+        #expect(child.ok)
+        #expect(agent.ok)
+        #expect(try #require(fixture.lease("anchor-300")).level == lidOnly)
+        #expect(try #require(fixture.lease("anchor-100")).level == lidOnly)
+        #expect(fixture.approver.calls.isEmpty)
+    }
+
+    @Test func agentNamedLeaseWatchingUnrelatedPidAsks() async throws {
+        let fixture = RequestFixture.agent()
+        fixture.approver.answers = [.allowOnce]
+
+        let response = await fixture.acquire(.lease, id: "job", level: "lid", watchPid: 4242)
+
+        #expect(response.ok)
+        #expect(fixture.approver.calls.map(\.leaseID) == ["job"])
+        #expect(try #require(fixture.lease("job")).level == lidOnly)
+    }
+
+    @Test func personAnchorOnAnyPidIsAllowed() async throws {
+        let fixture = RequestFixture()
+        fixture.knobs.settings.agentLidApproval = .alwaysAsk
+
+        let response = await fixture.acquire(.anchor, level: "lid", watchPid: 1)
+
+        #expect(response.ok)
+        #expect(try #require(fixture.lease("anchor-1")).level == lidOnly)
         #expect(fixture.approver.calls.isEmpty)
     }
 

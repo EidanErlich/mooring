@@ -39,9 +39,17 @@ extension AwakeLevel {
 }
 
 extension RequestHandler {
-    /// The agent the caller runs under, or nil for a person.
-    func agent(of caller: Caller) -> String? {
-        AgentDetection.agent(for: caller.pid, in: processes)
+    /// The agent the caller runs under, with that agent process's pid, or nil for a person.
+    func agentProcess(of caller: Caller) -> (name: String, pid: Int32)? {
+        AgentDetection.agentProcess(for: caller.pid, in: processes)
+    }
+
+    /// Whether a lease an agent asks for ends: by its expiry, or by a watch on the agent's own process or one below
+    /// it. Watching anything else (launchd, the Terminal, the agent's parents) is no end. `agentPID` nil (a hook,
+    /// which comes from Claude Code whatever its ancestry) takes any watch as an end.
+    func hasEnd(ttl: TimeInterval?, watching watched: Int32?, agentPID: Int32?) -> Bool {
+        guard ttl == nil, let watched, let agentPID else { return true }
+        return AgentDetection.descends(watched, from: agentPID, in: processes)
     }
 
     func liveLease(_ id: String) -> Lease? {

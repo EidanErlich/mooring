@@ -133,7 +133,9 @@ final class RequestHandler {
     private func acquire(_ args: AcquireArgs, from caller: Caller) async throws -> MooringIPC.AcquireResult {
         let plan = try plan(for: args, from: caller)
         var clamped = false
-        let lease = try await approvingLid(plan.level.lid ? lidRequest(for: plan, agent: agent(of: caller)) : nil) { withLid in
+        let agent = agentProcess(of: caller)
+        let request = plan.level.lid ? lidRequest(for: plan, agent: agent?.name, agentPID: agent?.pid) : nil
+        let lease = try await approvingLid(request) { withLid in
             let granted = try grant(args, plan: withLid ? plan : plan.withoutLid())
             clamped = granted.clamped
             return granted.lease
@@ -148,7 +150,7 @@ final class RequestHandler {
     /// asked, the lease starts without lid and the ask runs in the background, adding lid on Allow.
     func acquireWithoutWaiting(_ args: AcquireArgs, agent: String, from caller: Caller) throws {
         let plan = try plan(for: args, from: caller)
-        let request = plan.level.lid ? lidRequest(for: plan, agent: agent) : nil
+        let request = plan.level.lid ? lidRequest(for: plan, agent: agent, agentPID: nil) : nil
         let step = request.map(lidStep) ?? .grant
         var lease = try grant(args, plan: step == .grant ? plan : plan.withoutLid()).lease
         if let request { lease = step == .grant ? noteGrant(lease, for: request) : droppingLid(lease) }
@@ -162,12 +164,10 @@ final class RequestHandler {
         }
     }
 
-    /// Named leases always end: the cap bounds them, and an anchor watches its process.
-    private func lidRequest(for plan: Plan, agent: String?) -> LidRequest {
-        let existing = liveLease(plan.id)
-        return LidRequest(
-            leaseID: plan.id, agent: agent, hasEnd: true, existing: existing, existingCovers: existing?.level.lid == true
-        )
+    /// A named lease or anchor ends by its `--ttl`, or by its watch when that is on the agent's own processes.
+    private func lidRequest(for plan: Plan, agent: String?, agentPID: Int32?) -> LidRequest {
+        let existing = liveLease(plan.id), ends = hasEnd(ttl: plan.ttl, watching: plan.watchPID, agentPID: agentPID)
+        return LidRequest(leaseID: plan.id, agent: agent, hasEnd: ends, existing: existing, existingCovers: existing?.level.lid == true)
     }
 
     /// Creates or updates the lease `plan` describes, merging with a named lease that exists.
@@ -222,7 +222,7 @@ final class RequestHandler {
             // `on` replaces the session, and may drop its end, so only an open-ended lid session already covers it.
             let covers = existing.map { $0.level.lid && $0.expiresAt == nil && $0.watch == nil } ?? false
             let request = LidRequest(
-                leaseID: AwakeEngine.menuLeaseID, agent: agent(of: caller), hasEnd: duration != nil,
+                leaseID: AwakeEngine.menuLeaseID, agent: agentProcess(of: caller)?.name, hasEnd: duration != nil,
                 existing: existing, existingCovers: covers
             )
             lease = try await approvingLid(requested.lid ? request : nil) { withLid in
