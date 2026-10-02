@@ -2,7 +2,7 @@ import Foundation
 
 /// The operations a request can name.
 public enum Op: String, Codable, Sendable, Equatable { // swiftlint:disable:this type_name
-    case acquire, renew, release, status
+    case acquire, renew, release, status, hook
 }
 
 /// What an `acquire` asks for: the plain keep-awake toggle, an anchor lease or a named lease.
@@ -57,6 +57,35 @@ public struct ReleaseArgs: Codable, Sendable, Equatable {
     }
 }
 
+/// What `mooring hook <Event>` reports about one Claude Code hook event. Only `event` and `sessionId` are required.
+public struct HookArgs: Codable, Sendable, Equatable {
+    public var event: String
+    public var sessionId: String
+    public var cwd: String?
+    public var notificationType: String?
+    /// Set on events from inside a subagent or an internal helper agent.
+    public var agentID: String?
+    public var agentType: String?
+    /// The number of `background_tasks` entries whose status is `running`.
+    public var runningBackgroundTasks: Int?
+    public var watchPid: Int32?
+    /// For `PreToolUse` of a Bash command: its `timeout` in seconds.
+    public var toolTimeout: Double?
+
+    public init(event: String, sessionId: String, cwd: String?, notificationType: String?, agentID: String?, agentType: String?,
+                runningBackgroundTasks: Int?, watchPid: Int32?, toolTimeout: Double? = nil) {
+        self.event = event
+        self.sessionId = sessionId
+        self.cwd = cwd
+        self.notificationType = notificationType
+        self.agentID = agentID
+        self.agentType = agentType
+        self.runningBackgroundTasks = runningBackgroundTasks
+        self.watchPid = watchPid
+        self.toolTimeout = toolTimeout
+    }
+}
+
 /// A request's arguments. On the wire this is a plain object whose fields follow the request's `op`,
 /// so decoding goes through `Request`, which reads `op` first.
 public enum RequestArgs: Encodable, Sendable, Equatable {
@@ -64,12 +93,14 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
     case renew(RenewArgs)
     case release(ReleaseArgs)
     case status
+    case hook(HookArgs)
 
     public func encode(to encoder: any Encoder) throws {
         switch self {
         case .acquire(let args): try args.encode(to: encoder)
         case .renew(let args): try args.encode(to: encoder)
         case .release(let args): try args.encode(to: encoder)
+        case .hook(let args): try args.encode(to: encoder)
         case .status:
             _ = encoder.container(keyedBy: EmptyKeys.self)
         }
@@ -105,6 +136,7 @@ public struct Request: Codable, Sendable, Equatable {
         case .renew: args = .renew(try container.decode(RenewArgs.self, forKey: .args))
         case .release: args = .release(try container.decode(ReleaseArgs.self, forKey: .args))
         case .status: args = .status
+        case .hook: args = .hook(try container.decode(HookArgs.self, forKey: .args))
         }
     }
 

@@ -1,0 +1,10 @@
+{
+  "agent_id": "a1d0a20d24960c95b",
+  "agent_type": "general-purpose",
+  "cwd": "/Users/test/project",
+  "hook_event_name": "SubagentStart",
+  "prompt_id": "5f05ea2a-8fdd-4fc7-ba07-9266dab9d1eb",
+  "scratchpad_dir": "/Users/test/scratch",
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/00000000-0000-0000-0000-000000000001.jsonl"
+}

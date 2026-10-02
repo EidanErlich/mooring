@@ -49,9 +49,16 @@ targets:
       - package: AwakeKit
         product: AwaykeMonitors
       - package: MooringIPC
+    postCompileScripts:
+      - name: Bundle Claude Code plugin
+        script: '"$SRCROOT/scripts/bundle-claude-plugin.sh" "$SRCROOT/Integrations/claude-code-plugin" "$SRCROOT/Integrations/app-marketplace.json" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources/ClaudePlugin"'
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/ClaudePlugin/.claude-plugin/marketplace.json
+        basedOnDependencyAnalysis: false   # the plugin folder is copied whole, so any file in it can change
     settings:
       base:
         PRODUCT_NAME: Mooring
+        ENABLE_USER_SCRIPT_SANDBOXING: NO   # the bundling script writes into the app bundle
         PRODUCT_BUNDLE_IDENTIFIER: dev.mooring.app
         INFOPLIST_FILE: App/Info.plist
         GENERATE_INFOPLIST_FILE: NO

@@ -68,17 +68,28 @@ let fixedNow = Date(timeIntervalSince1970: 1_800_000_000)
 /// A CLI wired to fakes: run arguments through it, then inspect the client and the captured output.
 struct Harness {
     let client: RecordingClient
+    /// What `mooring hook` sends through, kept apart from `client` so a test can tell them apart.
+    let hookClient: RecordingClient
     let capture = Capture()
     let table: FakeProcessTable
     let parentPID: Int32
     let ownBinaryPath: String
     let pathEnv: String?
+    /// What stdin holds for `mooring hook`.
+    let input: Data
+    /// What `claude` reported to doctor; nil when it wasn't found.
+    let claude: ClaudeSnapshot?
 
     init(
-        client: RecordingClient = RecordingClient(), table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100,
-        ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil
+        client: RecordingClient = RecordingClient(), hookClient: RecordingClient = RecordingClient(),
+        table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100,
+        ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil, input: Data = Data(),
+        claude: ClaudeSnapshot? = nil
     ) {
         self.client = client
+        self.hookClient = hookClient
+        self.input = input
+        self.claude = claude
         self.table = table
         self.parentPID = parentPID
         self.ownBinaryPath = ownBinaryPath
@@ -87,10 +98,13 @@ struct Harness {
 
     func run(_ arguments: [String]) async -> Int32 {
         let capture = capture
+        let input = input
+        let claude = claude
         let environment = CLIEnvironment(
             client: client, processes: table, ownPID: 500, parentPID: parentPID,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
-            newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv
+            newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv,
+            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, claude: { claude }
         )
         return await MooringCLI.run(arguments, environment: environment)
     }

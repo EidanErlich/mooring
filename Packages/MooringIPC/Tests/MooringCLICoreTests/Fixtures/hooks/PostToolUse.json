@@ -1,0 +1,27 @@
+{
+  "cwd": "/Users/test/project",
+  "duration_ms": 6,
+  "hook_event_name": "PostToolUse",
+  "permission_mode": "default",
+  "prompt_id": "5f05ea2a-8fdd-4fc7-ba07-9266dab9d1eb",
+  "scratchpad_dir": "/Users/test/scratch",
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "tool_input": {
+    "description": "Count lines in one.txt",
+    "prompt": "Count the number of lines in one.txt in the current working directory and report only the number.",
+    "subagent_type": "general-purpose"
+  },
+  "tool_name": "Agent",
+  "tool_response": {
+    "agentId": "a1d0a20d24960c95b",
+    "canReadOutputFile": true,
+    "description": "Count lines in one.txt",
+    "isAsync": true,
+    "outputFile": "/Users/test/scratch",
+    "prompt": "Count the number of lines in one.txt in the current working directory and report only the number.",
+    "resolvedModel": "claude-haiku-4-5-20251001",
+    "status": "async_launched"
+  },
+  "tool_use_id": "toolu_01MKqHRnCt6wftC3jfsrwzUw",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/00000000-0000-0000-0000-000000000001.jsonl"
+}

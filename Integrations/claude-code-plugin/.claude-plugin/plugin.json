@@ -1,0 +1,10 @@
+{
+  "name": "mooring",
+  "version": "0.0.1",
+  "description": "Keeps your Mac awake while Claude works. Needs the Mooring app.",
+  "author": {
+    "name": "Eidan Erlich"
+  },
+  "homepage": "https://github.com/EidanErlich/mooring",
+  "license": "GPL-3.0-only"
+}

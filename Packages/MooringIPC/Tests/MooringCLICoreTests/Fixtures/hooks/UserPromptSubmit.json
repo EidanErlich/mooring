@@ -1,0 +1,10 @@
+{
+  "cwd": "/Users/test/project",
+  "hook_event_name": "UserPromptSubmit",
+  "permission_mode": "default",
+  "prompt": "Run ls in this folder. Then use the Task tool to launch a general-purpose subagent that counts the lines in one.txt and replies with the number. Answer with both results in one short line.",
+  "prompt_id": "5f05ea2a-8fdd-4fc7-ba07-9266dab9d1eb",
+  "scratchpad_dir": "/Users/test/scratch",
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "transcript_path": "/Users/test/.claude/projects/-Users-test-project/00000000-0000-0000-0000-000000000001.jsonl"
+}

@@ -21,6 +21,10 @@ let package = Package(
             ]
         ),
         .testTarget(name: "MooringIPCTests", dependencies: ["MooringIPC"]),
-        .testTarget(name: "MooringCLICoreTests", dependencies: ["MooringCLICore", "MooringIPC"])
+        .testTarget(
+            name: "MooringCLICoreTests",
+            dependencies: ["MooringCLICore", "MooringIPC"],
+            resources: [.copy("Fixtures")]
+        )
     ]
 )

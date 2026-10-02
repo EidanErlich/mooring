@@ -61,6 +61,15 @@ public struct ReleaseResult: Codable, Sendable, Equatable {
     }
 }
 
+/// What the app did with a hook event: `acquire`, `renew`, `waiting`, `releaseAfter`, `releaseNow`, `ignore` or `skipped`.
+public struct HookResult: Codable, Sendable, Equatable {
+    public var action: String
+
+    public init(action: String) {
+        self.action = action
+    }
+}
+
 /// Which assertions the engine wants held right now.
 public struct LevelInfo: Codable, Sendable, Equatable {
     public var system: Bool
@@ -151,6 +160,7 @@ public enum ResponseResult: Encodable, Sendable, Equatable {
     case release(ReleaseResult)
     case status(StatusResult)
     case renew(LeaseInfo)
+    case hook(HookResult)
 
     public func encode(to encoder: any Encoder) throws {
         switch self {
@@ -158,6 +168,7 @@ public enum ResponseResult: Encodable, Sendable, Equatable {
         case .release(let result): try result.encode(to: encoder)
         case .status(let result): try result.encode(to: encoder)
         case .renew(let result): try result.encode(to: encoder)
+        case .hook(let result): try result.encode(to: encoder)
         }
     }
 
@@ -167,6 +178,7 @@ public enum ResponseResult: Encodable, Sendable, Equatable {
         case .release: .release(try container.decode(ReleaseResult.self, forKey: .result))
         case .status: .status(try container.decode(StatusResult.self, forKey: .result))
         case .renew: .renew(try container.decode(LeaseInfo.self, forKey: .result))
+        case .hook: .hook(try container.decode(HookResult.self, forKey: .result))
         }
     }
 }

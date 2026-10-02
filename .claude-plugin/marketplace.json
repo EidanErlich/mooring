@@ -1,0 +1,16 @@
+{
+  "name": "mooring",
+  "owner": {
+    "name": "Eidan Erlich"
+  },
+  "metadata": {
+    "description": "Mooring keeps your Mac awake while Claude Code works."
+  },
+  "plugins": [
+    {
+      "name": "mooring",
+      "source": "./Integrations/claude-code-plugin",
+      "description": "Keeps your Mac awake while Claude works. Needs the Mooring app."
+    }
+  ]
+}
