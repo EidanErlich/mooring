@@ -252,7 +252,8 @@ private func socketEnvironment(path: String, replyTimeout: TimeInterval, input: 
         write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
         newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
         readInput: { Data(input.prefix($0)) },
-        hookClient: SocketClient(path: path, replyTimeout: replyTimeout, launchWait: 0, launcher: {}), claude: { nil }
+        hookClient: SocketClient(path: path, replyTimeout: replyTimeout, launchWait: 0, launcher: {}),
+        lidClient: RecordingClient(), claude: { nil }
     )
 }
 

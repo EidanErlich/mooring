@@ -12,7 +12,7 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
     let harness = Harness()
     let code = await harness.run(["on", "--level", "lid", "--for", "30m", "--reason", "build"])
     #expect(code == 0)
-    #expect(harness.client.lastRequest == Request(
+    #expect(harness.lidClient.lastRequest == Request(
         v: 1, id: "req-1", op: .acquire,
         args: .acquire(AcquireArgs(kind: .on, id: nil, level: "lid", ttl: 1800, watchPid: nil, reason: "build", agent: nil))
     ))
@@ -21,7 +21,7 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
 @Test func levelIsSentInCanonicalForm() async {
     let harness = Harness()
     _ = await harness.run(["on", "--level", "lid,display"])
-    #expect(acquireArgs(harness.client.lastRequest)?.level == "display,lid")
+    #expect(acquireArgs(harness.lidClient.lastRequest)?.level == "display,lid")
 }
 
 @Test func badDurationIsUsageExit1() async {

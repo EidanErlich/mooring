@@ -124,8 +124,15 @@ import Testing
         #expect(harness.capture.stdout.isEmpty)
     }
 
+    @Test func anchorAtALidLevelAcquiresThroughTheLidClient() async {
+        let harness = Harness()
+        #expect(await harness.run(["anchor", "--level", "lid", "--", "sh", "-c", "exit 0"]) == 0)
+        #expect(harness.client.requests.map(\.op) == [.status])
+        #expect(harness.lidClient.requests.map(\.op) == [.acquire])
+    }
+
     @Test func guardrailIsAWarning() async {
-        let harness = Harness(client: RecordingClient(reply: .success(.failure(id: "r", .guardrail, "Lid mode paused: battery low"))))
+        let harness = Harness(lidClient: RecordingClient(reply: .success(.failure(id: "r", .guardrail, "Lid mode paused: battery low"))))
         #expect(await harness.run(["anchor", "--level", "lid", "--", "sh", "-c", "exit 0"]) == 0)
         #expect(harness.capture.stderr == "mooring: Lid mode paused: battery low\n")
     }

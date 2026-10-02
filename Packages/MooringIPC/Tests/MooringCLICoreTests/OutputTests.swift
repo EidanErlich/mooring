@@ -42,6 +42,16 @@ private let threeLeases = [
     #expect(text == expected)
 }
 
+@Test func pendingLeaseShowsWaitingText() {
+    let pending = leaseInfo(
+        id: "job", owner: OwnerInfo(kind: "agent", name: "Claude Code"), reason: "Churn analysis", level: "lid",
+        expiresAt: fixedNow.addingTimeInterval(3600), watchPid: 80, pendingApproval: true
+    )
+    let text = StatusText.human(status(leases: [pending], suspensions: []), now: fixedNow)
+    #expect(text.contains("  Claude Code   Churn analysis   waiting for your approval\n"))
+    #expect(!text.contains("cap"))
+}
+
 @Test func statusWithNoLeasesOnPower() {
     let text = StatusText.human(
         status(leases: [], power: PowerInfo(onAC: true, batteryPercent: 100), lidClosed: nil, suspensions: []), now: fixedNow
@@ -88,7 +98,7 @@ private let threeLeases = [
 }
 
 @Test func jsonErrorsGoToStdout() async throws {
-    let harness = Harness(client: RecordingClient(reply: .success(.failure(id: "r", .guardrail, "Lid mode paused: battery low"))))
+    let harness = Harness(lidClient: RecordingClient(reply: .success(.failure(id: "r", .guardrail, "Lid mode paused: battery low"))))
     #expect(await harness.run(["on", "--level", "lid", "--json"]) == 2)
     let text = harness.capture.stdout
     #expect(text.contains(#""ok":false"#))
@@ -190,4 +200,36 @@ private let threeLeases = [
     #expect(await harness.run(["status"]) == 0)
     #expect(harness.capture.stdout.hasPrefix("On · lid mode · 1h 12m left\nLeases (3)\n"))
     #expect(harness.capture.stdout.hasSuffix("Paused: lid mode (battery low)\n"))
+}
+
+@Test func lidTimeoutIsLongerOnlyForLidRequests() async {
+    func clients(_ arguments: [String]) async -> (normal: [Op], lid: [Op]) {
+        let harness = Harness()
+        _ = await harness.run(arguments)
+        return (harness.client.requests.map(\.op), harness.lidClient.requests.map(\.op))
+    }
+    // An acquire whose level includes lid goes through the long-wait client, whichever command asks.
+    for arguments in [["on", "--level", "lid"], ["on", "--level", "display,lid"], ["lease", "acquire", "job", "--level", "lid"]] {
+        let used = await clients(arguments)
+        #expect(used.normal.isEmpty && used.lid == [.acquire], "\(arguments)")
+    }
+    // Everything else stays on the quick client.
+    for arguments in [["on"], ["on", "--level", "display"], ["lease", "acquire", "job"], ["lease", "acquire", "job", "--level", "system"],
+                      ["lease", "renew", "job"], ["lease", "release", "job"], ["off"], ["status"]] {
+        let used = await clients(arguments)
+        #expect(used.normal.count == 1 && used.lid.isEmpty, "\(arguments)")
+    }
+}
+
+@Test func lidRequestKeepsTheLaunchBehaviour() async {
+    let harness = Harness()
+    _ = await harness.run(["on", "--level", "lid", "--no-launch"])
+    #expect(harness.lidClient.lastLaunch == false)
+}
+
+@Test func deniedLidApprovalIsPrintedAsTheError() async {
+    let harness = Harness(lidClient: RecordingClient(reply: .success(.failure(id: "r", .denied, "Lid mode not approved (denied)"))))
+    #expect(await harness.run(["on", "--level", "lid"]) == 2)
+    #expect(harness.capture.stderr == "mooring: Lid mode not approved (denied)\n")
+    #expect(harness.capture.stdout.isEmpty)
 }

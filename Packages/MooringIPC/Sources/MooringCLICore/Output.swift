@@ -31,9 +31,11 @@ enum CLIText {
         }
     }
 
-    /// How long a lease lasts: "until turned off", "while running", "while running · 4h cap" or "1h 12m left".
+    /// How long a lease lasts: "until turned off", "while running", "while running · 4h cap" or "1h 12m left";
+    /// "waiting for your approval" while it hasn't been approved yet.
     static func timeText(_ lease: LeaseInfo, now: Date) -> String {
-        switch (lease.expiresAt, lease.watchPid) {
+        if lease.pendingApproval { return "waiting for your approval" }
+        return switch (lease.expiresAt, lease.watchPid) {
         case (nil, nil): "until turned off"
         case (nil, _?): "while running"
         case (let expiry?, nil): "\(remaining(expiry.timeIntervalSince(now))) left"

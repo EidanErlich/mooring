@@ -21,7 +21,7 @@ public enum Doctor {
         }
     }
 
-    /// The six checks in order. `status` is nil when the app didn't give a status, and `unavailable` says why, or
+    /// The seven checks in order. `status` is nil when the app didn't give a status, and `unavailable` says why, or
     /// `appError` holds the message of an error reply from an app that did answer; `resolve` follows symlinks;
     /// `claude` is nil when Claude Code wasn't found.
     public static func checks(
@@ -34,7 +34,8 @@ public enum Doctor {
             helperCheck(status),
             lidCheck(status),
             pluginCheck(claude),
-            claudeVersionCheck(claude)
+            claudeVersionCheck(claude),
+            notificationsCheck(status)
         ]
     }
 
@@ -137,6 +138,22 @@ public enum Doctor {
             return Check(name: name, state: "skip", detail: "tested with \(tested); you have \(version)", fix: nil)
         }
         return Check(name: name, state: "pass", detail: version, fix: nil)
+    }
+
+    /// Notifications carry lid approvals, so a denial only fails when the setting can ask for one.
+    private static func notificationsCheck(_ status: StatusResult?) -> Check {
+        let name = "Notifications"
+        guard let status else { return Check(name: name, state: "skip", detail: "needs the app", fix: nil) }
+        switch status.notifications {
+        case "allowed": return Check(name: name, state: "pass", detail: "allowed", fix: nil)
+        case "notDetermined": return Check(name: name, state: "skip", detail: "not asked yet", fix: nil)
+        case "denied":
+            guard ["askWhenOpenEnded", "alwaysAsk"].contains(status.agentLidApproval) else {
+                return Check(name: name, state: "skip", detail: "denied (not needed)", fix: nil)
+            }
+            return Check(name: name, state: "fail", detail: "denied", fix: "System Settings → Notifications → Mooring")
+        default: return Check(name: name, state: "skip", detail: "unknown", fix: nil)
+        }
     }
 
     private static func isExecutableFile(_ path: String) -> Bool {
