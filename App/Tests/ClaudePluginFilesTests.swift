@@ -39,7 +39,7 @@ struct ClaudePluginFilesTests {
         let hooks = try #require(file["hooks"] as? [String: [[String: Any]]])
         let background: Set<String> = ["PreToolUse", "PostToolUse", "PostToolBatch",
                                        "SubagentStart", "SubagentStop", "PreCompact"]
-        let synchronous: Set<String> = ["UserPromptSubmit", "Stop", "Notification", "PermissionRequest"]
+        let synchronous: Set<String> = ["UserPromptSubmit", "Stop", "StopFailure", "Notification", "PermissionRequest"]
         #expect(Set(hooks.keys) == background.union(synchronous).union(["SessionEnd"]))
         for (event, groups) in hooks {
             #expect(groups.count == 1)

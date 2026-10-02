@@ -65,6 +65,17 @@ struct HookPolicyTests {
         #expect(action("Stop", runningBackgroundTasks: 0) == .releaseAfter(120))
     }
 
+    @Test func stopFailureReleasesAfterGrace() {
+        #expect(action("StopFailure") == .releaseAfter(120))
+        #expect(action("StopFailure", leaseExists: false) == .ignore)
+        #expect(action("StopFailure", runningBackgroundTasks: 0) == .releaseAfter(120))
+    }
+
+    @Test func stopFailureWithBackgroundTasksRenews() {
+        #expect(action("StopFailure", runningBackgroundTasks: 1) == .renew)
+        #expect(action("StopFailure", runningBackgroundTasks: 1, leaseExists: false) == .acquire)
+    }
+
     @Test func sessionEndReleasesNow() {
         #expect(action("SessionEnd") == .releaseNow)
     }
@@ -75,7 +86,7 @@ struct HookPolicyTests {
     }
 
     @Test func unknownEventsAreIgnored() {
-        for event in ["SessionStart", "StopFailure", "FutureThing"] {
+        for event in ["SessionStart", "FutureThing"] {
             #expect(action(event) == .ignore, "\(event)")
         }
     }

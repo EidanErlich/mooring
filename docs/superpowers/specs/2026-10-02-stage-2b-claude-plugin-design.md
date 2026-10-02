@@ -33,7 +33,7 @@ This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--wat
 - **Events that fire:**
   - `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PermissionRequest`, `Notification`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `Stop` and `SessionEnd`.
   - `PreCompact` is documented.
-  - `StopFailure` didn't occur in the test, so it is ignored if it exists.
+  - `StopFailure` didn't occur in the test. Claude Code documents it as firing instead of `Stop` when a turn ends on an API error, so it follows the `Stop` rules.
   - The docs were wrong to omit `PostToolBatch`, `SubagentStart` and `PermissionRequest`.
 - **Fields on every event:** `session_id`, `cwd`, `hook_event_name`, `transcript_path`, `prompt_id`, and usually `permission_mode`.
 - **Per-event fields:**
@@ -72,10 +72,10 @@ One lease per session, `claude-<session_id>`:
 | `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PreCompact` | Renew: expiry = now + 15 min. If the lease is gone, acquire it as for `UserPromptSubmit`. |
 | `PermissionRequest`, and `Notification` with `notification_type` `permission_prompt` | Expiry = now + the waiting timeout (Settings, default 30 min). Both fire for one prompt; the second is a no-op. |
 | `Notification` of any other type (including `idle_prompt`) | **Ignored.** Claude sends the idle prompt after finishing a turn, while it waits for the next message. Counting it as waiting would keep the Mac awake for 30 min after every turn. |
-| `Stop` with any `background_tasks` entry whose `status` is `running` | Renew, as for tool events. Claude is still working in the background. |
-| `Stop` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
+| `Stop` or `StopFailure` (a turn that ended on an API error, such as a usage limit) with any `background_tasks` entry whose `status` is `running` | Renew, as for tool events. Claude is still working in the background. |
+| `Stop` or `StopFailure` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
 | `SessionEnd` | Release now. |
-| `SessionStart`, `StopFailure` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
+| `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
 - **"Only when asked":** every hook request is acknowledged and does nothing. Agent holds and `mooring anchor` still work.
 - **Crashes:** if Claude dies, the watched pid exits and the lease ends at once. If the pid can't be resolved, the 15 min expiry is the backstop.
@@ -110,7 +110,7 @@ It tries these in order, using the first that is executable:
 
 ### `hooks/hooks.json`
 
-- **Synchronous, `timeout: 2`:** `UserPromptSubmit`, `Stop`, `Notification`, `PermissionRequest`.
+- **Synchronous, `timeout: 2`:** `UserPromptSubmit`, `Stop`, `StopFailure`, `Notification`, `PermissionRequest`.
 - **`SessionEnd`:** synchronous, `timeout: 1`.
 - **Background (`"async": true`, `timeout: 5`):** `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PreCompact`.
 - Every command is `${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook <EventName>`.

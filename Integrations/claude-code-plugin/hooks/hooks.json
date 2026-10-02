@@ -23,6 +23,17 @@
         ]
       }
     ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" StopFailure",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
     "Notification": [
       {
         "hooks": [

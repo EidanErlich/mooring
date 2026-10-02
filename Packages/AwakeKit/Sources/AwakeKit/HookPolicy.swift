@@ -69,7 +69,8 @@ public enum HookPolicy {
             return .setExpiry(settings.agentWaitingTimeout)
         case "Notification":
             return hook.notificationType == "permission_prompt" ? .setExpiry(settings.agentWaitingTimeout) : .ignore
-        case "Stop":
+        // `StopFailure` ends a turn that failed on an API error, instead of `Stop`.
+        case "Stop", "StopFailure":
             if (hook.runningBackgroundTasks ?? 0) > 0 { return renewOrAcquire }
             return leaseExists ? .releaseAfter(stopGrace) : .ignore
         case "SessionEnd":

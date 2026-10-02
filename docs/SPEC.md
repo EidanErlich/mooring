@@ -350,17 +350,17 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.j
 | `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PreCompact` | Renew: expiry = now + 15 min. If the lease is gone, acquire it as for `UserPromptSubmit`. |
 | `PermissionRequest`, and `Notification` with `notification_type` `permission_prompt` | Expiry = now + the waiting timeout (Settings, default 30 min). Both fire for one prompt; the second is a no-op. |
 | `Notification` of any other type (including `idle_prompt`) | **Ignored.** Claude sends the idle prompt after finishing a turn, while it waits for the next message. Counting it as waiting would keep the Mac awake for 30 min after every turn. |
-| `Stop` with any `background_tasks` entry whose `status` is `running` | Renew, as for tool events. Claude is still working in the background. |
-| `Stop` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
+| `Stop` or `StopFailure` (a turn that ended on an API error, such as a usage limit) with any `background_tasks` entry whose `status` is `running` | Renew, as for tool events. Claude is still working in the background. |
+| `Stop` or `StopFailure` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
 | `SessionEnd` | Release now. |
-| `SessionStart`, `StopFailure` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
+| `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
 If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
 
 **Hook rules** so Mooring can never break a Claude session:
 
 - Every hook exits 0 with no output, even on errors; failures go to Mooring's log, not to Claude.
-- `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop` and `PreCompact` run with `"async": true` and `timeout: 5`. `UserPromptSubmit`, `Stop`, `Notification` and `PermissionRequest` are synchronous with `timeout: 2`; `SessionEnd` is synchronous with `timeout: 1`.
+- `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop` and `PreCompact` run with `"async": true` and `timeout: 5`. `UserPromptSubmit`, `Stop`, `StopFailure`, `Notification` and `PermissionRequest` are synchronous with `timeout: 2`; `SessionEnd` is synchronous with `timeout: 1`.
 - Hooks never launch the app, and if `mooring` isn't installed the script is a no-op.
 - Hook events and fields change over time; `mooring doctor` fails its "Claude Code version" check when `claude --version` reports a different major.minor than the plugin was tested with.
 
