@@ -21,6 +21,10 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## Lid approvals (2c-1 leftovers)
 
+- **Agent-granted mark survives menu changes.** If an agent's `on` got lid and you then change that session from the menu, it still counts as agent-granted, so switching to Never takes its lid. Fix: a counter bumped by the menu entry points, stored with the mark.
+- **Under Never, an agent re-acquiring a person's named lease** drops that lease's lid.
+- **The `claude-` session prefix** is duplicated in `GuardrailNotifier` and `RequestHandler.sessionLeasePrefix`.
+- **No test for `AgentDetection.descends`** walking past 64 steps (the cycle case is tested).
 - **Agent detection is advisory.** An agent escapes it by detaching itself (`(mooring on --level lid &)` reparents to `launchd`), by launching `mooring` through Terminal or `osascript`, or by naming a binary `claude` to inherit "Always allow Claude Code". It guards against accidents, not a hostile agent.
 - **The first-run permission prompt runs outside the 60 s budget:** the timer starts after `authorize()` returns, so the first ask can outlast the CLI's 65 s ("didn't answer") and a later Allow still adds lid.
 - **Which leases got lid on an agent's behalf** is kept in memory, so after a relaunch Never and session lid off don't take lid back from restored named leases (session leases lose it on their next hook event).
