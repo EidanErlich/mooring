@@ -53,7 +53,8 @@ check "anchor lease is listed" 0 anchor_listed yes
 check "lease acquire" 0 "$MOORING" lease acquire smoke-test --ttl 1m
 check "lease release" 0 "$MOORING" lease release smoke-test
 check "lease release is idempotent" 0 "$MOORING" lease release smoke-test
-check "lid lease is refused" 2 "$MOORING" lease acquire smoke-lid --ttl 1m --level lid
+check "bounded lid lease is allowed" 0 "$MOORING" lease acquire smoke-lid --ttl 1m --level lid
+check "bounded lid lease release" 0 "$MOORING" lease release smoke-lid
 check "bare number duration is a usage error" 1 "$MOORING" on --for 5
 check "renew of a missing lease" 1 "$MOORING" lease renew no-such-lease
 

@@ -73,12 +73,12 @@ struct RequestHandlerReacquireTests {
         #expect(try #require(fixture.lease("job")).level == AwakeLevel(display: true, lid: false))
     }
 
-    @Test func reacquireStillDeniesLid() async throws {
+    @Test func reacquireMayAddLidWhenBounded() async throws {
         let fixture = RequestFixture()
         _ = await fixture.acquire(.lease, id: "job", level: "display", ttl: 600)
         let response = await fixture.acquire(.lease, id: "job", level: "lid", ttl: 600)
-        #expect(wireFailure(response)?.code == .denied)
-        #expect(try #require(fixture.lease("job")).level == AwakeLevel(display: true, lid: false))
+        #expect(acquireResult(response)?.lease.level == "display,lid")
+        #expect(try #require(fixture.lease("job")).level == AwakeLevel(display: true, lid: true))
     }
 
     @Test func reacquireKeepsReasonAndOwnerUnlessGiven() async throws {

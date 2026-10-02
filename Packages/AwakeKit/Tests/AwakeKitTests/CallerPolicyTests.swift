@@ -20,10 +20,10 @@ struct CallerPolicyTests {
             liveLeaseCount: 0, exists: false).get() == 4 * 3600)
     }
 
-    @Test func namedLidIsDenied() {
-        let result = CallerPolicy.checkAcquire(kind: .named, id: "job", level: AwakeLevel(display: false, lid: true), ttl: 600,
-            watched: false, liveLeaseCount: 0, exists: false)
-        #expect(result == .failure(.denied("Lid mode for leases needs approval, which arrives in stage 2c")))
+    @Test func namedLidIsNoLongerDeniedByPolicy() throws {
+        let level = AwakeLevel(display: false, lid: true)
+        #expect(try CallerPolicy.checkAcquire(kind: .named, id: "job", level: level, ttl: 600,
+            watched: false, liveLeaseCount: 0, exists: false).get() == 600)
     }
 
     @Test func reservedAndInvalidIDsAreRefused() {

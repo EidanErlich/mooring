@@ -4,7 +4,7 @@ import Foundation
 public enum CallerKind: Sendable {
     /// The `mooring` CLI itself: may do anything the menu can.
     case trusted
-    /// An agent or script naming its own lease: short, bounded, no lid mode.
+    /// An agent or script naming its own lease: short and bounded; lid mode is decided by `LidApproval`.
     case named
 }
 
@@ -44,9 +44,6 @@ public enum CallerPolicy {
         guard kind == .named else { return .success(ttl) }
         if ttl == nil && !watched {
             return .failure(.badRequest("A lease needs --ttl or --watch-pid"))
-        }
-        if level.lid {
-            return .failure(.denied("Lid mode for leases needs approval, which arrives in stage 2c"))
         }
         return .success(min(ttl ?? maxNamedLease, maxNamedLease))
     }
