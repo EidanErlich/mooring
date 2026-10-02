@@ -31,7 +31,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - the `blocked` socket test returns early as root instead of using `.enabled(if:)`;
   - there's no test for `anchor -- cmd --json` keeping anchor's own errors human, or for the ttl after a longer re-acquire.
 
-- **Silent 12 h cap on `on`.** `mooring on --for 24h` caps at 12 h without saying so (`clamped` is always false for `on`). SPEC 1.7 says the clamp is reported. It's a one-line fix in `RequestHandler.turnOn`.
 - **`on` can reply with an expired session.** With no flags, it can reply with a just-expired, not-yet-ticked menu lease, a window of up to 5 s. Filter with `isLive(at:)`.
 - **SPEC 2.2's exit-2 wording** should say "held but paused by a guardrail", not "refused".
 - **`doctor`:**

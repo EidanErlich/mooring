@@ -46,6 +46,22 @@ struct RequestHandlerTests {
         #expect(lease.owner == .menu)
     }
 
+    @Test func onLongerThan12HoursIsClamped() async throws {
+        let fixture = RequestFixture()
+        let response = await fixture.acquire(.on, ttl: 24 * 3600)
+        #expect(response.ok)
+        #expect(acquireResult(response)?.clamped == true)
+        let lease = try #require(fixture.lease("menu"))
+        #expect(lease.expiresAt == fixture.clock.addingTimeInterval(AwakeEngine.maxLeaseLength))
+    }
+
+    @Test func onWithinLimitIsNotClamped() async {
+        let fixture = RequestFixture()
+        let response = await fixture.acquire(.on, ttl: AwakeEngine.maxLeaseLength)
+        #expect(response.ok)
+        #expect(acquireResult(response)?.clamped == false)
+    }
+
     @Test func onWithUntilTurnedOffDefaultHasNoExpiry() async throws {
         let fixture = RequestFixture()
         _ = await fixture.acquire(.on)

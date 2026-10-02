@@ -158,7 +158,7 @@ final class RequestHandler {
         if let message = guardrailMessage(holdingBack: lease.level) {
             throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id))
         }
-        return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: false)
+        return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: (ttl ?? 0) > AwakeEngine.maxLeaseLength)
     }
 
     private func plan(for args: AcquireArgs, from caller: Caller) throws -> Plan {
