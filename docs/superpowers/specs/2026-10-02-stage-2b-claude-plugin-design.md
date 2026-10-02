@@ -158,7 +158,7 @@ About 30 lines. It says:
 **Check 6, "Claude Code version":**
 
 - ✓ "<version>" when `claude --version`'s major.minor equals `testedWithClaudeCode` in the installed plugin's `mooring.json`.
-- ✗ "tested with <testedWith>; you have <version>", no fix. Like any failed check it makes `doctor` exit 1; the line explains why.
+- – "tested with <testedWith>; you have <version>" when the major.minor differs. It is a warning, not a failure, so a Claude Code update never makes `doctor` exit 1 on its own.
 - – "unknown" when either value is missing.
 
 `mooring` finds `claude` on its own `PATH`, then in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`, and runs each `claude` command with a 3 s limit.

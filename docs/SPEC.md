@@ -305,7 +305,7 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 | `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
 | `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
 | `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]` |
-| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Mooring's Claude Code plugin is installed and enabled, and Claude Code's major.minor version is the one the plugin was tested with. Exits 1 if any check fails |
+| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Mooring's Claude Code plugin is installed and enabled, and Claude Code's major.minor version is the one the plugin was tested with (a different one only prints a note). Exits 1 if any check fails |
 | `mooring mcp` | Run the MCP server over stdio (2.5; arrives in 2c) |
 
 **Conventions:**
@@ -363,7 +363,7 @@ If Claude Code crashes, the watched PID exits and the lease ends at once; if the
 - Every hook exits 0 with no output, even on errors; failures go to Mooring's log, not to Claude.
 - `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop` and `PreCompact` run with `"async": true` and `timeout: 5`. `UserPromptSubmit`, `Stop`, `StopFailure`, `Notification` and `PermissionRequest` are synchronous with `timeout: 2`; `SessionEnd` is synchronous with `timeout: 1`.
 - Hooks never launch the app, and if `mooring` isn't installed the script is a no-op.
-- Hook events and fields change over time; `mooring doctor` fails its "Claude Code version" check when `claude --version` reports a different major.minor than the plugin was tested with.
+- Hook events and fields change over time; `mooring doctor` flags (without failing) its "Claude Code version" check when `claude --version` reports a different major.minor than the plugin was tested with.
 
 Sketch of `hooks/hooks.json` (every event has the same shape; the real file lists all eleven):
 
@@ -864,7 +864,7 @@ struct AwakeSettings: Codable, Equatable {
 - The `mooring://` URL scheme and the awake App Intents ship in stage 2c.
 - **CLI packaging:** the command-line logic lives in the `MooringCLICore` library target of `Packages/MooringIPC` (argument parsing with `swift-argument-parser`, the socket client, `anchor`, `doctor`), so tests drive it without a socket. `CLI/main.swift` is a thin entry point that builds the real environment and exits with the result.
 - **`mooring doctor` and lid sleep:** doctor reads `SleepDisabled` from the app's `status` reply, which asks the helper. The CLI never runs `pmset`.
-- **`mooring doctor` and Claude Code:** the plugin records the Claude Code major.minor it was tested with as `testedWithClaudeCode` in its `mooring.json`. Doctor finds `claude` (`PATH`, then `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), runs `claude --version` and `claude plugin list --json` with a 3 s limit each, and reads `mooring.json` from the installed plugin's `installPath`. Its "Claude plugin" check passes for an enabled `mooring@mooring-app` or `mooring@mooring`; its "Claude Code version" check fails when the major.minor differs (so `doctor` exits 1), and is skipped when either value is unknown.
+- **`mooring doctor` and Claude Code:** the plugin records the Claude Code major.minor it was tested with as `testedWithClaudeCode` in its `mooring.json`. Doctor finds `claude` (`PATH`, then `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), runs `claude --version` and `claude plugin list --json` with a 3 s limit each, and reads `mooring.json` from the installed plugin's `installPath`. Its "Claude plugin" check passes for an enabled `mooring@mooring-app` or `mooring@mooring`; its "Claude Code version" check is skipped with a note ("tested with 2.1; you have 2.2.0", marked –, exit code unaffected) when the major.minor differs, and when either value is unknown.
 
 **Stage 3 additions to the Loop file map**
 

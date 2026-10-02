@@ -145,10 +145,10 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     #expect(claudeChecks(snapshot)[1] == Doctor.Check(name: "Claude Code version", state: "pass", detail: "2.1.285", fix: nil))
 }
 
-@Test func versionMismatchFails() {
+@Test func versionMismatchSkips() {
     let snapshot = ClaudeSnapshot(version: "2.2.0", plugins: [], testedWith: "2.1")
     #expect(claudeChecks(snapshot)[1] == Doctor.Check(
-        name: "Claude Code version", state: "fail", detail: "tested with 2.1; you have 2.2.0", fix: nil
+        name: "Claude Code version", state: "skip", detail: "tested with 2.1; you have 2.2.0", fix: nil
     ))
 }
 
@@ -181,11 +181,23 @@ private let pluginFix = "Settings → Awake → Agents → Install"
         client: RecordingClient(reply: .success(.success(id: "r", .status(doctorStatus())))),
         ownBinaryPath: bin.binary, pathEnv: bin.path, claude: snapshot
     )
-    #expect(await harness.run(["doctor"]) == 1)
+    #expect(await harness.run(["doctor"]) == 0)
     let lines = harness.capture.stdout.split(separator: "\n").map(String.init)
     #expect(lines.count == 6)
     #expect(lines[4] == "✓ Claude plugin        mooring@mooring-app 0.1.0")
-    #expect(lines[5] == "✗ Claude Code version  tested with 2.1; you have 2.2.0")
+    #expect(lines[5] == "– Claude Code version  tested with 2.1; you have 2.2.0")
+}
+
+@Test func versionMismatchDoesNotFailDoctor() async throws {
+    let bin = try BinFolder()
+    let newer = ClaudeSnapshot(version: "2.2.0", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
+    let harness = Harness(
+        client: RecordingClient(reply: .success(.success(id: "r", .status(doctorStatus())))),
+        ownBinaryPath: bin.binary, pathEnv: bin.path, claude: newer
+    )
+    #expect(await harness.run(["doctor"]) == 0)
+    #expect(harness.capture.stdout.contains("– Claude Code version"))
+    #expect(!harness.capture.stdout.contains("✗"))
 }
 
 @Test func doctorExitCodes() async throws {

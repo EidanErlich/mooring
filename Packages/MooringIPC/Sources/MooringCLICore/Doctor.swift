@@ -115,7 +115,8 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: detail, fix: nil)
     }
 
-    /// Passes when Claude Code's major.minor is the one the plugin was tested with.
+    /// Passes when Claude Code's major.minor is the one the plugin was tested with. A different one only skips with a note,
+    /// so a Claude Code update never makes `doctor` fail before Mooring ships a retest.
     private static func claudeVersionCheck(_ claude: ClaudeSnapshot?) -> Check {
         let name = "Claude Code version"
         guard let version = claude?.version, let tested = claude?.testedWith,
@@ -123,7 +124,7 @@ public enum Doctor {
             return Check(name: name, state: "skip", detail: "unknown", fix: nil)
         }
         guard installed == tested else {
-            return Check(name: name, state: "fail", detail: "tested with \(tested); you have \(version)", fix: nil)
+            return Check(name: name, state: "skip", detail: "tested with \(tested); you have \(version)", fix: nil)
         }
         return Check(name: name, state: "pass", detail: version, fix: nil)
     }
