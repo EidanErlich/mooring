@@ -1,4 +1,5 @@
 import Foundation
+import MooringIPC
 import Testing
 @testable import Mooring
 
@@ -93,11 +94,29 @@ struct ClaudePluginInstallerTests {
         #expect(ClaudePluginInstaller.Status.claudeNotFound.buttonTitle == nil)
     }
 
-    @Test func marketplaceCommandAddsWhenNotRegisteredAndUpdatesWhenRegistered() {
-        #expect(ClaudePluginInstaller.marketplaceCommand(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: false)
-            == ["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin"])
-        #expect(ClaudePluginInstaller.marketplaceCommand(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: true)
-            == ["/x/claude", "plugin", "marketplace", "update", "mooring-app"])
+    @Test func marketplaceStepsAddWhenNotRegistered() {
+        #expect(ClaudePluginInstaller.marketplaceSteps(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: nil)
+            == [["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin"]])
+    }
+
+    @Test func marketplaceStepsUpdateWhenTheSamePath() {
+        let same = ClaudeCode.Marketplace(name: "mooring-app", path: "/App/ClaudePlugin/")
+        #expect(ClaudePluginInstaller.marketplaceSteps(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: same)
+            == [["/x/claude", "plugin", "marketplace", "update", "mooring-app"]])
+    }
+
+    @Test func marketplaceStepsUpdateWhenThePathIsUnknown() {
+        let unknown = ClaudeCode.Marketplace(name: "mooring-app", path: nil)
+        #expect(ClaudePluginInstaller.marketplaceSteps(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: unknown)
+            == [["/x/claude", "plugin", "marketplace", "update", "mooring-app"]])
+    }
+
+    @Test func marketplaceStepsRemoveThenAddWhenTheAppMoved() {
+        let moved = ClaudeCode.Marketplace(name: "mooring-app", path: "/Old/Mooring.app/Contents/Resources/ClaudePlugin")
+        #expect(ClaudePluginInstaller.marketplaceSteps(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: moved) == [
+            ["/x/claude", "plugin", "marketplace", "remove", "mooring-app"],
+            ["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin"]
+        ])
     }
 
     @Test func pluginCommandInstallsWhenAbsentAndUpdatesWhenInstalled() {
@@ -172,6 +191,35 @@ struct ClaudePluginInstallerTests {
         #expect(runner.calls[3] == ["/x/claude", "plugin", "install", "mooring@mooring-app", "-y"])
     }
 
+    @Test func movedAppRemovesAndReAddsTheMarketplaceThenInstalls() {
+        let moved = ToolResult(status: 0, stdout: Data(#"[{"name":"mooring-app","source":"directory","path":"/Old/ClaudePlugin"}]"#.utf8))
+        let runner = FakeRunner([moved, ToolResult(status: 0), ToolResult(status: 0), Self.pluginListWithout, ToolResult(status: 0)])
+        let result = install(runner)
+        #expect(throws: Never.self) { try result.get() }
+        #expect(runner.calls == [
+            ["/x/claude", "plugin", "marketplace", "list", "--json"],
+            ["/x/claude", "plugin", "marketplace", "remove", "mooring-app"],
+            ["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin"],
+            ["/x/claude", "plugin", "list", "--json"],
+            ["/x/claude", "plugin", "install", "mooring@mooring-app", "-y"]
+        ])
+    }
+
+    @Test func samePathUpdatesTheMarketplace() {
+        let same = ToolResult(status: 0, stdout: Data(#"[{"name":"mooring-app","source":"directory","path":"/App/ClaudePlugin"}]"#.utf8))
+        let runner = FakeRunner([same, ToolResult(status: 0), Self.pluginListWithApp, ToolResult(status: 0)])
+        _ = install(runner)
+        #expect(runner.calls[1] == ["/x/claude", "plugin", "marketplace", "update", "mooring-app"])
+        #expect(runner.calls[3] == ["/x/claude", "plugin", "update", "mooring@mooring-app", "-y"])
+    }
+
+    @Test func missingPathFieldUpdatesTheMarketplace() {
+        // marketplaceList has no `path` field.
+        let runner = FakeRunner([Self.marketplaceList, ToolResult(status: 0), Self.pluginListWithApp, ToolResult(status: 0)])
+        _ = install(runner)
+        #expect(runner.calls[1] == ["/x/claude", "plugin", "marketplace", "update", "mooring-app"])
+    }
+
     @Test func installStopsIfTheCLILinkFails() {
         let runner = FakeRunner([])
         let result = install(runner, ensureCLI: { throw CLIInstallerError.notALink })
@@ -186,6 +234,18 @@ struct ClaudePluginInstallerTests {
         #expect(runner.calls.count == 2)
         #expect((error?.message.count ?? 999) <= 300)
         #expect(error?.message.hasPrefix("xxx") == true)
+    }
+
+    @Test func aFailureWithNoStderrReportsTheExitStatus() {
+        for blank in ["", "  \n\t"] {
+            let runner = FakeRunner([ToolResult(status: 3, stderr: blank)])
+            #expect(failure(install(runner)) == .command("Failed (exit 3)"))
+        }
+    }
+
+    @Test func aTimeoutWithNoStderrSaysTimedOut() {
+        let runner = FakeRunner([Self.otherMarketplaces, ToolResult(status: 124, stderr: " \n")])
+        #expect(failure(install(runner)) == .command("Timed out"))
     }
 
     @Test func installStopsWhenAListFails() {

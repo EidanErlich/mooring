@@ -57,11 +57,14 @@ private let listJSON = Data("""
     #expect(ClaudeCode.candidatePaths == ["~/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"])
 }
 
-@Test func parsesMarketplaceNames() {
+@Test func parsesMarketplaces() {
     let json = #"[{"name":"mooring-app","source":"directory","path":"/x"},{"name":"claude-plugins-official","source":"github"}]"#
-    #expect(ClaudeCode.parseMarketplaceNames(Data(json.utf8)) == ["mooring-app", "claude-plugins-official"])
-    #expect(ClaudeCode.parseMarketplaceNames(Data("[]".utf8)) == [])
-    #expect(ClaudeCode.parseMarketplaceNames(Data(#"[{"source":"x"},{"name":"a"}]"#.utf8)) == ["a"])
-    #expect(ClaudeCode.parseMarketplaceNames(Data("nope".utf8)) == nil)
-    #expect(ClaudeCode.parseMarketplaceNames(Data()) == nil)
+    #expect(ClaudeCode.parseMarketplaces(Data(json.utf8)) == [
+        ClaudeCode.Marketplace(name: "mooring-app", path: "/x"),
+        ClaudeCode.Marketplace(name: "claude-plugins-official", path: nil)
+    ])
+    #expect(ClaudeCode.parseMarketplaces(Data("[]".utf8)) == [])
+    #expect(ClaudeCode.parseMarketplaces(Data(#"[{"source":"x"},{"name":"a"}]"#.utf8)) == [ClaudeCode.Marketplace(name: "a", path: nil)])
+    #expect(ClaudeCode.parseMarketplaces(Data("nope".utf8)) == nil)
+    #expect(ClaudeCode.parseMarketplaces(Data()) == nil)
 }

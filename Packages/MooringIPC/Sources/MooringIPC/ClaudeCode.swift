@@ -52,10 +52,24 @@ public enum ClaudeCode {
         }
     }
 
-    /// The names in `claude plugin marketplace list --json`, ignoring fields it doesn't know. nil when it isn't a JSON array.
-    public static func parseMarketplaceNames(_ json: Data) -> [String]? {
+    public struct Marketplace: Equatable, Sendable {
+        public var name: String
+        /// Where a directory marketplace lives; nil for other sources or when the field is missing.
+        public var path: String?
+
+        public init(name: String, path: String?) {
+            self.name = name
+            self.path = path
+        }
+    }
+
+    /// Parses `claude plugin marketplace list --json`, ignoring fields it doesn't know. nil when it isn't a JSON array.
+    public static func parseMarketplaces(_ json: Data) -> [Marketplace]? {
         guard let items = (try? JSONSerialization.jsonObject(with: json)) as? [Any] else { return nil }
-        return items.compactMap { ($0 as? [String: Any])?["name"] as? String }
+        return items.compactMap { item in
+            guard let object = item as? [String: Any], let name = object["name"] as? String else { return nil }
+            return Marketplace(name: name, path: object["path"] as? String)
+        }
     }
 
     /// Mooring's plugin among the installed ones, preferring the copy installed from the app.

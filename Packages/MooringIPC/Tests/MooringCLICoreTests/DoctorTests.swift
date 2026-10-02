@@ -129,8 +129,29 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     let expected = Doctor.Check(name: "Claude plugin", state: "fail", detail: "not installed", fix: pluginFix)
     #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: [plugin("other@x")], testedWith: nil))[0] == expected)
     #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: [], testedWith: nil))[0] == expected)
-    // `claude plugin list` failing leaves no list at all, which reads the same.
-    #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: nil, testedWith: nil))[0] == expected)
+    // With no version either, nothing says `claude` works, so the missing list reads the same.
+    #expect(claudeChecks(ClaudeSnapshot(version: nil, plugins: nil, testedWith: nil))[0] == expected)
+}
+
+@Test func failedPluginListSkipsInsteadOfClaimingNotInstalled() {
+    let snapshot = ClaudeSnapshot(version: "2.1.285", plugins: nil, testedWith: nil)
+    #expect(claudeChecks(snapshot)[0] == Doctor.Check(
+        name: "Claude plugin", state: "skip", detail: "couldn't check (claude plugin list failed)", fix: nil
+    ))
+}
+
+@Test func bothCopiesPassWhenEitherIsEnabled() {
+    func check(app: Bool, repo: Bool) -> Doctor.Check {
+        let plugins = [
+            plugin(ClaudeCode.appPluginID, enabled: app), plugin(ClaudeCode.repoPluginID, version: "0.2.0", enabled: repo)
+        ]
+        return claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: plugins, testedWith: nil))[0]
+    }
+    #expect(check(app: false, repo: true) == Doctor.Check(name: "Claude plugin", state: "pass", detail: "mooring@mooring 0.2.0", fix: nil))
+    #expect(check(app: true, repo: false).detail == "mooring@mooring-app 0.1.0")
+    #expect(check(app: true, repo: false).state == "pass")
+    #expect(check(app: true, repo: true).detail == "mooring@mooring-app 0.1.0")
+    #expect(check(app: false, repo: false) == Doctor.Check(name: "Claude plugin", state: "fail", detail: "disabled", fix: pluginFix))
 }
 
 @Test func noClaudeSkips() {
@@ -227,6 +248,16 @@ private let pluginFix = "Settings → Awake → Agents → Install"
         #expect(await harness.run(["doctor"]) == 1)
         #expect(harness.capture.stdout.contains("\(detail) — Open Mooring\n"))
     }
+}
+
+@Test func doctorSaysWhenTheAppAnsweredWithAnError() async throws {
+    let bin = try BinFolder()
+    let harness = Harness(
+        client: RecordingClient(reply: .success(.failure(id: "r", .internal, "boom"))), ownBinaryPath: bin.binary, pathEnv: bin.path
+    )
+    #expect(await harness.run(["doctor"]) == 1)
+    #expect(harness.capture.stdout.contains("answered with an error: boom — Quit and reopen Mooring\n"))
+    #expect(!harness.capture.stdout.contains("not running"))
 }
 
 @Test func doctorJSON() async throws {

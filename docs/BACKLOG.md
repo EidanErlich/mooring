@@ -3,17 +3,17 @@
 Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
 ## Claude Code plugin (2b leftovers)
-- **Sessions without a project folder all read "Claude Code · session".** Sessions whose `cwd` is `/` or missing (for example Claude sessions started outside any project) get the same label, so several look identical in the menu and `mooring status`. Show something that tells them apart, e.g. the session's start time ("Claude Code · session 14:32") or a short id ("Claude Code · session 1a2b").
-- A short tool event (e.g. a parallel `Read`) resets the expiry to 15 min, which can cut short the longer hold a long Bash command set; renew should never shorten a hold set by `PreToolUse` with a timeout.
-- A failing `claude` step with empty stderr (e.g. a runner timeout) shows a blank red line on the Agents page; say "timed out" or the exit status instead.
-
+- `doctor`'s plugin detail can name the GitHub copy when both copies are enabled and `claude plugin list` lists it first; prefer the app copy explicitly.
+- `doctor` still says "not installed" when both `claude --version` and `plugin list` fail; skip whenever the list is unavailable.
+- SPEC.md's Esc paragraph says an interrupted turn keeps its lease "up to 15 min"; with renewals that only extend, it can last until a long Bash hold or the waiting timeout ends.
+- No tests for the installer failing at `marketplace remove` (must stop before `add`) or at `add` after a successful remove.
+- The moved-app check compares standardized paths without resolving symlinks, so a symlinked app path triggers a needless remove and reinstall.
 - **An npm-installed Claude shows as "node"** for leases the skill creates (`LeaseCommands.swift` `agentName`). Hook leases are fine, because the owner is passed explicitly.
 - **Async renew after the sync `Stop`.** An async `PostToolUse`, `PostToolBatch` or `SubagentStop` can land after the sync `Stop` for a very short final reply, which turns the 2 min grace into 15 min.
 - **"Only when asked" mid-session** also skips the `Stop` and `SessionEnd` releases, so a lease made just before the switch lives out its expiry.
 - **The internal-agent rule** relies on undocumented Claude Code behaviour (a helper agent with an `agent_id` and no `agent_type`). A typed helper agent would renew after every turn.
 - **`SessionEnd`'s 1 s hook timeout** is shorter than the 1.5 s reply limit, so Claude can kill the hook before it gives up. Harmless: the watch ends the lease when `claude` exits.
-- **A failed `claude plugin list`** reads "not installed" in doctor and Settings.
-- **The app copy disabled and the GitHub copy enabled** fails doctor's check 5.
+- **A failed `claude plugin list`** still reads "Not installed" on the Settings page (doctor now skips).
 - **On timeout, the runner doesn't kill grandchildren** (`ProcessRunner` has no process group).
 - **The waiting picker** shows no selection for odd stored values (for example after `defaults write`).
 - **`findClaude` and `runBounded` in the CLI are untested.**
@@ -35,13 +35,11 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - the `blocked` socket test returns early as root instead of using `.enabled(if:)`;
   - there's no test for `anchor -- cmd --json` keeping anchor's own errors human, or for the ttl after a longer re-acquire.
 
-- **Silent 12 h cap on `on`.** `mooring on --for 24h` caps at 12 h without saying so (`clamped` is always false for `on`). SPEC 1.7 says the clamp is reported. It's a one-line fix in `RequestHandler.turnOn`.
 - **`on` can reply with an expired session.** With no flags, it can reply with a just-expired, not-yet-ticked menu lease, a window of up to 5 s. Filter with `isLive(at:)`.
 - **SPEC 2.2's exit-2 wording** should say "held but paused by a guardrail", not "refused".
 - **`doctor`:**
   - its "mismatch" fix text is wrong in one direction, and a transient mismatch can show during a helper call;
-  - the Helper check fails for people who never use lid mode;
-  - it shows "not running" when the app answered with an error.
+  - the Helper check fails for people who never use lid mode.
 - **Settings and install:**
   - A regular file at `~/.local/bin/mooring` reads "Points to <own path>" in Settings; say "Not a link".
   - `make uninstall` doesn't remove the symlink, though SPEC's Repository setup says it does.

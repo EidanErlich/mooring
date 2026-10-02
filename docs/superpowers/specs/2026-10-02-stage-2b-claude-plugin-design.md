@@ -22,7 +22,7 @@ This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--wat
 | Question | Decision |
 | --- | --- |
 | How the plugin is installed | **Both.** A button in Settings → Awake → Agents installs it from inside `Mooring.app`, so its version always matches the app. The repo also publishes a marketplace for `/plugin marketplace add EidanErlich/mooring`. |
-| What the menu shows for a session | **The project folder:** "Claude Code · <folder>". No prompt text is ever stored or shown. |
+| What the menu shows for a session | **The project folder:** "Claude Code · <folder>" ("Claude Code · session 1a2b" with no folder). No prompt text is ever stored or shown. |
 | The Settings → Awake → Agents page | The install and status row, plus "Keep awake while agents work: Automatic / Only when asked", plus "When Claude is waiting for you, stay awake for: 10 / 30 / 60 min" (default 30). |
 | Where the hook logic lives | **In the app.** `mooring hook <event>` forwards the raw event, and a pure `HookPolicy` in AwakeKit decides what happens. |
 
@@ -61,7 +61,7 @@ This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--wat
 One lease per session, `claude-<session_id>`:
 
 - owner `.agent(name: "Claude Code")`;
-- reason "Claude Code · <last path component of cwd>";
+- reason "Claude Code · <last path component of cwd>", or "Claude Code · session <first 4 characters of the session id>" when there is no folder (cwd missing or `/`), so folderless sessions can be told apart;
 - level `system` (lid for agents arrives with 2c);
 - watched pid: the nearest non-shell ancestor of the hook, i.e. the Claude process.
 
@@ -78,6 +78,7 @@ One lease per session, `claude-<session_id>`:
 | `SessionEnd` | Release now. |
 | `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
+- **Renewals only ever extend:** a renew sets the expiry to the later of its current value and its new one, so a short tool event never cuts a long Bash hold. Only the waiting timeout and the `Stop` grace set the expiry outright.
 - **"Only when asked":** every hook request is acknowledged and does nothing. Agent holds and `mooring anchor` still work.
 - **Crashes:** if Claude dies, the watched pid exits and the lease ends at once. If the pid can't be resolved, the 15 min expiry is the backstop.
 - The owner approved the background-task `Stop` rule on 2026-10-02. The internal-agent rule was a controller ruling.
@@ -97,7 +98,7 @@ One lease per session, `claude-<session_id>`:
 | Bundled marketplace | `Mooring.app/Contents/Resources/ClaudePlugin/` (a copy-files build phase) | The plugin folder plus its own `marketplace.json`, with marketplace `mooring-app`. |
 | Plugin installer | `App/Settings/ClaudePluginInstaller.swift` | Finds `claude`, reads the plugin status, installs or updates. Pure parsing of the CLI's output, plus a thin `Process` runner. |
 | Agents page | `App/Settings/AgentsSettingsPage.swift`, in the Awake group | The plugin row and the two settings. |
-| `doctor` | `MooringCLICore` `Doctor` | Check 5 becomes real, plus a Claude Code version warning. |
+| `doctor` | `MooringCLICore` `Doctor` | Check 5 becomes real, plus a Claude Code version warning. It passes if either the app's or the GitHub copy is enabled, and is skipped ("couldn't check") when `claude plugin list` fails. |
 
 ### How `mooring-hook` finds `mooring`
 
@@ -138,9 +139,9 @@ About 30 lines. It says:
   2. then `~/.local/bin/claude`
   3. then `/opt/homebrew/bin/claude`
   4. then `/usr/local/bin/claude`
-- **Install, Update and Reinstall** are one flow, and stop at the first command that fails (the page shows its stderr):
+- **Install, Update and Reinstall** are one flow, and stop at the first command that fails (the page shows its stderr, or "Timed out" or "Failed (exit N)" when stderr is empty):
   1. Link `mooring` onto the PATH.
-  2. `claude plugin marketplace list --json`. If `mooring-app` isn't listed, `claude plugin marketplace add <bundle>/Contents/Resources/ClaudePlugin`; otherwise `claude plugin marketplace update mooring-app`.
+  2. `claude plugin marketplace list --json`. If `mooring-app` isn't listed, `claude plugin marketplace add <bundle>/Contents/Resources/ClaudePlugin`; otherwise `claude plugin marketplace update mooring-app`. If it is listed with a different `path` (the app was moved), run `claude plugin marketplace remove mooring-app` (which also uninstalls its plugins) and then `add` the new path, so step 3 installs afresh.
   3. `claude plugin list --json`. If `mooring@mooring-app` isn't listed, `claude plugin install mooring@mooring-app -y`; otherwise `claude plugin update mooring@mooring-app -y`.
   4. After a successful Update the page says "Restart Claude Code sessions to use the new version."
 - `claude` runs with its own folder first on `PATH` (so an npm-installed `claude` finds the `node` beside it), then the usual Homebrew and system folders.

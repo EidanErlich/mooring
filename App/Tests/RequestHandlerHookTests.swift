@@ -48,12 +48,21 @@ struct RequestHandlerHookTests {
 
     @Test func reasonWithoutCwdSaysSession() async throws {
         let fixture = RequestFixture()
-        _ = await fixture.hook("UserPromptSubmit", session: "a", cwd: nil)
-        _ = await fixture.hook("UserPromptSubmit", session: "b", cwd: "")
-        _ = await fixture.hook("UserPromptSubmit", session: "c", cwd: "/")
-        for id in ["claude-a", "claude-b", "claude-c"] {
-            #expect(try #require(fixture.lease(id)).reason == "Claude Code · session")
-        }
+        _ = await fixture.hook("UserPromptSubmit", session: "1a2b3c4d", cwd: nil)
+        _ = await fixture.hook("UserPromptSubmit", session: "5e6f7a8b", cwd: "")
+        _ = await fixture.hook("UserPromptSubmit", session: "ab", cwd: "/")
+        #expect(try #require(fixture.lease("claude-1a2b3c4d")).reason == "Claude Code · session 1a2b")
+        #expect(try #require(fixture.lease("claude-5e6f7a8b")).reason == "Claude Code · session 5e6f")
+        #expect(try #require(fixture.lease("claude-ab")).reason == "Claude Code · session ab")
+    }
+
+    @Test func twoFolderlessSessionsHaveDifferentLabels() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit", session: "1a2b-first", cwd: "/")
+        _ = await fixture.hook("UserPromptSubmit", session: "9c8d-second", cwd: nil)
+        let first = try #require(fixture.lease("claude-1a2b-first")).reason
+        let second = try #require(fixture.lease("claude-9c8d-second")).reason
+        #expect(first != second)
     }
 
     @Test func toolEventRenewsTo15Minutes() async throws {
@@ -78,6 +87,53 @@ struct RequestHandlerHookTests {
         // The call ends and the next event is back to 15 minutes.
         _ = await fixture.hook("PostToolUse")
         #expect(abs(try expiry(fixture) - 900) < 0.001)
+    }
+
+    @Test func shortToolEventDoesNotCutALongBashHold() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+        // A parallel short tool finishes while the long call runs: the hold stays where it was.
+        fixture.advance(5)
+        let response = await fixture.hook("PostToolUse")
+        #expect(hookAction(response) == "renew")
+        #expect(abs(try expiry(fixture) - 1255) < 0.001)
+    }
+
+    @Test func renewExtendsWhenShorter() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        fixture.advance(600)
+        // 300 s are left, so a 15 minute renew extends the hold.
+        _ = await fixture.hook("PostToolUse")
+        #expect(abs(try expiry(fixture) - 900) < 0.001)
+        // A Bash timeout shorter than 15 minutes (+1 min) also extends from a shorter remainder.
+        fixture.advance(800)
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+    }
+
+    @Test func waitingStillResets() async throws {
+        let fixture = RequestFixture()
+        fixture.knobs.settings.agentWaitingTimeout = 600
+        _ = await fixture.hook("UserPromptSubmit")
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+        let response = await fixture.hook("PermissionRequest")
+        #expect(hookAction(response) == "waiting")
+        #expect(abs(try expiry(fixture) - 600) < 0.001)
+    }
+
+    @Test func stopAfterLongHoldStillReleasesIn2Minutes() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        fixture.advance(30)
+        _ = await fixture.hook("PostToolUse")
+        let response = await fixture.hook("Stop")
+        #expect(hookAction(response) == "releaseAfter")
+        #expect(abs(try expiry(fixture) - 120) < 0.001)
     }
 
     @Test func longBashCallWithoutLeaseAcquiresForItsTimeout() async throws {

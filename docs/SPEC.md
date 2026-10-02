@@ -317,7 +317,7 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
   - no answer: "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`." (connected, but the write failed, the reply timed out, ended early, was over 64 KiB or couldn't be read);
   - blocked: "Can't reach Mooring's socket (permission denied). If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock" (never retried or launched).
 
-  `anchor` treats all three as "the app isn't reachable" and doesn't start the command. `doctor`'s App check reads "not running", "didn't answer" or "permission denied".
+  `anchor` treats all three as "the app isn't reachable" and doesn't start the command. `doctor`'s App check reads "not running", "didn't answer" or "permission denied", or "answered with an error: <message>" (fix: quit and reopen Mooring) when the app replied with an error.
 - **Usage errors under `--json`:** when `--json` is among the arguments, every usage error (a parse or validation failure, or one found while running, such as "Couldn't find a process to watch") prints one line on stdout, `{"ok":false,"error":{"code":"usage","message":"<message>"}}`, nothing on stderr, and exits 1. `--help` and `--version` still print their text and exit 0. Without `--json`, the message goes to stderr as `mooring: <message>`.
 - **Re-acquiring** a named lease with `lease acquire` never weakens it: the later expiry wins (the new length, or what the lease has left, whichever is longer, within the 4 h cap), the existing watch is kept unless `--watch-pid` is given, the level is the union of the old and new, the reason and owner are kept unless `--reason` or `--agent` is given. `lease renew --ttl` is an explicit reset and is unchanged, and so are `on` and `anchor`.
 - **Acquire output:** a lease or `anchor --pid` acquire that watches a process names it: `Lease job · while Claude Code (80) runs · 4h cap`, `Anchored anchor-80 · while Codex (80) runs`, or `while process 80 runs` when it can't be found. `status` and `--json` are unchanged.
@@ -336,12 +336,12 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.j
 
 **Two ways to install it:**
 
-- **From the app:** Settings → Awake → Agents → Install registers the bundled marketplace (`claude plugin marketplace add <Mooring.app>/Contents/Resources/ClaudePlugin`, or `marketplace update mooring-app` when it is already registered) and then runs `claude plugin install mooring@mooring-app -y` (`claude plugin update …` when it is already installed), so the plugin's version always matches the app. After an update, Claude Code sessions need a restart.
+- **From the app:** Settings → Awake → Agents → Install registers the bundled marketplace (`claude plugin marketplace add <Mooring.app>/Contents/Resources/ClaudePlugin`, or `marketplace update mooring-app` when it is already registered; if it is registered from a different path because the app moved, it is removed and added again) and then runs `claude plugin install mooring@mooring-app -y` (`claude plugin update …` when it is already installed), so the plugin's version always matches the app. After an update, Claude Code sessions need a restart.
 - **From GitHub:** `/plugin marketplace add EidanErlich/mooring`, then `/plugin install mooring@mooring`. The repo's root `.claude-plugin/marketplace.json` publishes it.
 
 **`mooring hook <event>`** (hidden from `--help`) reads up to 1 MiB of the hook's JSON from stdin and takes `session_id`, `cwd`, `notification_type`, `agent_id`, `agent_type`, whether any `background_tasks` entry is `running`, and the watched pid (resolved like `--watch-pid auto`: Claude's own process). It sends the wire op `hook` without launching the app and with a 1.5 s reply limit. It **always exits 0 and never prints to stdout** (Claude Code parses a hook's stdout); errors go to the `hook` log category. The prompt text is never read.
 
-**Lease lifecycle for one session** (lease id `claude-<session_id>`, owner `.agent(name: "Claude Code")`, reason "Claude Code · <last path component of cwd>", level `system`, watching the Claude process). The events are the ones Claude Code 2.1.285 was recorded sending (`Packages/MooringIPC/Tests/MooringCLICoreTests/Fixtures/hooks/`), decided by `HookPolicy` in AwakeKit:
+**Lease lifecycle for one session** (lease id `claude-<session_id>`, owner `.agent(name: "Claude Code")`, reason "Claude Code · <last path component of cwd>" (or "Claude Code · session <first 4 characters of the session id>" when there is no folder), level `system`, watching the Claude process). The events are the ones Claude Code 2.1.285 was recorded sending (`Packages/MooringIPC/Tests/MooringCLICoreTests/Fixtures/hooks/`), decided by `HookPolicy` in AwakeKit:
 
 | Event | Action |
 | --- | --- |
@@ -355,6 +355,8 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.j
 | `Stop` or `StopFailure` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
 | `SessionEnd` | Release now. |
 | `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
+
+Renewals only ever extend: a renew sets the expiry to the later of its current value and its new one, so a short tool event never cuts a long Bash hold. Only the waiting timeout and the `Stop` grace set the expiry outright.
 
 Pressing Esc to interrupt fires no `Stop`, so an interrupted turn keeps its lease for up to 15 min (up to the waiting timeout after Esc at a permission prompt) before the expiry ends it. If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
 
@@ -864,7 +866,7 @@ struct AwakeSettings: Codable, Equatable {
 - The `mooring://` URL scheme and the awake App Intents ship in stage 2c.
 - **CLI packaging:** the command-line logic lives in the `MooringCLICore` library target of `Packages/MooringIPC` (argument parsing with `swift-argument-parser`, the socket client, `anchor`, `doctor`), so tests drive it without a socket. `CLI/main.swift` is a thin entry point that builds the real environment and exits with the result.
 - **`mooring doctor` and lid sleep:** doctor reads `SleepDisabled` from the app's `status` reply, which asks the helper. The CLI never runs `pmset`.
-- **`mooring doctor` and Claude Code:** the plugin records the Claude Code major.minor it was tested with as `testedWithClaudeCode` in its `mooring.json`. Doctor finds `claude` (`PATH`, then `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), runs `claude --version` and `claude plugin list --json` with a 3 s limit each, and reads `mooring.json` from the installed plugin's `installPath`. Its "Claude plugin" check passes for an enabled `mooring@mooring-app` or `mooring@mooring`; its "Claude Code version" check is skipped with a note ("tested with 2.1; you have 2.2.0", marked –, exit code unaffected) when the major.minor differs, and when either value is unknown.
+- **`mooring doctor` and Claude Code:** the plugin records the Claude Code major.minor it was tested with as `testedWithClaudeCode` in its `mooring.json`. Doctor finds `claude` (`PATH`, then `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), runs `claude --version` and `claude plugin list --json` with a 3 s limit each, and reads `mooring.json` from the installed plugin's `installPath`. Its "Claude plugin" check passes for an enabled `mooring@mooring-app` or `mooring@mooring` (with both installed, either one enabled is enough), and is skipped with "couldn't check (claude plugin list failed)" when `claude` runs but the list fails or times out; its "Claude Code version" check is skipped with a note ("tested with 2.1; you have 2.2.0", marked –, exit code unaffected) when the major.minor differs, and when either value is unknown.
 
 **Stage 3 additions to the Loop file map**
 
