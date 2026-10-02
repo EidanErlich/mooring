@@ -25,6 +25,8 @@ protocol NotificationPosting: AnyObject {
     func post(id: String, title: String, body: String, userInfo: [String: String]) async
     /// Removes a delivered notification whose ask is over.
     func withdraw(id: String)
+    /// The ids of delivered lid-approval notifications.
+    func deliveredApprovalIDs() async -> [String]
 }
 
 /// `NotificationPosting` over `UNUserNotificationCenter`.
@@ -66,6 +68,12 @@ final class SystemNotificationPoster: NotificationPosting {
 
     func withdraw(id: String) {
         center.removeDeliveredNotifications(withIdentifiers: [id])
+    }
+
+    func deliveredApprovalIDs() async -> [String] {
+        await center.deliveredNotifications()
+            .filter { $0.request.content.categoryIdentifier == LidApprovalCenter.categoryID }
+            .map(\.request.identifier)
     }
 }
 
@@ -143,7 +151,15 @@ final class LidApprovalCenter: LidApproving {
         await poster.notificationStatus()
     }
 
-        /// A notification response, forwarded by the app's notification delegate.
+    /// Withdraws approvals that no ask is waiting for, such as those left from before a restart: their buttons
+    /// would answer nothing.
+    func removeStaleApprovals() async {
+        for id in await poster.deliveredApprovalIDs() where waiting[id] == nil {
+            poster.withdraw(id: id)
+        }
+    }
+
+    /// A notification response, forwarded by the app's notification delegate.
     func handle(actionIdentifier: String, requestID: String) {
         guard let answer = Self.answer(forAction: actionIdentifier) else { return }
         resolve(requestID, with: answer)

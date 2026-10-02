@@ -225,7 +225,8 @@ final class RequestHandler {
                 leaseID: AwakeEngine.menuLeaseID, agent: agentProcess(of: caller)?.name, hasEnd: duration != nil,
                 existing: existing, existingCovers: covers
             )
-            lease = try await approvingLid(requested.lid ? request : nil) { withLid in
+            // The menu session keeps its own reason; the person is told what the agent ran.
+            lease = try await approvingLid(requested.lid ? request : nil, reason: cleaned(args.reason) ?? "mooring on") { withLid in
                 engine.turnOnMenu(duration: duration, level: withLid ? requested : requested.withoutLid)
                 guard let lease = engine.menuLease else { throw WireError(code: .internal, message: "Couldn't turn on") }
                 return lease

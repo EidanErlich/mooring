@@ -98,11 +98,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.update(thermal: ProcessInfo.processInfo.thermalState)
     }
 
-    /// Registers the lid-approval actions and routes responses to the approval
-    /// center. Nothing is posted here; permission is asked on first need.
+    /// Registers the lid-approval actions, removes approvals left from a previous
+    /// run, and routes responses to the approval center. Nothing is posted here;
+    /// permission is asked on first need.
     private func startNotificationResponses() {
         let center = UNUserNotificationCenter.current()
         center.setNotificationCategories([LidApprovalCenter.category])
+        Task { [approvals] in await approvals.removeStaleApprovals() }
         let responder = NotificationResponder(approvals: approvals)
         center.delegate = responder
         notificationResponder = responder

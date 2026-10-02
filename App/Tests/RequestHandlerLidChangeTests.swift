@@ -52,7 +52,7 @@ struct RequestHandlerLidChangeTests {
 
         let ask = Task { await fixture.acquire(.on, level: "lid", ttl: 600) }
         await fixture.approver.waitForCalls(1)
-        #expect(fixture.approver.calls.first?.body == "\(AwakeEngine.menuReason) · for 10m")
+        #expect(fixture.approver.calls.first?.body == "mooring on · for 10m")
         let widened = await fixture.acquire(.on, level: "system")
         fixture.approver.resolve("menu", with: .allowOnce)
 

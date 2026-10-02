@@ -17,6 +17,8 @@ final class FakeNotificationPoster: NotificationPosting {
     var status: String? = "allowed"
     var posts: [Post] = []
     var withdrawn: [String] = []
+    /// Ids of the approvals Notification Center still shows.
+    var delivered: [String] = []
     var authorizeCalls = 0
 
     func authorize() async -> Bool {
@@ -33,6 +35,8 @@ final class FakeNotificationPoster: NotificationPosting {
     func withdraw(id: String) {
         withdrawn.append(id)
     }
+
+    func deliveredApprovalIDs() async -> [String] { delivered }
 
     /// Waits until `count` notifications have been posted (or about 2 s pass).
     func waitForPosts(_ count: Int) async {
@@ -149,5 +153,20 @@ struct LidApprovalCenterTests {
         center.handle(actionIdentifier: "mooring.deny", requestID: poster.posts[0].id)
         #expect(await first.value == .deny)
         #expect(center.pending.isEmpty)
+    }
+
+    @Test func staleApprovalsAreRemovedAtLaunch() async {
+        let center = LidApprovalCenter(poster: poster, timeout: .seconds(10))
+        let ask = Task { await center.ask(leaseID: "anchor-1", agent: "Claude Code", body: "tests") }
+        await poster.waitForPosts(1)
+        let live = poster.posts[0].id
+        poster.delivered = ["lid-anchor-9-from-before", live]
+
+        await center.removeStaleApprovals()
+
+        // Only the one no ask is waiting for: its buttons would do nothing.
+        #expect(poster.withdrawn == ["lid-anchor-9-from-before"])
+        center.handle(actionIdentifier: LidApprovalCenter.denyAction, requestID: live)
+        #expect(await ask.value == .deny)
     }
 }

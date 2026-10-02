@@ -11,7 +11,8 @@ struct LidRequest {
     let hasEnd: Bool
     /// The live lease the request changes, if there is one.
     let existing: Lease?
-    /// `existing` already has lid mode and ends no later than this request would, so there is nothing to ask.
+    /// `existing` already has lid mode that this request can't widen, so there is nothing to ask: for a named lease
+    /// any lid (the cap bounds it); for `on`, only an open-ended lid session.
     let existingCovers: Bool
 }
 
@@ -59,8 +60,10 @@ extension RequestHandler {
 
     /// Runs `acquire` (true: with lid as requested; false: without it) as `request` allows, asking the person when
     /// `LidApproval` says to. Returns the lease as it ends up; a refusal still acquires, then throws `denied`.
-    /// A nil `request` doesn't want lid and just acquires.
-    func approvingLid(_ request: LidRequest?, acquire: (Bool) throws -> Lease) async throws -> Lease {
+    /// A nil `request` doesn't want lid and just acquires. `reason` leads the notification instead of the lease's own.
+    func approvingLid(
+        _ request: LidRequest?, reason: String? = nil, acquire: (Bool) throws -> Lease
+    ) async throws -> Lease {
         guard let request else { return try acquire(true) }
         switch lidStep(request) {
         case .grant:
@@ -71,7 +74,7 @@ extension RequestHandler {
             throw WireError(code: .denied, message: message)
         case .ask(let agent):
             // If the CLI disconnects meanwhile, the ask still runs its course and an Allow still adds lid.
-            return try await ask(agent, about: droppingLid(try acquire(false)))
+            return try await ask(agent, about: droppingLid(try acquire(false)), reason: reason)
         }
     }
 
@@ -138,12 +141,13 @@ extension RequestHandler {
     }
 
     /// Asks the person whether `agent` may add lid mode to `lease`, then applies the answer: lid on Allow, if the
-    /// lease is still the one they were told about; otherwise a `denied` error (or `notFound` when it ended).
-    func ask(_ agent: String, about lease: Lease) async throws -> Lease {
+    /// lease is still the one they were told about; otherwise a `denied` error (or `notFound` when it ended). The
+    /// notification gives `reason`, else the lease's own.
+    func ask(_ agent: String, about lease: Lease, reason: String? = nil) async throws -> Lease {
         // Marked before the first suspension, so a second request for this lease is refused rather than asked again.
         asking.insert(lease.id)
         defer { asking.remove(lease.id) }
-        let answer = await approver.ask(leaseID: lease.id, agent: agent, body: approvalBody(lease))
+        let answer = await approver.ask(leaseID: lease.id, agent: agent, body: approvalBody(lease, reason: reason))
         let current = liveLease(lease.id)
         switch answer {
         case .allowOnce, .alwaysAllow:
@@ -176,7 +180,7 @@ extension RequestHandler {
     }
 
     /// "<reason> · <with no end time | for 30m | while <process> runs>"; the center adds the agent's name.
-    private func approvalBody(_ lease: Lease) -> String {
+    private func approvalBody(_ lease: Lease, reason: String?) -> String {
         let end = if let pid = lease.watch?.pid {
             "while \(processes.entry(pid)?.name ?? "pid \(pid)") runs"
         } else if let expiry = lease.expiresAt {
@@ -184,7 +188,7 @@ extension RequestHandler {
         } else {
             "with no end time"
         }
-        return "\(lease.reason) · \(end)"
+        return "\(reason ?? lease.reason) · \(end)"
     }
 
     private func alwaysAllow(_ agent: String) {

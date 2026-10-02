@@ -142,8 +142,19 @@ struct RequestHandlerLidTests {
         #expect(acquireResult(response)?.lease.level == "lid")
         #expect(try #require(fixture.lease("menu")).level == lidOnly)
         #expect(fixture.approver.calls == [
-            FakeLidApprover.Call(leaseID: "menu", agent: "Claude Code", body: "\(AwakeEngine.menuReason) · with no end time")
+            FakeLidApprover.Call(leaseID: "menu", agent: "Claude Code", body: "mooring on · with no end time")
         ])
+    }
+
+    @Test func onApprovalNamesTheAgentsReason() async throws {
+        let fixture = RequestFixture.agent()
+        fixture.approver.answers = [.allowOnce]
+
+        _ = await fixture.acquire(.on, level: "lid", reason: "nightly build")
+
+        #expect(fixture.approver.calls.map(\.body) == ["nightly build · with no end time"])
+        // The menu's own session keeps its reason.
+        #expect(try #require(fixture.lease("menu")).reason == AwakeEngine.menuReason)
     }
 
     @Test func boundedOnDoesNotAskButOpenEndedClickDefaultDoes() async throws {
