@@ -109,12 +109,19 @@ final class RequestHandler {
         let current = now()
         let existing = args.kind == .lease ? engine.leases.first { $0.id == plan.id } : nil
         if let existing { plan = plan.merged(with: existing, args: args) }
-        var granted = try grantedDuration(
+        let requested = try grantedDuration(
             for: plan, liveLeases: engine.leases.filter { $0.isLive(at: current) }.count, exists: existing != nil
         )
-        if let existing { granted = Self.keepingLater(granted, of: existing, at: current) }
+        var granted = requested
+        var renewLength = requested
+        if let existing {
+            granted = Self.keepingLater(requested, of: existing, at: current)
+            // The length `renew` reuses is the longest asked for, not the time left, so repeated acquires don't shrink it.
+            renewLength = granted.map { _ in min(max(existing.ttl ?? 0, requested ?? 0), CallerPolicy.maxNamedLease) }
+        }
         guard let outcome = engine.acquire(
-            id: plan.id, owner: plan.owner, reason: plan.reason, level: plan.level, duration: granted, watchPID: plan.watchPID
+            id: plan.id, owner: plan.owner, reason: plan.reason, level: plan.level, duration: granted,
+            watchPID: plan.watchPID, ttl: renewLength
         ) else {
             throw plan.watchPID.map { WireError(code: .badRequest, message: "Process \($0) isn't running") }
                 ?? WireError(code: .internal, message: "Couldn't create the lease")

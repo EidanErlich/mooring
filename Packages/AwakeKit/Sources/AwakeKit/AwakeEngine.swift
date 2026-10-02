@@ -71,11 +71,12 @@ public final class AwakeEngine {
     // MARK: - Leases
 
     /// Creates the lease, or renews it if the id exists (keeping its creation time).
+    /// `ttl` is the length a later renewal reuses; it defaults to the granted `duration`.
     /// Returns nil when `watchPID` names a process that isn't running.
     @discardableResult
     public func acquire(
         id: String, owner: LeaseOwner, reason: String, level: AwakeLevel,
-        duration: TimeInterval?, watchPID: Int32? = nil, endsOnLidOpen: Bool = false
+        duration: TimeInterval?, watchPID: Int32? = nil, endsOnLidOpen: Bool = false, ttl: TimeInterval? = nil
     ) -> AcquireResult? {
         let current = now()
         var watch: WatchedProcess?
@@ -94,7 +95,7 @@ public final class AwakeEngine {
         let lease = Lease(
             id: id, owner: owner, reason: reason, level: level, expiresAt: expiresAt, watch: watch,
             endsOnLidOpen: endsOnLidOpen, createdAt: existing.map { leases[$0].createdAt } ?? current,
-            ttl: granted
+            ttl: ttl.map { min($0, Self.maxLeaseLength) } ?? granted
         )
 
         if let existing {

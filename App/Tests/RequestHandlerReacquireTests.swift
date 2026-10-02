@@ -37,6 +37,20 @@ struct RequestHandlerReacquireTests {
         #expect(acquireResult(response)?.clamped == false)
     }
 
+    @Test func reacquireKeepsTheLongerTTL() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.acquire(.lease, id: "job", ttl: 3600)
+        fixture.knobs.clock = fixture.clock.addingTimeInterval(1800)
+
+        _ = await fixture.acquire(.lease, id: "job", ttl: 60)
+        let lease = try #require(fixture.lease("job"))
+        #expect(lease.ttl == 3600)
+        #expect(try #require(lease.expiresAt) == fixture.clock.addingTimeInterval(1800))
+
+        _ = await fixture.renew("job")
+        #expect(try #require(fixture.lease("job")).expiresAt == fixture.clock.addingTimeInterval(3600))
+    }
+
     @Test func reacquireExtendsWhenLonger() async throws {
         let fixture = RequestFixture()
         _ = await fixture.acquire(.lease, id: "job", ttl: 600)
