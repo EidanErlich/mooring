@@ -4,8 +4,12 @@ import Testing
 
 struct SettingsPageTests {
     @Test func pagesAndGroupsMatchSpec() {
-        #expect(SettingsPage.allCases.map(\.title) == ["General", "Keep Awake", "Lid & Battery", "Advanced"])
-        #expect(SettingsPage.allCases.map(\.group) == ["General", "Awake", "Awake", "Mooring"])
+        #expect(SettingsPage.allCases.map(\.title) == ["General", "Keep Awake", "Lid & Battery", "Agents", "Advanced"])
+        #expect(SettingsPage.allCases.map(\.group) == ["General", "Awake", "Awake", "Awake", "Mooring"])
+    }
+
+    @Test func agentsPageUsesSparkles() {
+        #expect(SettingsPage.agents.systemImage == "sparkles")
     }
 
     @Test func clickLevelOptionsRoundTrip() {

@@ -4,7 +4,7 @@ import SwiftUI
 /// The Settings sidebar (docs/SPEC.md, "Settings window"). Windows, Clipboard
 /// and Shortcuts pages arrive with their stages.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, keepAwake, lidAndBattery, advanced
+    case general, keepAwake, lidAndBattery, agents, advanced
 
     var id: String { rawValue }
 
@@ -13,6 +13,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "General"
         case .keepAwake: "Keep Awake"
         case .lidAndBattery: "Lid & Battery"
+        case .agents: "Agents"
         case .advanced: "Advanced"
         }
     }
@@ -20,7 +21,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var group: String {
         switch self {
         case .general: "General"
-        case .keepAwake, .lidAndBattery: "Awake"
+        case .keepAwake, .lidAndBattery, .agents: "Awake"
         case .advanced: "Mooring"
         }
     }
@@ -30,6 +31,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .keepAwake: "sun.max"
         case .lidAndBattery: "laptopcomputer"
+        case .agents: "sparkles"
         case .advanced: "wrench.and.screwdriver"
         }
     }
@@ -85,6 +87,7 @@ struct SettingsView: View {
             case .general: GeneralSettingsPage()
             case .keepAwake: KeepAwakeSettingsPage()
             case .lidAndBattery: LidBatterySettingsPage()
+            case .agents: AgentsSettingsPage()
             case .advanced: AdvancedSettingsPage(engine: engine)
             }
         }
