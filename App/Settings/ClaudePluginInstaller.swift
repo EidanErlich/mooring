@@ -165,11 +165,17 @@ enum ClaudePluginInstaller {
         return ClaudeCode.mooringPlugin(in: plugins).map { !$0.enabled } ?? false
     }
 
-    /// Registers the bundled marketplace, or refreshes it when it is already registered (`add` refuses a known name).
-    static func marketplaceCommand(claude: String, bundlePlugin: String, registered: Bool) -> [String] {
-        registered
-            ? [claude, "plugin", "marketplace", "update", ClaudeCode.appMarketplaceName]
-            : [claude, "plugin", "marketplace", "add", bundlePlugin]
+    /// What to run for the bundled marketplace: register it when unknown, refresh it when it points at this app
+    /// (`add` refuses a known name), and re-point it when the app moved. `remove` also uninstalls the marketplace's
+    /// plugins, so the install that follows starts from scratch. A registration with no `path` is refreshed.
+    static func marketplaceSteps(claude: String, bundlePlugin: String, registered: ClaudeCode.Marketplace?) -> [[String]] {
+        let add = [claude, "plugin", "marketplace", "add", bundlePlugin]
+        guard let registered else { return [add] }
+        func standardized(_ path: String) -> String { URL(fileURLWithPath: path).standardizedFileURL.path }
+        if let path = registered.path, standardized(path) != standardized(bundlePlugin) {
+            return [[claude, "plugin", "marketplace", "remove", ClaudeCode.appMarketplaceName], add]
+        }
+        return [[claude, "plugin", "marketplace", "update", ClaudeCode.appMarketplaceName]]
     }
 
     /// Installs the plugin, or updates it when it is already installed from the app's marketplace.
@@ -197,7 +203,7 @@ enum ClaudePluginInstaller {
     }
 
     /// Links `mooring` onto the PATH first (an installed plugin runs from Claude's cache, so its hook finds `mooring` there),
-    /// then registers or refreshes the marketplace and installs or updates the plugin, stopping at the first failure.
+    /// then registers, refreshes or re-points the marketplace and installs or updates the plugin, stopping at the first failure.
     static func install(claude: String, bundlePlugin: String, runner: ToolRunning,
                         ensureCLI: () throws -> Void) -> Result<Void, InstallError> {
         do {
@@ -214,9 +220,11 @@ enum ClaudePluginInstaller {
         }
         let marketplaces = run([claude, "plugin", "marketplace", "list", "--json"])
         guard case .success(let marketplaceJSON) = marketplaces else { return marketplaces.map { _ in () } }
-        let registered = ClaudeCode.parseMarketplaceNames(marketplaceJSON)?.contains(ClaudeCode.appMarketplaceName) ?? false
-        let marketplace = run(marketplaceCommand(claude: claude, bundlePlugin: bundlePlugin, registered: registered))
-        guard case .success = marketplace else { return marketplace.map { _ in () } }
+        let registered = ClaudeCode.parseMarketplaces(marketplaceJSON)?.first { $0.name == ClaudeCode.appMarketplaceName }
+        for step in marketplaceSteps(claude: claude, bundlePlugin: bundlePlugin, registered: registered) {
+            let marketplace = run(step)
+            guard case .success = marketplace else { return marketplace.map { _ in () } }
+        }
         let plugins = run([claude, "plugin", "list", "--json"])
         guard case .success(let pluginJSON) = plugins else { return plugins.map { _ in () } }
         let installed = ClaudeCode.parsePluginList(pluginJSON)?.contains { $0.id == ClaudeCode.appPluginID } ?? false

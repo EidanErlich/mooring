@@ -141,7 +141,7 @@ About 30 lines. It says:
   4. then `/usr/local/bin/claude`
 - **Install, Update and Reinstall** are one flow, and stop at the first command that fails (the page shows its stderr):
   1. Link `mooring` onto the PATH.
-  2. `claude plugin marketplace list --json`. If `mooring-app` isn't listed, `claude plugin marketplace add <bundle>/Contents/Resources/ClaudePlugin`; otherwise `claude plugin marketplace update mooring-app`.
+  2. `claude plugin marketplace list --json`. If `mooring-app` isn't listed, `claude plugin marketplace add <bundle>/Contents/Resources/ClaudePlugin`; otherwise `claude plugin marketplace update mooring-app`. If it is listed with a different `path` (the app was moved), run `claude plugin marketplace remove mooring-app` (which also uninstalls its plugins) and then `add` the new path, so step 3 installs afresh.
   3. `claude plugin list --json`. If `mooring@mooring-app` isn't listed, `claude plugin install mooring@mooring-app -y`; otherwise `claude plugin update mooring@mooring-app -y`.
   4. After a successful Update the page says "Restart Claude Code sessions to use the new version."
 - `claude` runs with its own folder first on `PATH` (so an npm-installed `claude` finds the `node` beside it), then the usual Homebrew and system folders.
