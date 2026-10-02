@@ -4,15 +4,11 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## Before or during stage 2b (Claude Code plugin)
 
-- **Misleading "isn't running" error.** Every failure after a connection reads "Mooring isn't running and couldn't be started" (exit 3): a reply timeout, a sandbox refusal, the 16-connection cap. Use a distinct "Mooring didn't answer" message. After an `acquire` timeout, the lease may exist anyway.
-- **`--json` usage errors.** Usage errors print nothing on stdout under `--json`, and parse-time versus execute-time usage errors use two formats. Emit `{"ok":false,"error":{"code":"usage",…}}`. The skill will teach `--json`, so fix this first.
-- **Re-acquire replaces a hold.** Re-acquiring an id replaces its TTL, watch and owner wholesale, so a nested `--ttl 10m` turns a watched hold into a 10-minute unwatched one. Consider keeping an existing watch and never shortening the expiry.
 - **Skill guidance for `--watch-pid auto`:**
   - always `release`;
   - call `mooring` directly, not through wrappers, because `timeout`, `xargs`, `make`, `npx` and scripts become the watched process;
   - an npm-installed Claude shows as "node";
   - Claude Code's sandbox may need the socket path allowed.
-- **Human output doesn't name the watched process.**
 
 ## Before stage 2c (approvals)
 
