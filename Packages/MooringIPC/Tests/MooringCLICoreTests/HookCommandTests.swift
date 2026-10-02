@@ -20,7 +20,7 @@ private func event(of name: String) -> String {
 
 private let sessionID = "00000000-0000-0000-0000-000000000001"
 
-/// A shell under `claude`, as the hook script's parent chain looks after `exec`.
+/// A shell under `claude`, as the hook script's parent chain looks.
 private let claudeTable = FakeProcessTable([proc(100, 90, "sh"), proc(90, 1, "claude")])
 
 private func hookArgs(_ harness: Harness) throws -> HookArgs {
@@ -51,6 +51,14 @@ func everyFixtureSendsOneHookRequest(name: String) async throws {
     #expect(args.cwd == "/Users/test/project")
     #expect(args.watchPid == 90)
     expectSilent(harness)
+}
+
+@Test func autoWatchSkipsTheHookScriptShell() async throws {
+    // mooring runs as a child of the script's `sh`, which sits under the hook's own `sh`, under claude.
+    let table = FakeProcessTable([proc(200, 100, "sh"), proc(100, 90, "sh"), proc(90, 1, "claude")])
+    let harness = Harness(table: table, parentPID: 200, input: try fixture("Stop"))
+    #expect(await harness.run(["hook", "Stop"]) == 0)
+    #expect(try hookArgs(harness).watchPid == 90)
 }
 
 @Test func fieldsComeFromTheRightKeys() async throws {

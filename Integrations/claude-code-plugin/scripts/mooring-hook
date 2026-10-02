@@ -1,6 +1,8 @@
 #!/bin/sh
 # Forwards a Claude Code hook event to `mooring hook <Event>`. The hook JSON arrives on stdin and is
-# left unread here: `exec` hands it to mooring. With no mooring found, or no event, it does nothing.
+# left unread here: mooring inherits it. With no mooring found, or no event, it does nothing.
+# Whatever mooring does (prints, crashes, fails to start), this script prints nothing and exits 0, so a
+# stale or foreign binary can never show a hook error or inject text into Claude.
 set -u
 
 [ $# -ge 1 ] || exit 0
@@ -31,4 +33,7 @@ fi
 try "${MOORING_APPLICATIONS_DIR:-/Applications}/Mooring.app/Contents/Helpers/mooring"
 
 [ -n "$found" ] || exit 0
-exec "$found" hook "$1" 2>/dev/null
+# No `exec`: mooring runs as a child of this `sh`, and `--watch-pid auto` skips shells, so it still resolves
+# the `claude` process above it.
+"$found" hook "$1" >/dev/null 2>&1
+exit 0

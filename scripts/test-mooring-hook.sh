@@ -101,4 +101,31 @@ run_hook "{}" HOME="$d/home" PATH="/usr/bin:/bin" MOORING_APPLICATIONS_DIR="$d/a
 [ ! -s "$OUT" ] && [ ! -s "$ERR" ]; a=$?
 check noMooringAnywhereExits0Silently $((a + CODE))
 
+# 8. A mooring that prints and fails (a stale or foreign binary) leaves no output and no error exit.
+d=$(sandbox foreignMooringIsSilenced)
+mkdir -p "$d/bin"
+printf '#!/bin/sh\necho "to stdout"\necho "to stderr" >&2\nexit 1\n' > "$d/bin/mooring"
+chmod +x "$d/bin/mooring"
+run_hook "{}" HOME="$d/home" PATH="$d/bin:/usr/bin:/bin" MOORING_APPLICATIONS_DIR="$d/apps"
+[ ! -s "$OUT" ] && [ ! -s "$ERR" ]; a=$?
+check foreignMooringIsSilenced $((a + CODE))
+
+# 9. A mooring that can't be executed (a bad interpreter, so exec fails) is silent and exits 0.
+d=$(sandbox unrunnableMooringIsSilenced)
+mkdir -p "$d/bin"
+printf '#!/nonexistent/interpreter\n' > "$d/bin/mooring"
+chmod +x "$d/bin/mooring"
+run_hook "{}" HOME="$d/home" PATH="$d/bin:/usr/bin:/bin" MOORING_APPLICATIONS_DIR="$d/apps"
+[ ! -s "$OUT" ] && [ ! -s "$ERR" ]; a=$?
+check unrunnableMooringIsSilenced $((a + CODE))
+
+# 10. Without the event argument the script exits 0 and prints nothing, even with a mooring present.
+d=$(sandbox missingArgumentExits0)
+make_fake "$d/bin/mooring" "$d/log-path"
+OUT="$WORK/out"; ERR="$WORK/err"
+env -i HOME="$d/home" PATH="$d/bin:/usr/bin:/bin" MOORING_APPLICATIONS_DIR="$d/apps" sh "$HOOK" </dev/null >"$OUT" 2>"$ERR"
+CODE=$?
+[ ! -s "$OUT" ] && [ ! -s "$ERR" ] && [ ! -e "$d/log-path" ]; a=$?
+check missingArgumentExits0 $((a + CODE))
+
 [ "$failures" -eq 0 ]
