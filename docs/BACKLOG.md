@@ -2,6 +2,19 @@
 
 Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
+## Claude Code plugin (2b leftovers)
+
+- **An npm-installed Claude shows as "node"** for leases the skill creates (`LeaseCommands.swift` `agentName`). Hook leases are fine, because the owner is passed explicitly.
+- **Async renew after the sync `Stop`.** An async `PostToolUse`, `PostToolBatch` or `SubagentStop` can land after the sync `Stop` for a very short final reply, which turns the 2 min grace into 15 min.
+- **"Only when asked" mid-session** also skips the `Stop` and `SessionEnd` releases, so a lease made just before the switch lives out its expiry.
+- **The internal-agent rule** relies on undocumented Claude Code behaviour (a helper agent with an `agent_id` and no `agent_type`). A typed helper agent would renew after every turn.
+- **`SessionEnd`'s 1 s hook timeout** is shorter than the 1.5 s reply limit, so Claude can kill the hook before it gives up. Harmless: the watch ends the lease when `claude` exits.
+- **A failed `claude plugin list`** reads "not installed" in doctor and Settings.
+- **The app copy disabled and the GitHub copy enabled** fails doctor's check 5.
+- **On timeout, the runner doesn't kill grandchildren** (`ProcessRunner` has no process group).
+- **The waiting picker** shows no selection for odd stored values (for example after `defaults write`).
+- **`findClaude` and `runBounded` in the CLI are untested.**
+
 ## Before stage 2c (approvals)
 
 - **Policy is advisory.** An agent can skip the named-lease limits (4 h cap, no lid) by calling `mooring on --level lid` or `mooring anchor`, because the client picks the request kind. Decide which of these approvals gate.

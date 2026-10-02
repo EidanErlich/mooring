@@ -61,7 +61,7 @@ mooring/
     WindowKit/           # vendored Loop (level 3)
     ClipKit/             # vendored Maccy (level 4)
   Integrations/
-    claude-code-plugin/  # .claude-plugin/plugin.json, hooks/hooks.json, scripts/mooring-hook, skills/mooring/SKILL.md, .mcp.json
+    claude-code-plugin/  # .claude-plugin/plugin.json, hooks/hooks.json, scripts/mooring-hook, skills/mooring/SKILL.md, mooring.json
   scripts/               # write-helper-requirement.sh, lid-kill-test.sh, …
   THIRD_PARTY/<Repo>/    # upstream LICENSE + UPSTREAM.md (provenance)
   docs/SPEC.md           # this spec
@@ -336,7 +336,7 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.j
 
 **Two ways to install it:**
 
-- **From the app:** Settings → Awake → Agents → Install runs `claude plugin marketplace add <Mooring.app>/Contents/Resources/ClaudePlugin -y` and `claude plugin install mooring@mooring-app -y`, so the plugin's version always matches the app.
+- **From the app:** Settings → Awake → Agents → Install registers the bundled marketplace (`claude plugin marketplace add <Mooring.app>/Contents/Resources/ClaudePlugin`, or `marketplace update mooring-app` when it is already registered) and then runs `claude plugin install mooring@mooring-app -y` (`claude plugin update …` when it is already installed), so the plugin's version always matches the app. After an update, Claude Code sessions need a restart.
 - **From GitHub:** `/plugin marketplace add EidanErlich/mooring`, then `/plugin install mooring@mooring`. The repo's root `.claude-plugin/marketplace.json` publishes it.
 
 **`mooring hook <event>`** (hidden from `--help`) reads up to 1 MiB of the hook's JSON from stdin and takes `session_id`, `cwd`, `notification_type`, `agent_id`, `agent_type`, whether any `background_tasks` entry is `running`, and the watched pid (resolved like `--watch-pid auto`: Claude's own process). It sends the wire op `hook` without launching the app and with a 1.5 s reply limit. It **always exits 0 and never prints to stdout** (Claude Code parses a hook's stdout); errors go to the `hook` log category. The prompt text is never read.
@@ -356,7 +356,7 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.j
 | `SessionEnd` | Release now. |
 | `SessionStart` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
 
-If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
+Pressing Esc to interrupt fires no `Stop`, so an interrupted turn keeps its lease for up to 15 min (up to the waiting timeout after Esc at a permission prompt) before the expiry ends it. If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
 
 **Hook rules** so Mooring can never break a Claude session:
 
@@ -859,7 +859,7 @@ struct AwakeSettings: Codable, Equatable {
 **Stage 2 details**
 
 - **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|hook|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` and `not_found` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. An Ask-each-time approval holds the connection open for up to 60 s.
-- **Hooks:** the plugin's hooks all run `mooring hook <Event>`, which forwards the event over the socket as the additive protocol-v1 op `hook` (`args: {event, sessionId, cwd, notificationType?, agentID?, agentType?, runningBackgroundTasks?, watchPid?}`, result `{action}`; unknown fields are ignored). The decision lives in `HookPolicy` in AwakeKit, a pure function `(event, notificationType, settings, leaseExists) → HookAction` (`acquire`, `renew`, `setExpiry(seconds)`, `releaseAfter(seconds)`, `releaseNow` or `ignore`); the request handler applies the action through the engine's acquire, `renew`, `shorten` and `release`, under the same caller policy as named leases. `hooks.json` registers every event in the 2.3 table; synchronous hooks time out at 2 s (`SessionEnd` at 1 s) and the rest are `async`. Hooks never launch the app: `mooring hook` sends with a 1.5 s reply limit and `launch: false`, and `mooring-hook` exits 0 when there is no `mooring`, which keeps hook cost under 50 ms. Auto-launch applies only to interactive CLI use.
+- **Hooks:** the plugin's hooks all run `mooring hook <Event>`, which forwards the event over the socket as the additive protocol-v1 op `hook` (`args: {event, sessionId, cwd, notificationType?, agentID?, agentType?, runningBackgroundTasks?, watchPid?, toolTimeout?}`, result `{action}`; unknown fields are ignored). The decision lives in `HookPolicy` in AwakeKit, a pure function `action(_ hook: HookEvent, settings:, leaseExists:) → HookAction`, where `HookEvent` bundles the event name, `notificationType`, `agentID`, `agentType`, the running background-task count and `toolTimeout` (the action is `acquire`, `renew`, `renewFor(seconds)`, `setExpiry(seconds)`, `releaseAfter(seconds)`, `releaseNow`, `ignore` or `skipped` for "Only when asked"); the request handler applies the action through the engine's acquire, `renew`, `shorten` and `release`, under the same caller policy as named leases. `hooks.json` registers every event in the 2.3 table; synchronous hooks time out at 2 s (`SessionEnd` at 1 s) and the rest are `async`. Hooks never launch the app: `mooring hook` sends with a 1.5 s reply limit and `launch: false`, and `mooring-hook` exits 0 when there is no `mooring`, which keeps hook cost under 50 ms. Auto-launch applies only to interactive CLI use.
 - **MCP:** runs inside the CLI (`mooring mcp`); there is no separate server package. The client id is the slugified `clientInfo.name` from the MCP `initialize` request.
 - The `mooring://` URL scheme and the awake App Intents ship in stage 2c.
 - **CLI packaging:** the command-line logic lives in the `MooringCLICore` library target of `Packages/MooringIPC` (argument parsing with `swift-argument-parser`, the socket client, `anchor`, `doctor`), so tests drive it without a socket. `CLI/main.swift` is a thin entry point that builds the real environment and exits with the result.
