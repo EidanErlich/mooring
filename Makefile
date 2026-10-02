@@ -37,6 +37,7 @@ run: build
 
 test: generate
 	@for pkg in $(PACKAGES); do echo "== swift test $$pkg"; (cd $$pkg && swift test) || exit 1; done
+	bash scripts/test-mooring-hook.sh
 	$(XCODEBUILD) -configuration Debug test $(XCODEBUILD_FLAGS)
 
 lint:

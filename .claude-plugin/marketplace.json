@@ -1,0 +1,13 @@
+{
+  "name": "mooring",
+  "owner": {
+    "name": "Eidan Erlich"
+  },
+  "plugins": [
+    {
+      "name": "mooring",
+      "source": "./Integrations/claude-code-plugin",
+      "description": "Keeps your Mac awake while Claude works. Needs the Mooring app."
+    }
+  ]
+}

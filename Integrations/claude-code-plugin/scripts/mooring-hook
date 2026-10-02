@@ -1,0 +1,34 @@
+#!/bin/sh
+# Forwards a Claude Code hook event to `mooring hook <Event>`. The hook JSON arrives on stdin and is
+# left unread here: `exec` hands it to mooring. With no mooring found, or no event, it does nothing.
+set -u
+
+[ $# -ge 1 ] || exit 0
+
+found=""
+try() {
+    if [ -z "$found" ] && [ -n "$1" ] && [ -x "$1" ] && [ ! -d "$1" ]; then found="$1"; fi
+}
+
+# 1. An explicit override.
+try "${MOORING_BIN:-}"
+# 2. The CLI link the app installs.
+try "${HOME:-}/.local/bin/mooring"
+# 3. mooring on PATH.
+if [ -z "$found" ]; then
+    try "$(command -v mooring 2>/dev/null || true)"
+fi
+# 4. The app that contains this script: .../Mooring.app/Contents/Resources/ClaudePlugin/mooring/scripts.
+if [ -z "$found" ]; then
+    here=$(cd "$(dirname "$0")" 2>/dev/null && pwd -P) || here=""
+    case "$here" in
+        */Contents/Resources/ClaudePlugin/mooring/scripts)
+            try "${here%/Resources/ClaudePlugin/mooring/scripts}/Helpers/mooring"
+            ;;
+    esac
+fi
+# 5. The installed app.
+try "${MOORING_APPLICATIONS_DIR:-/Applications}/Mooring.app/Contents/Helpers/mooring"
+
+[ -n "$found" ] || exit 0
+exec "$found" hook "$1" 2>/dev/null
