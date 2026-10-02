@@ -21,14 +21,15 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## Lid approvals (2c-1 leftovers)
 
+- **Agent detection is advisory.** An agent escapes it by detaching itself (`(mooring on --level lid &)` reparents to `launchd`), by launching `mooring` through Terminal or `osascript`, or by naming a binary `claude` to inherit "Always allow Claude Code". It guards against accidents, not a hostile agent.
+- **The first-run permission prompt runs outside the 60 s budget:** the timer starts after `authorize()` returns, so the first ask can outlast the CLI's 65 s ("didn't answer") and a later Allow still adds lid.
+- **Which leases got lid on an agent's behalf** is kept in memory, so after a relaunch Never and session lid off don't take lid back from restored named leases (session leases lose it on their next hook event).
 - **Authorized but alerts off** isn't treated as unavailable: the ask posts nothing visible and runs out its 60 s.
 - **A failed notification post** (`center.add` throws) means a timeout instead of "unavailable".
-- **`GuardrailNotifier` asks only for alert permission,** so approval notifications may lack sound if it asked first.
-- **Stale approval notifications survive a quit,** and their buttons do nothing.
 - **An unwatched hook session under Always ask** can be falsely refused ("the request changed") when it renews during the ask, because "expiry no later" fails after a renewal.
 - **Compare the whole watch** (pid and start time) when checking that the request is unchanged, not just the pid.
 - **Under Never,** an agent's refused `on --level lid` downgrades a person's lid session.
-- **Session acquires on battery** log a guardrail notice.
+- **Session acquires on battery** still log a guardrail notice (the notification is skipped).
 - **The decision tests** are tables, not a full exhaustive product of every input.
 
 ## CLI and IPC (stage 2a leftovers)

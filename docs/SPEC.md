@@ -249,6 +249,8 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 | Max lease length | 12 h for any lease with an expiry; "Until turned off" allowed only from the menu | Longer requests are clamped and the clamp is reported to the caller |
 | Agent cap | 4 h per agent lease, renewable | See Part 2 |
 
+The two lid-mode notifications ("Lid mode paused" at low battery, and "Lid mode waits for power" before the battery opt-in) are posted only when some lease that wants lid isn't a Claude Code session lease (`claude-…`): a session wants lid on every turn, so a session alone would bring one on nearly every prompt. The guardrails still apply to sessions, and "Mooring paused" and the thermal notice are unchanged (stage 2c-1 fixes).
+
 macOS still forces sleep at critical battery regardless of `disablesleep`; the guardrails act before that point. Battery state comes from `IOPSNotificationCreateRunLoopSource` (Awayke's `BatteryMonitor`), lid state from the `IOPMrootDomain` clamshell notification (Awayke's `LidMonitor`).
 
 ### 1.8 System events
@@ -297,14 +299,14 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 
 | Command | Does |
 | --- | --- |
-| `mooring on [--level system\|display\|lid] [--for 2h] [--reason "…"]` | Turn on the menu's On switch: the same `menu` session a left click and the dropdown control. With no flags a running session is left alone and described; otherwise one starts at Settings → "When I click the icon". With `--for` or `--level` the session is replaced, as picking a duration in the dropdown does: picked apps are cleared, the duration is `--for` or the click duration, and the level is `--level`, else the session's level, else the click level. `--reason` is accepted and ignored (the menu shows "Turned on from the menu bar") |
+| `mooring on [--level system\|display\|lid] [--for 2h] [--reason "…"]` | Turn on the menu's On switch: the same `menu` session a left click and the dropdown control. With no flags a running session is left alone and described; otherwise one starts at Settings → "When I click the icon". With `--for` or `--level` the session is replaced, as picking a duration in the dropdown does: picked apps are cleared, the duration is `--for` or the click duration, and the level is `--level`, else the session's level, else the click level. `--reason` only appears in a lid approval's notification (the menu shows "Turned on from the menu bar") |
 | `mooring off` | End the menu session (the `menu` lease and any picked apps), like a left click while on. Also ends a `cli` lease an earlier build left. Never touches agent leases or anchors. Idempotent: prints "Already off" and exits 0 when nothing was on |
 | `mooring anchor [--level …] [--reason …] -- <command …>` | Lease tied to the child process; exits with the child's exit code |
 | `mooring anchor --pid <pid> [--level …]` | Lease until that process exits |
 | `mooring lease acquire <id> (--ttl 15m \| --watch-pid <pid>\|auto) [--level …] [--reason …] [--agent "<name>"]` | Named lease; needs `--ttl` or `--watch-pid`; re-acquiring an existing id renews it without weakening it (see Re-acquiring below) |
 | `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
 | `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
-| `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]` |
+| `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`, `pendingApproval`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]`, `notifications` (`allowed`, `notDetermined` or `denied`), `agentLidApproval` (`askWhenOpenEnded`, `alwaysAsk`, `alwaysAllow` or `never`) |
 | `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Mooring's Claude Code plugin is installed and enabled, Claude Code's major.minor version is the one the plugin was tested with (a different one only prints a note), and notifications (check 7, below). Exits 1 if any check fails |
 | `mooring mcp` | Run the MCP server over stdio (2.5; arrives in 2c-2) |
 
@@ -399,9 +401,9 @@ Agents act automatically by default; Settings → Awake → Agents lets the user
 | Lid mode for agents | **Ask only when it has no end** · Always ask · Always allow · Never | Ask only when it has no end |
 | Window arrangement by agents | **Automatic** · Ask first · Off | Automatic |
 
-**Who counts as an agent.** The app decides from the caller's pid (`LOCAL_PEERPID`), walking the process ancestry (at most 64 steps, stopping at pid 1). A request is an agent request if any ancestor is named `claude`, `codex`, `cursor-agent`, `gemini`, `aider` or `opencode` (shown as "Claude Code", "Codex" and so on), and every `hook` request is one. Anything else is a person: your Terminal, `launchd`, Raycast, scripts you start yourself. People are never asked.
+**Who counts as an agent.** The app decides from the caller's pid (`LOCAL_PEERPID`), walking the process ancestry (at most 64 steps, stopping at pid 1). A request is an agent request if any ancestor is named exactly (case included, after dropping a login shell's leading `-`) `claude`, `codex`, `cursor-agent`, `gemini`, `aider` or `opencode`, the agent CLIs (shown as "Claude Code", "Codex" and so on), and every `hook` request is one. Anything else is a person: your Terminal, `launchd`, Raycast, scripts you start yourself, and the terminals inside the Claude and Codex desktop apps (`Claude`, `Codex`), which aren't the CLIs. The trade-off: a process a desktop app launches directly, such as an MCP server Claude.app starts, also counts as a person. People are never asked.
 
-**The decision.** An *open-ended* request has no expiry and no watched process (for an agent, `mooring on --level lid` without `--for`). `anchor`, `lease` and session leases always have an end. `LidApproval.decide` (AwakeKit, pure) gives:
+**The decision.** An *open-ended* request has no expiry and no watched process of its own (for an agent, `mooring on --level lid` without `--for`). Session leases always have an end. A `lease` or `anchor` ends by its `--ttl`, or by its watch; for an agent, a watch counts as an end only when the watched pid is the agent's own process or runs below it (the watched pid's ancestry is walked, at most 64 steps). `--watch-pid auto`, `anchor -- <cmd>` (whose command runs under `mooring`, under the agent) and the hooks pass; an agent's `anchor --pid 1`, or a watch on its Terminal or its own parents, is open-ended, so it's asked under the default and refused under Never. `LidApproval.decide` (AwakeKit, pure) gives:
 
 | Setting | Agent request with an end | Agent request with no end |
 | --- | --- | --- |
@@ -412,9 +414,9 @@ Agents act automatically by default; Settings → Awake → Agents lets the user
 
 For `on`, an existing lid session counts as already approved only when it is itself open-ended; a bounded lid session doesn't let `on` become open-ended without asking.
 
-**Asking** posts a notification (category `mooring.lid-approval`): *"Claude Code wants to keep your Mac awake with the lid closed"*, with the body "Claude Code · <reason> · <with no end time | for 30m | while <process> runs>". Its actions are **Allow once**, **Always allow this agent** (category actions are static, so the agent's name leads the body instead) and **Deny**. Clicking the body opens Settings and counts as no answer. "Always allow" appends the agent's name to `agentLidAlwaysAllowed`, listed and removable under Settings → Agents → Lid mode. Permission is requested the first time an approval is needed.
+**Asking** posts a notification (category `mooring.lid-approval`): *"Claude Code wants to keep your Mac awake with the lid closed"*, with the body "Claude Code · <reason> · <with no end time | for 30m | while <process> runs>". For `on` the reason is the agent's `--reason`, else "mooring on". At launch the app withdraws approvals left from an earlier run, since their buttons would answer nothing. Its actions are **Allow once**, **Always allow this agent** (category actions are static, so the agent's name leads the body instead) and **Deny**. Clicking the body opens Settings and counts as no answer. "Always allow" appends the agent's name to `agentLidAlwaysAllowed`, listed and removable under Settings → Agents → Lid mode. Permission is requested the first time an approval is needed.
 
-The call waits up to 60 s (the CLI allows 65 s for any request at lid level, including a plain `mooring on`). One ask runs per lease at a time. While it waits, the lease's row and `mooring status` show "waiting for your approval". On refusal, deny or timeout the lease is still created at the requested level without lid, and the reply is `denied` (exit 2) with one of:
+The call waits up to 60 s (the CLI allows 65 s for any request at lid level, including a plain `mooring on`). One ask runs per lease at a time. While it waits, `mooring status` shows "waiting for your approval", and so does the lease's row in the menu once the notification is posted (not while macOS is still asking for notification permission). On refusal, deny or timeout the lease is still created at the requested level without lid, and the reply is `denied` (exit 2) with one of:
 
 - "Lid mode not approved (denied)";
 - "Lid mode not approved (no answer in 60 s)";
@@ -424,6 +426,8 @@ The call waits up to 60 s (the CLI allows 65 s for any request at lid level, inc
 - "Turn on notifications for Mooring in System Settings to approve lid mode", when notifications are denied or off.
 
 A hook can't wait (Claude gives it 2 s), so under "Always ask" the session starts at system level, a notification is posted, and Allow upgrades the lease to lid. Battery guardrails apply after approval as always (1.7).
+
+**Never and session lid off apply to live leases.** A refused or unapproved acquire ends without lid even when it re-acquires a lease that had it (re-acquiring merges levels, so lid is taken off afterwards), so the `denied` reply matches the outcome. While "Keep working with the lid closed" is off or the setting is Never, every hook event takes lid off the session's lease first. When the setting becomes Never, the app at once takes lid off every live lease that got it on an agent's behalf; when "Keep working with the lid closed" is switched off, off the `claude-…` session leases among them. The handler records which leases those are, so a person's own lid session is never touched.
 
 ### Three ways an agent anchors the Mac
 
@@ -457,13 +461,13 @@ The MCP server never has clipboard tools; its window tools arrive with level 3 (
 | --- | --- | --- |
 | Until turned off | Allowed, like the menu | Not allowed: `--ttl` or `--watch-pid` is required |
 | Max length | Engine max (12 h) | 4 h, including a watched lease with no TTL; renewable while renewals keep arriving |
-| `lid` level | Allowed (guardrails apply), like the menu | Allowed for people; for agents `LidApproval` decides (named leases always have an end, so they are allowed by default; see Agent control and approvals) |
+| `lid` level | Allowed (guardrails apply), like the menu | Allowed for people; for agents `LidApproval` decides (named leases with a TTL, or watching the agent's own processes, have an end, so they are allowed by default; see Agent control and approvals) |
 | Ids | `menu` (`on`, `off`), `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`; reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused |
 | Max concurrent leases | 32 live leases; a socket request past that gets exit code 2 (the menu is never refused) | Same |
 | Reason text | Trimmed to 80 characters, control characters stripped before display | Same |
 | Guardrails (1.7) | Always win; the caller is told in the response | Same |
 
-Any process running as the user can take a lease; that's the same trust level as running `caffeinate`, and the menu always shows who holds one.
+Any process running as the user can take a lease; that's the same trust level as running `caffeinate`, and the menu always shows who holds one. Agent detection is advisory: an agent can escape it by detaching itself (a process reparented to `launchd` has no agent ancestor) or by launching `mooring` through other apps (Terminal, `osascript`), so it guards against accidents, not against a hostile agent.
 
 ### 2.7 Notifications for walk-away use
 
@@ -677,7 +681,7 @@ Recording history needs no permission. Auto-paste needs **Accessibility**, the s
 
 ### B. Open questions
 
-Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL-3.0; plain-snapshot vendoring with provenance docs; anchor icon (outline off, filled on); agents act automatically by default, lid mode for agents asks each time; lid mode on battery behind an explicit opt-in; no clipboard encryption beyond Maccy's; development is staged (Build brief below).
+Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL-3.0; plain-snapshot vendoring with provenance docs; anchor icon (outline off, filled on); agents act automatically by default, lid mode for agents asks each time (superseded by stage 2c-1: by default only open-ended agent requests ask); lid mode on battery behind an explicit opt-in; no clipboard encryption beyond Maccy's; development is staged (Build brief below).
 
 - [x] Does launchd refuse to start a `dev.mooring.helper` binary that a user-level process swapped inside the (user-writable) app bundle? **Yes** (stage 1c, 2026-10-01, macOS 26.3.1): an ad-hoc-signed probe swapped in for the helper never ran; launchd logged `OS_REASON_CODESIGNING | Launch Constraint Violation` and AMFI `Constraint not matched`. No local path to root. Side effect worth knowing: after the refusal launchd marked the job `needs LWCR update` and would not spawn even the restored genuine helper until it was unregistered and approved again (and overwriting a signed binary in place spoils the kernel's signature cache: replace the file instead).
 - [ ] Is the 2-minute grace after `Stop` long enough for background shells Claude starts? Measure on real sessions in stage 2.

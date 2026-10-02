@@ -23,13 +23,15 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
 ## Who counts as an agent
 
 - **Detection happens in the app,** from the caller's pid (`LOCAL_PEERPID`). The app walks the process ancestry (at most 64 steps, stopping at pid 1) through the same sysctl process table the CLI uses.
-- **A request is an agent request** if any ancestor's name is one of `claude`, `codex`, `cursor-agent`, `gemini`, `aider` or `opencode`. The agent's display name is "Claude Code", "Codex" and so on, otherwise the process name.
+- **A request is an agent request** if any ancestor's name is exactly one of the agent CLIs `claude`, `codex`, `cursor-agent`, `gemini`, `aider` or `opencode`. The match is case-sensitive; only a login shell's leading `-` is dropped. The agent's display name is "Claude Code", "Codex" and so on, otherwise the process name.
+- **Desktop apps aren't agents.** The Claude and Codex desktop apps run as `Claude` and `Codex`, so a person typing in their terminal panels (`zsh → Claude Helper → Claude`) is a person. The trade-off: a process a desktop app launches directly (for example an MCP server Claude.app starts) also counts as a person, unless it runs under one of the CLIs.
 - **Every `op: hook` request is an agent request** (Claude Code).
 - **Anything else is a person:** your Terminal, `launchd`, Raycast, scripts you start yourself. People are never asked; lid mode follows today's rules for them.
+- **Detection is advisory.** An agent can escape it by detaching itself (reparenting to `launchd`) or by launching `mooring` through other apps (Terminal, `osascript`). It guards against accidents, not against a hostile agent.
 
 ## The decision
 
-**An open-ended request** asks for a lease with **no expiry and no watched process**. For agents that's essentially `mooring on --level lid` without `--for`, when the click default is "until turned off". `anchor`, `lease` and session leases always have an end.
+**An open-ended request** asks for a lease with **no expiry and no watched process of its own**. For agents that's essentially `mooring on --level lid` without `--for`, when the click default is "until turned off". Session leases always have an end. A `lease` or `anchor` ends by its `--ttl`, or by its watch, but for an agent a watch counts only when the watched pid is the agent's own process or one of its descendants (walking the watched pid's ancestry, at most 64 steps). `--watch-pid auto`, `anchor -- <cmd>` and the hooks pass; `mooring anchor --pid 1 --level lid` from an agent is open-ended, so it's asked under the default and refused under Never. People are unaffected.
 
 **The setting:** "Lid mode for agents", a new key, `AwakeSettings.agentLidApproval: AgentLidApproval`, defaulting to `.askWhenOpenEnded`. The old `agentLid` key is never shown or used. No screen ever set it, so its stored default isn't a user choice.
 
@@ -41,7 +43,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
 | Never | refuse | refuse (even for always-allowed agents) |
 
 - **Pure function:** `LidApproval.decide(setting:, isAgent:, hasEnd:, agentName:, alwaysAllowed:) -> .allow | .ask | .refuse`, in AwakeKit. Non-agents always get `.allow`.
-- **Refuse, deny or timeout:** the lease is still created or updated, but at the requested level **without lid**. The reply is `denied` (exit 2) with the reason:
+- **Refuse, deny or timeout:** the lease is still created or updated, but at the requested level **without lid**, even when it re-acquires a lease that had lid (re-acquiring merges levels, so lid is taken off after the merge). The reply is `denied` (exit 2) with the reason:
   - "Lid mode not approved (denied)";
   - "… (no answer in 60 s)";
   - "… (lid mode for agents is set to Never)";
@@ -51,23 +53,26 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
 - **For `on`,** an existing lid session counts as already approved only when it is itself open-ended. A bounded lid session doesn't let `on` become open-ended without asking.
 - **After approval,** the battery guardrails apply as today: lid mode needs AC until the opt-in, pauses below 20%, and everything pauses below 10%.
 - **Policy changes from stage 2a:**
-  - `CallerPolicy` no longer refuses lid for named leases outright; `LidApproval` decides. Under the default, named leases with lid are allowed, since they always have an end.
+  - `CallerPolicy` no longer refuses lid for named leases outright; `LidApproval` decides. Under the default, named leases with lid are allowed when they have an end: a `--ttl`, or a watch on the agent's own processes.
   - Unchanged: the 4 h cap, the 32-lease limit, reserved ids and the other rules.
 
 ## Claude Code sessions
 
 - **Settings → Awake → Agents → "Keep working with the lid closed"** is `AwakeSettings.agentSessionLid: Bool = true`. When it's on, the `claude-<session>` lease is acquired and renewed at lid level, `AwakeLevel(display: false, lid: true)`; when it's off, at system level.
 - **Session leases have an end,** so they're allowed by default. Under "Always ask", a hook can't wait (Claude gives it 2 s), so the lease starts at system level, a notification is posted, and Allow upgrades the lease to lid. Under "Never", sessions stay at system level.
+- **Never and session lid off apply to live leases.** While session lid is off or the setting is Never, every hook event first takes lid off the session's lease, so a later acquire or renewal can't keep it. When the setting becomes Never, the app takes lid off every live lease that got it on an agent's behalf right away; when session lid is switched off, off the `claude-…` leases among them. The request handler records those lease ids, so a person's own lid session is never touched.
+- **No guardrail nagging.** "Lid mode waits for power" and the low-battery "Lid mode paused" notifications are posted only when some lease that wants lid isn't a `claude-…` session lease; otherwise a laptop on battery would get one on nearly every turn. "Mooring paused" and the thermal notice are unchanged.
 - **The lease lifecycle from 2b is unchanged.**
 
 ## Asking
 
 - **The notification** uses `UNUserNotificationCenter`, with category `mooring.lid-approval` and three actions:
   - title: "<Agent> wants to keep your Mac awake with the lid closed";
-  - body: "<reason> · <with no end time | for 30m | while <process> runs>";
+  - body: "<reason> · <with no end time | for 30m | while <process> runs>"; for `on` the reason is the agent's `--reason`, else "mooring on";
   - actions: **Allow once**, **Always allow this agent** and **Deny**. Category actions are static, so the title can't name the agent; the agent's name leads the body instead ("<Agent> · <reason> · <end>");
   - the request id goes in `userInfo`.
 - **Clicking the notification body** opens Settings → Agents and counts as no answer.
+- **At launch,** the app withdraws delivered approvals left from an earlier run, whose buttons would answer nothing.
 - **Permission:** requested the first time an approval is needed. If it's denied or off, the request is refused immediately with the notifications message.
 - **Waiting:**
   - The request handler awaits the decision for up to 60 s.
@@ -76,7 +81,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
   - The CLI's reply timeout is 65 s for any request that asks for lid level (`--level lid` on `on`, `anchor` or `lease acquire`), a plain `mooring on` included, and 5 s otherwise.
   - SPEC.md already reserves the op name `approve.wait`. It isn't needed as a separate op, because the acquire itself waits. The name stays reserved.
 - **"Always allow <Agent>"** appends the agent name to `AwakeSettings.agentLidAlwaysAllowed: [String]`.
-- **Pending state:** while a lease waits, its row and `mooring status` show "waiting for your approval". `LeaseInfo` gains `pendingApproval: Bool`. The menu shows the same in the Anchored row.
+- **Pending state:** while a lease waits, `mooring status` shows "waiting for your approval". `LeaseInfo` gains `pendingApproval: Bool`. The menu shows the same in the Anchored row once the notification is posted (not while macOS is still asking for notification permission).
 
 ## Settings → Awake → Agents
 
@@ -95,7 +100,7 @@ A new **"Notifications"** check, check 7:
 - – "not asked yet";
 - ✗ "denied", with the fix "System Settings → Notifications → Mooring", **only** when the lid setting could need to ask (anything except Always allow and Never). Otherwise – "denied (not needed)".
 
-The app reports `notifications: "allowed" | "notDetermined" | "denied"` in `StatusResult`.
+The app reports `notifications: "allowed" | "notDetermined" | "denied"` and `agentLidApproval` (`askWhenOpenEnded`, `alwaysAsk`, `alwaysAllow` or `never`) in `StatusResult`; `status --json` lists both, and `pendingApproval` on each lease.
 
 ## Skill
 
