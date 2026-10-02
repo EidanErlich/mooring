@@ -172,3 +172,9 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
     #expect(result["notifications"] as? String == "granted" && result["agentLidApproval"] as? String == "ask")
     #expect(try WireCoding.decodeResponse(line, op: .status) == response)
 }
+
+@Test func leaseWithoutExpiresAtKeyDecodes() throws {
+    let bare = Data(#"{"id":"job","owner":{"kind":"cli","name":"Terminal"},"reason":"x","level":"lid"}"#.utf8)
+    let decoded = try JSONDecoder().decode(LeaseInfo.self, from: bare)
+    #expect(decoded.expiresAt == nil)
+}

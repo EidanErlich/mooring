@@ -43,7 +43,7 @@ public struct LeaseInfo: Codable, Sendable, Equatable {
         owner = try container.decode(OwnerInfo.self, forKey: .owner)
         reason = try container.decode(String.self, forKey: .reason)
         level = try container.decode(String.self, forKey: .level)
-        expiresAt = try container.decode(Date?.self, forKey: .expiresAt)
+        expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
         watchPid = try container.decodeIfPresent(Int32.self, forKey: .watchPid)
         ttl = try container.decodeIfPresent(Double.self, forKey: .ttl)
         pendingApproval = try container.decodeIfPresent(Bool.self, forKey: .pendingApproval) ?? false
