@@ -3,6 +3,7 @@ import AppKit
 import AwakeKit
 import Defaults
 import os
+import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -17,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
+    private let approvals = LidApprovalCenter()
+    private var notificationResponder: NotificationResponder?
 
     /// True when Xcode launched the app only to host unit tests.
     nonisolated static var isHostingTests: Bool {
@@ -37,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsWindowController.shared.engine = engine
         SettingsWindowController.shared.lid = lid
         engine.onSuspensionsAdded = { GuardrailNotifier.post($0) }
+        startNotificationResponses()
         startMonitors(engine)
         engine.restore()
         startSocketServer(engine)
@@ -89,6 +93,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.update(thermal: ProcessInfo.processInfo.thermalState)
     }
 
+    /// Registers the lid-approval actions and routes responses to the approval
+    /// center. Nothing is posted here; permission is asked on first need.
+    private func startNotificationResponses() {
+        let center = UNUserNotificationCenter.current()
+        center.setNotificationCategories([LidApprovalCenter.category])
+        let responder = NotificationResponder(approvals: approvals)
+        center.delegate = responder
+        notificationResponder = responder
+    }
+
     /// Serves the `mooring` CLI (docs/SPEC.md 2.1). Failing to listen leaves the menu working.
     private func startSocketServer(_ engine: AwakeEngine) {
         let handler = RequestHandler(
@@ -133,5 +147,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !terminationReplied else { return }
         terminationReplied = true
         NSApp.reply(toApplicationShouldTerminate: true)
+    }
+}
+
+/// Forwards notification responses to the approval center. Tapping an
+/// approval's body opens Settings → Agents; it and dismissal don't answer.
+private final class NotificationResponder: NSObject, UNUserNotificationCenterDelegate {
+    private let approvals: LidApprovalCenter
+
+    init(approvals: LidApprovalCenter) {
+        self.approvals = approvals
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let request = response.notification.request
+        guard request.content.categoryIdentifier == LidApprovalCenter.categoryID else {
+            completionHandler()
+            return
+        }
+        let action = response.actionIdentifier
+        let requestID = request.identifier
+        let approvals = approvals
+        Task { @MainActor in
+            if action == UNNotificationDefaultActionIdentifier {
+                SettingsWindowController.shared.show(page: .agents)
+            } else {
+                approvals.handle(actionIdentifier: action, requestID: requestID)
+            }
+        }
+        completionHandler()
+    }
+
+    /// Shows banners even while Mooring is the active app (e.g. Settings is open).
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
     }
 }

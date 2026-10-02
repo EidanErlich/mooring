@@ -62,9 +62,15 @@ enum ClickLevelOption: CaseIterable {
     }
 }
 
+/// The selected page, shared so the window can be opened on a given page.
+@MainActor @Observable
+final class SettingsNavigation {
+    var selection: SettingsPage? = .general
+}
+
 struct SettingsView: View {
     let engine: AwakeEngine?
-    @State private var selection: SettingsPage? = .general
+    @Bindable var navigation: SettingsNavigation
 
     private var groups: [String] {
         SettingsPage.allCases.map(\.group).reduce(into: []) { if !$0.contains($1) { $0.append($1) } }
@@ -72,7 +78,7 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List(selection: $navigation.selection) {
                 ForEach(groups, id: \.self) { group in
                     Section(group) {
                         ForEach(SettingsPage.allCases.filter { $0.group == group }) { page in
@@ -83,7 +89,7 @@ struct SettingsView: View {
             }
             .navigationSplitViewColumnWidth(180)
         } detail: {
-            switch selection ?? .general {
+            switch navigation.selection ?? .general {
             case .general: GeneralSettingsPage()
             case .keepAwake: KeepAwakeSettingsPage()
             case .lidAndBattery: LidBatterySettingsPage()

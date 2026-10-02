@@ -10,6 +10,7 @@ final class SettingsWindowController {
     /// Set once at launch, for the pages that read engine state (diagnostics).
     var engine: AwakeEngine?
     var lid: LidController?
+    private let navigation = SettingsNavigation()
 
     private lazy var window: NSWindow = {
         let window = NSWindow(
@@ -19,7 +20,7 @@ final class SettingsWindowController {
             defer: false
         )
         window.title = "Mooring Settings"
-        window.contentViewController = NSHostingController(rootView: SettingsView(engine: engine))
+        window.contentViewController = NSHostingController(rootView: SettingsView(engine: engine, navigation: navigation))
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 640, height: 420))
         window.center()
@@ -28,7 +29,9 @@ final class SettingsWindowController {
 
     private init() {}
 
-    func show() {
+    /// Brings the window forward, on `page` if one is given.
+    func show(page: SettingsPage? = nil) {
+        if let page { navigation.selection = page }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
     }
