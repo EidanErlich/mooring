@@ -59,6 +59,7 @@ final class RequestHandler {
             case .renew(let args): return .success(id: request.id, .renew(try renew(args)))
             case .release(let args): return .success(id: request.id, .release(try release(args)))
             case .status: return .success(id: request.id, .status(await status()))
+            case .hook: throw WireError(code: .internal, message: "Not implemented")
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")

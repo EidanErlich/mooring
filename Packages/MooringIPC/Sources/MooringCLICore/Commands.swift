@@ -202,6 +202,7 @@ struct CommandRunner {
         case .renew: .renew
         case .release: .release
         case .status: .status
+        case .hook: .hook
         }
     }
 }

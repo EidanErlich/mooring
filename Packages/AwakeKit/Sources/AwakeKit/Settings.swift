@@ -30,6 +30,8 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
     public var agentKeepAwake = AgentMode.automatic
     public var agentLid = AgentLidMode.askEachTime
     public var agentWindows = AgentWindowMode.automatic
+    /// How long a session waiting on a permission prompt keeps the Mac awake.
+    public var agentWaitingTimeout: TimeInterval = 1800
 
     public init() {}
 
@@ -39,7 +41,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case clickLevel, clickDuration, endMenuLeaseAfterSleep, allowLidOnBattery
         case lidBatteryThreshold, allBatteryThreshold, thermalCutoff
-        case agentKeepAwake, agentLid, agentWindows
+        case agentKeepAwake, agentLid, agentWindows, agentWaitingTimeout
     }
 
     public init(from decoder: any Decoder) throws {
@@ -58,6 +60,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         agentKeepAwake = try value(.agentKeepAwake, defaults.agentKeepAwake)
         agentLid = try value(.agentLid, defaults.agentLid)
         agentWindows = try value(.agentWindows, defaults.agentWindows)
+        agentWaitingTimeout = try value(.agentWaitingTimeout, defaults.agentWaitingTimeout)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -72,6 +75,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         try container.encode(agentKeepAwake, forKey: .agentKeepAwake)
         try container.encode(agentLid, forKey: .agentLid)
         try container.encode(agentWindows, forKey: .agentWindows)
+        try container.encode(agentWaitingTimeout, forKey: .agentWaitingTimeout)
     }
 }
 
