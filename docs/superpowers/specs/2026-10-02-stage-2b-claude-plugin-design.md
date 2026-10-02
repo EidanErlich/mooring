@@ -98,7 +98,7 @@ One lease per session, `claude-<session_id>`:
 | Bundled marketplace | `Mooring.app/Contents/Resources/ClaudePlugin/` (a copy-files build phase) | The plugin folder plus its own `marketplace.json`, with marketplace `mooring-app`. |
 | Plugin installer | `App/Settings/ClaudePluginInstaller.swift` | Finds `claude`, reads the plugin status, installs or updates. Pure parsing of the CLI's output, plus a thin `Process` runner. |
 | Agents page | `App/Settings/AgentsSettingsPage.swift`, in the Awake group | The plugin row and the two settings. |
-| `doctor` | `MooringCLICore` `Doctor` | Check 5 becomes real, plus a Claude Code version warning. |
+| `doctor` | `MooringCLICore` `Doctor` | Check 5 becomes real, plus a Claude Code version warning. It passes if either the app's or the GitHub copy is enabled, and is skipped ("couldn't check") when `claude plugin list` fails. |
 
 ### How `mooring-hook` finds `mooring`
 

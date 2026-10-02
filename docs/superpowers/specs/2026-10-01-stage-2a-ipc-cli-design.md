@@ -83,7 +83,7 @@ Shared behaviour:
   - "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`.": connected, but the write failed, the reply timed out, ended before a newline, was over `maxLineBytes`, or wouldn't decode.
   - "Can't reach Mooring's socket (permission denied). If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock": connect fails with `EPERM` or `EACCES`; never retried or launched.
 
-  `anchor` treats all three as "not reachable" and doesn't start the command. `doctor` treats all three as no status, with App detail "not running", "didn't answer" or "permission denied".
+  `anchor` treats all three as "not reachable" and doesn't start the command. `doctor` treats all three as no status, with App detail "not running", "didn't answer" or "permission denied"; an error reply from the app reads "answered with an error: <message>" (fix: quit and reopen Mooring).
 - **Waiting for a reply:** 5 s. 2c raises it to 60 s for approvals.
 - **Flag placement:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`).
 - **Output:** human text by default, with errors on stderr as `mooring: <message>`. With `--json`, stdout carries the `result`, or `{"ok":false,"error":{…}}`.

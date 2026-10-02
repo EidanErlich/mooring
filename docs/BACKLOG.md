@@ -8,8 +8,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **"Only when asked" mid-session** also skips the `Stop` and `SessionEnd` releases, so a lease made just before the switch lives out its expiry.
 - **The internal-agent rule** relies on undocumented Claude Code behaviour (a helper agent with an `agent_id` and no `agent_type`). A typed helper agent would renew after every turn.
 - **`SessionEnd`'s 1 s hook timeout** is shorter than the 1.5 s reply limit, so Claude can kill the hook before it gives up. Harmless: the watch ends the lease when `claude` exits.
-- **A failed `claude plugin list`** reads "not installed" in doctor and Settings.
-- **The app copy disabled and the GitHub copy enabled** fails doctor's check 5.
+- **A failed `claude plugin list`** still reads "Not installed" on the Settings page (doctor now skips).
 - **On timeout, the runner doesn't kill grandchildren** (`ProcessRunner` has no process group).
 - **The waiting picker** shows no selection for odd stored values (for example after `defaults write`).
 - **`findClaude` and `runBounded` in the CLI are untested.**
@@ -35,8 +34,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **SPEC 2.2's exit-2 wording** should say "held but paused by a guardrail", not "refused".
 - **`doctor`:**
   - its "mismatch" fix text is wrong in one direction, and a transient mismatch can show during a helper call;
-  - the Helper check fails for people who never use lid mode;
-  - it shows "not running" when the app answered with an error.
+  - the Helper check fails for people who never use lid mode.
 - **Settings and install:**
   - A regular file at `~/.local/bin/mooring` reads "Points to <own path>" in Settings; say "Not a link".
   - `make uninstall` doesn't remove the symlink, though SPEC's Repository setup says it does.

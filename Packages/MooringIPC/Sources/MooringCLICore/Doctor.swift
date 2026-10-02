@@ -21,14 +21,15 @@ public enum Doctor {
         }
     }
 
-    /// The six checks in order. `status` is nil when the app didn't answer, and `unavailable` says why;
-    /// `resolve` follows symlinks; `claude` is nil when Claude Code wasn't found.
+    /// The six checks in order. `status` is nil when the app didn't give a status, and `unavailable` says why, or
+    /// `appError` holds the message of an error reply from an app that did answer; `resolve` follows symlinks;
+    /// `claude` is nil when Claude Code wasn't found.
     public static func checks(
-        status: StatusResult?, unavailable: CLIError = .unreachable, pathEnv: String?, ownBinary: String,
-        resolve: (String) -> String?, claude: ClaudeSnapshot?
+        status: StatusResult?, unavailable: CLIError = .unreachable, appError: String? = nil, pathEnv: String?,
+        ownBinary: String, resolve: (String) -> String?, claude: ClaudeSnapshot?
     ) -> [Check] {
         [
-            appCheck(status, unavailable: unavailable),
+            appCheck(status, unavailable: unavailable, appError: appError),
             pathCheck(pathEnv: pathEnv, ownBinary: ownBinary, resolve: resolve),
             helperCheck(status),
             lidCheck(status),
@@ -57,8 +58,11 @@ public enum Doctor {
         return String(cString: resolved)
     }
 
-    private static func appCheck(_ status: StatusResult?, unavailable: CLIError) -> Check {
+    private static func appCheck(_ status: StatusResult?, unavailable: CLIError, appError: String?) -> Check {
         guard let status else {
+            if let appError {
+                return Check(name: "App", state: "fail", detail: "answered with an error: \(appError)", fix: "Quit and reopen Mooring")
+            }
             let detail = switch unavailable {
             case .noAnswer: "didn't answer"
             case .blocked: "permission denied"
@@ -107,7 +111,13 @@ public enum Doctor {
         let name = "Claude plugin"
         guard let claude else { return Check(name: name, state: "skip", detail: "Claude Code not found", fix: nil) }
         let fix = "Settings → Awake → Agents → Install"
-        guard let plugin = ClaudeCode.mooringPlugin(in: claude.plugins ?? []) else {
+        // `claude` runs but its plugin list is unreadable (it failed or timed out): don't claim the plugin is missing.
+        if claude.plugins == nil, claude.version != nil {
+            return Check(name: name, state: "skip", detail: "couldn't check (claude plugin list failed)", fix: nil)
+        }
+        // With both the app's and the GitHub copy installed, either one enabled is enough; the app's copy is preferred.
+        let copies = (claude.plugins ?? []).filter { $0.id == ClaudeCode.appPluginID || $0.id == ClaudeCode.repoPluginID }
+        guard let plugin = copies.first(where: \.enabled) ?? ClaudeCode.mooringPlugin(in: copies) else {
             return Check(name: name, state: "fail", detail: "not installed", fix: fix)
         }
         guard plugin.enabled else { return Check(name: name, state: "fail", detail: "disabled", fix: fix) }
@@ -142,9 +152,9 @@ struct DoctorCommand: ParsableCommand, CLICommand {
     @OptionGroup var output: OutputOptions
 
     func execute(_ env: CLIEnvironment) async -> Int32 {
-        let (status, unavailable) = await currentStatus(env)
+        let app = await currentStatus(env)
         let checks = Doctor.checks(
-            status: status, unavailable: unavailable, pathEnv: env.pathEnv, ownBinary: env.ownBinaryPath,
+            status: app.status, unavailable: app.unavailable, appError: app.error, pathEnv: env.pathEnv, ownBinary: env.ownBinaryPath,
             resolve: Doctor.resolvePath, claude: env.claude()
         )
         if output.json {
@@ -161,18 +171,25 @@ struct DoctorCommand: ParsableCommand, CLICommand {
         return checks.contains { $0.state == "fail" } ? 1 : 0
     }
 
-    /// The app's status, never launching it, so a stopped app shows as a failed check; nil on any failure,
-    /// with the reason it couldn't be read (`.unreachable` when the app answered with something else).
-    private func currentStatus(_ env: CLIEnvironment) async -> (StatusResult?, CLIError) {
+    /// What asking the app for its status gave: the status, or why there is none. `error` is an error reply's message
+    /// when the app answered with one; otherwise `unavailable` says why nothing usable came back.
+    private struct AppReading {
+        var status: StatusResult?
+        var unavailable: CLIError = .unreachable
+        var error: String?
+    }
+
+    /// The app's status, never launching it, so a stopped app shows as a failed check.
+    private func currentStatus(_ env: CLIEnvironment) async -> AppReading {
         let request = Request(v: WireProtocol.version, id: env.newID(), op: .status, args: .status)
         do {
             let response = try await env.client.send(request, launch: false)
-            guard case .status(let status)? = response.result else { return (nil, .unreachable) }
-            return (status, .unreachable)
+            if case .status(let status)? = response.result { return AppReading(status: status) }
+            return AppReading(error: response.ok ? nil : response.error?.message ?? "unknown error")
         } catch let error as CLIError {
-            return (nil, error)
+            return AppReading(unavailable: error)
         } catch {
-            return (nil, .unreachable)
+            return AppReading()
         }
     }
 }
