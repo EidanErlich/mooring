@@ -138,7 +138,12 @@ final class LidApprovalCenter: LidApproving {
         }
     }
 
-    /// A notification response, forwarded by the app's notification delegate.
+    /// "allowed", "notDetermined" or "denied", for `mooring status` and `doctor`.
+    func notificationStatus() async -> String? {
+        await poster.notificationStatus()
+    }
+
+        /// A notification response, forwarded by the app's notification delegate.
     func handle(actionIdentifier: String, requestID: String) {
         guard let answer = Self.answer(forAction: actionIdentifier) else { return }
         resolve(requestID, with: answer)

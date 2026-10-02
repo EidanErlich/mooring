@@ -111,7 +111,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // A hung helper mustn't hang `mooring status`.
             readHelperSleepDisabled: {
                 await withDeadline(.seconds(1)) { @MainActor in try? await HelperClient.shared.lidSleepDisabled() }
-            }
+            },
+            approver: approvals,
+            updateSettings: { change in
+                var settings = Defaults[.awake]
+                change(&settings)
+                Defaults[.awake] = settings
+            },
+            notificationStatus: { [approvals] in await approvals.notificationStatus() }
         )
         let server = SocketServer(path: SocketServer.defaultPath) { request, caller in
             await handler.handle(request, from: caller)

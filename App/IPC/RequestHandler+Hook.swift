@@ -50,16 +50,20 @@ extension RequestHandler {
         engine.renew(id: id, ttl: ttl)
     }
 
-    /// Acquires the session's lease through the same path as `mooring lease acquire`, so re-acquiring merges.
+    /// Acquires the session's lease through the same path as `mooring lease acquire`, so re-acquiring merges. It asks
+    /// for lid mode while "Keep working with the lid closed" is on; a hook never waits for an approval.
     private func acquireSessionLease(id: String, ttl: TimeInterval, hook: HookArgs, from caller: Caller) throws {
         let folder = hook.cwd.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0).lastPathComponent } ?? ""
         let name = folder.isEmpty || folder == "/" ? "session \(hook.sessionId.prefix(4))" : folder
-        _ = try acquire(
+        try acquireWithoutWaiting(
             AcquireArgs(
-                kind: .lease, id: id, level: nil, ttl: ttl, watchPid: hook.watchPid, reason: "Claude Code · \(name)",
-                agent: "Claude Code"
+                kind: .lease, id: id, level: settings().agentSessionLid ? "lid" : nil, ttl: ttl, watchPid: hook.watchPid,
+                reason: "Claude Code · \(name)", agent: Self.claudeCode
             ),
-            from: caller
+            agent: Self.claudeCode, from: caller
         )
     }
+
+    /// Every hook comes from Claude Code, whatever the caller's ancestry.
+    private static let claudeCode = "Claude Code"
 }

@@ -9,6 +9,60 @@ final class RequestKnobs {
     var clock = Date(timeIntervalSince1970: 1_000_000)
     var settings = AwakeSettings()
     var helperSleepDisabled: Bool?
+    var notifications: String? = "allowed"
+}
+
+/// Process ancestry for agent detection; empty, so callers count as people, unless a test adds a chain.
+struct FakeProcessTable: ProcessTable {
+    var entries: [Int32: ProcessEntry] = [:]
+
+    /// `chain` from the caller up: `[(200, "sh"), (100, "claude")]` makes 200 a child of 100, and 100 a child of launchd.
+    init(_ chain: [(pid: Int32, name: String)] = []) {
+        for (index, link) in chain.enumerated() {
+            let parent = index + 1 < chain.count ? chain[index + 1].pid : 1
+            entries[link.pid] = ProcessEntry(pid: link.pid, parent: parent, name: link.name)
+        }
+    }
+
+    func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
+}
+
+/// Answers lid asks from a script, or holds them until the test resolves them.
+@MainActor
+final class FakeLidApprover: LidApproving {
+    struct Call: Equatable {
+        let leaseID: String
+        let agent: String
+        let body: String
+    }
+
+    /// The answers to give, in order; `.timeout` once they run out.
+    var answers: [LidAnswer] = []
+    /// When true, each ask waits for `resolve(_:with:)`.
+    var holds = false
+    var pending: Set<String> = []
+    private(set) var calls: [Call] = []
+    private var held: [String: CheckedContinuation<LidAnswer, Never>] = [:]
+
+    func ask(leaseID: String, agent: String, body: String) async -> LidAnswer {
+        calls.append(Call(leaseID: leaseID, agent: agent, body: body))
+        guard holds else { return answers.isEmpty ? .timeout : answers.removeFirst() }
+        pending.insert(leaseID)
+        let answer = await withCheckedContinuation { held[leaseID] = $0 }
+        pending.remove(leaseID)
+        return answer
+    }
+
+    func resolve(_ leaseID: String, with answer: LidAnswer) {
+        held.removeValue(forKey: leaseID)?.resume(returning: answer)
+    }
+
+    /// Waits until `count` asks have been made (or about 2 s pass).
+    func waitForCalls(_ count: Int) async {
+        for _ in 0..<2000 where calls.count < count {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
 }
 
 @MainActor
@@ -16,10 +70,15 @@ struct RequestFixture {
     let knobs = RequestKnobs()
     let engine: AwakeEngine
     let handler: RequestHandler
-    let caller = Caller(uid: 501, pid: 77)
+    let approver = FakeLidApprover()
+    let caller: Caller
 
-    init(processes: any ProcessInspecting = AliveProcesses()) {
+    /// `table` is the caller's ancestry; `callerPID` is where agent detection starts.
+    init(
+        processes: any ProcessInspecting = AliveProcesses(), table: FakeProcessTable = FakeProcessTable(), callerPID: Int32 = 77
+    ) {
         let knobs = knobs
+        caller = Caller(uid: 501, pid: callerPID)
         let engine = AwakeEngine(
             assertions: NullAssertions(), store: MemoryStore(), processes: processes,
             lid: LidController(helper: FakeLidHelper()), settings: { knobs.settings }, now: { knobs.clock }
@@ -27,7 +86,9 @@ struct RequestFixture {
         self.engine = engine
         handler = RequestHandler(
             engine: engine, settings: { knobs.settings }, helperStatus: { "enabled" },
-            readHelperSleepDisabled: { knobs.helperSleepDisabled }, now: { knobs.clock }
+            readHelperSleepDisabled: { knobs.helperSleepDisabled }, now: { knobs.clock },
+            processes: table, approver: approver, updateSettings: { change in change(&knobs.settings) },
+            notificationStatus: { knobs.notifications }
         )
     }
 

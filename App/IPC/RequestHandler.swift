@@ -10,7 +10,7 @@ struct Caller: Sendable {
 }
 
 extension LeaseInfo {
-    init(_ lease: Lease) {
+    init(_ lease: Lease, pendingApproval: Bool = false) {
         let kind: String
         switch lease.owner {
         case .menu: kind = "menu"
@@ -22,12 +22,12 @@ extension LeaseInfo {
             id: lease.id, owner: OwnerInfo(kind: kind, name: LeaseText.owner(lease.owner)), reason: lease.reason,
             level: WireText.levelName(display: lease.level.display, lid: lease.level.lid),
             expiresAt: lease.expiresAt, watchPid: lease.watch?.pid, ttl: lease.ttl,
-            pendingApproval: false
+            pendingApproval: pendingApproval
         )
     }
 }
 
-/// Turns a decoded CLI request into engine calls, through `CallerPolicy`, and builds the reply.
+/// Turns a decoded CLI request into engine calls, through `CallerPolicy` and `LidApproval`, and builds the reply.
 @MainActor
 final class RequestHandler {
     let engine: AwakeEngine
@@ -35,6 +35,14 @@ final class RequestHandler {
     private let helperStatus: @MainActor () -> String
     private let readHelperSleepDisabled: @MainActor () async -> Bool?
     let now: @MainActor () -> Date
+    /// The process ancestry agent detection walks.
+    let processes: any ProcessTable
+    let approver: any LidApproving
+    let updateSettings: @MainActor ((inout AwakeSettings) -> Void) -> Void
+    private let notificationStatus: @MainActor () async -> String?
+    /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied: it isn't asked
+    /// again in that lifetime (stage 2c-1 spec).
+    var deniedLid: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
     /// The id `mooring on` used before it became the menu's On switch.
     private static let legacyCLILeaseID = "cli"
@@ -42,21 +50,27 @@ final class RequestHandler {
     init(
         engine: AwakeEngine, settings: @escaping @MainActor () -> AwakeSettings,
         helperStatus: @escaping @MainActor () -> String, readHelperSleepDisabled: @escaping @MainActor () async -> Bool?,
-        now: @escaping @MainActor () -> Date = { Date() }
+        now: @escaping @MainActor () -> Date = { Date() }, processes: any ProcessTable = SystemProcessTable(),
+        approver: any LidApproving, updateSettings: @escaping @MainActor ((inout AwakeSettings) -> Void) -> Void,
+        notificationStatus: @escaping @MainActor () async -> String?
     ) {
         self.engine = engine
         self.settings = settings
         self.helperStatus = helperStatus
         self.readHelperSleepDisabled = readHelperSleepDisabled
         self.now = now
+        self.processes = processes
+        self.approver = approver
+        self.updateSettings = updateSettings
+        self.notificationStatus = notificationStatus
     }
 
     func handle(_ request: Request, from caller: Caller) async -> Response {
         do {
             switch request.args {
             case .acquire(let args) where args.kind == .on:
-                return .success(id: request.id, .acquire(try turnOn(args)))
-            case .acquire(let args): return .success(id: request.id, .acquire(try acquire(args, from: caller)))
+                return .success(id: request.id, .acquire(try await turnOn(args, from: caller)))
+            case .acquire(let args): return .success(id: request.id, .acquire(try await acquire(args, from: caller)))
             case .renew(let args): return .success(id: request.id, .renew(try renew(args)))
             case .release(let args): return .success(id: request.id, .release(try release(args)))
             case .status: return .success(id: request.id, .status(await status()))
@@ -93,6 +107,11 @@ final class RequestHandler {
             )
         }
 
+        /// This plan at its level without lid mode.
+        func withoutLid() -> Plan {
+            Plan(id: id, owner: owner, reason: reason, level: level.withoutLid, ttl: ttl, watchPID: watchPID, caller: caller)
+        }
+
         private func reasonGiven(_ args: AcquireArgs) -> Bool {
             args.reason.map(CallerPolicy.cleanReason).map { !$0.isEmpty } ?? false
         }
@@ -106,8 +125,44 @@ final class RequestHandler {
         return granted.map { min(max($0, remaining), CallerPolicy.maxNamedLease) }
     }
 
-    func acquire(_ args: AcquireArgs, from caller: Caller) throws -> MooringIPC.AcquireResult {
-        var plan = try plan(for: args, from: caller)
+    /// `anchor` and `lease acquire`. A request for lid mode goes through `LidApproval` first, and may wait for the person.
+    private func acquire(_ args: AcquireArgs, from caller: Caller) async throws -> MooringIPC.AcquireResult {
+        let plan = try plan(for: args, from: caller)
+        var clamped = false
+        let lease = try await approvingLid(plan.level.lid ? lidRequest(for: plan, agent: agent(of: caller)) : nil) { withLid in
+            let granted = try grant(args, plan: withLid ? plan : plan.withoutLid())
+            clamped = granted.clamped
+            return granted.lease
+        }
+        if let message = guardrailMessage(holdingBack: lease.level) {
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
+        }
+        return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: clamped)
+    }
+
+    /// The hook's acquire, by the same rules but never waiting: Claude gives a hook 2 s. When the person must be
+    /// asked, the lease starts without lid and the ask runs in the background, adding lid on Allow.
+    func acquireWithoutWaiting(_ args: AcquireArgs, agent: String, from caller: Caller) throws {
+        let plan = try plan(for: args, from: caller)
+        let request = plan.level.lid ? lidRequest(for: plan, agent: agent) : nil
+        let step = request.map(lidStep) ?? .grant
+        let lease = try grant(args, plan: step == .grant ? plan : plan.withoutLid()).lease
+        if case .ask(let agent) = step {
+            Task { @MainActor in _ = try? await self.ask(agent, about: lease) }
+        }
+        if let message = guardrailMessage(holdingBack: lease.level) {
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
+        }
+    }
+
+    /// Named leases always end: the cap bounds them, and an anchor watches its process.
+    private func lidRequest(for plan: Plan, agent: String?) -> LidRequest {
+        LidRequest(leaseID: plan.id, agent: agent, hasEnd: true, existing: liveLease(plan.id))
+    }
+
+    /// Creates or updates the lease `plan` describes, merging with a named lease that exists.
+    private func grant(_ args: AcquireArgs, plan: Plan) throws -> (lease: Lease, clamped: Bool) {
+        var plan = plan
         let current = now()
         let existing = args.kind == .lease ? engine.leases.first { $0.id == plan.id } : nil
         if let existing { plan = plan.merged(with: existing, args: args) }
@@ -128,22 +183,21 @@ final class RequestHandler {
             throw plan.watchPID.map { WireError(code: .badRequest, message: "Process \($0) isn't running") }
                 ?? WireError(code: .internal, message: "Couldn't create the lease")
         }
-        // The engine reconciles inside `acquire`, so its suspensions already account for this lease.
-        if let message = guardrailMessage(holdingBack: outcome.lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
-        }
         let cutShort = plan.ttl.map { requested in granted.map { $0 < requested } ?? false } ?? false
-        return MooringIPC.AcquireResult(lease: LeaseInfo(outcome.lease), clamped: outcome.wasClamped || cutShort)
+        return (outcome.lease, outcome.wasClamped || cutShort)
     }
 
-    /// `mooring on`: the menu's On switch. With no flags it leaves a running session alone; with
+    /// `mooring on`: the menu's On switch. With no flags it leaves a running session alone (and asks nothing); with
     /// `--for` or `--level` it replaces the session (and any picked apps), as picking a duration does.
-    private func turnOn(_ args: AcquireArgs) throws -> MooringIPC.AcquireResult {
+    private func turnOn(_ args: AcquireArgs, from caller: Caller) async throws -> MooringIPC.AcquireResult {
         let ttl = try positive(args.ttl)
         let level = try args.level.map(parseLevel)
-        let current = now()
-        let unchanged = ttl == nil && level == nil ? engine.menuLease ?? engine.sessionApps.first : nil
-        if unchanged == nil {
+        let session = engine.menuLease ?? engine.sessionApps.first
+        let lease: Lease
+        if ttl == nil && level == nil, let session {
+            lease = session
+        } else {
+            let current = now()
             _ = try grantedDuration(
                 for: Plan(
                     id: AwakeEngine.menuLeaseID, owner: .menu, reason: AwakeEngine.menuReason, level: level ?? .system,
@@ -151,10 +205,18 @@ final class RequestHandler {
                 ),
                 liveLeases: engine.leases.filter { $0.isLive(at: current) }.count, exists: engine.hasMenuSession
             )
-            engine.turnOnMenu(duration: ttl ?? settings().clickDuration, level: level)
-        }
-        guard let lease = unchanged ?? engine.menuLease else {
-            throw WireError(code: .internal, message: "Couldn't turn on")
+            let defaults = settings()
+            let requested = level ?? engine.sessionLevel ?? defaults.clickLevel
+            let duration = ttl ?? defaults.clickDuration
+            let request = LidRequest(
+                leaseID: AwakeEngine.menuLeaseID, agent: agent(of: caller), hasEnd: duration != nil,
+                existing: session.flatMap { liveLease($0.id) }
+            )
+            lease = try await approvingLid(requested.lid ? request : nil) { withLid in
+                engine.turnOnMenu(duration: duration, level: withLid ? requested : requested.withoutLid)
+                guard let lease = engine.menuLease else { throw WireError(code: .internal, message: "Couldn't turn on") }
+                return lease
+            }
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
             throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id))
@@ -262,12 +324,15 @@ final class RequestHandler {
         }
         return ended
     }
+}
 
+extension RequestHandler {
     // MARK: - status
 
     private func status() async -> StatusResult {
-        // The helper read suspends, so take it first and read the engine in one synchronous stretch.
+        // The helper and notification reads suspend, so take them first and read the engine in one synchronous stretch.
         let helperSleepDisabled = await readHelperSleepDisabled()
+        let notifications = await notificationStatus()
         let current = now()
         let state = engine.state
         let live = engine.leases.filter { $0.isLive(at: current) }
@@ -276,11 +341,12 @@ final class RequestHandler {
             effective: LevelInfo(system: state.systemAssertion, display: state.displayAssertion, lid: state.lidSleepDisabled),
             systemAssertion: state.systemAssertion, displayAssertion: state.displayAssertion,
             lidSleepDisabled: state.lidSleepDisabled, helperSleepDisabled: helperSleepDisabled,
-            wantsLid: engine.wantsLid, leases: live.map(LeaseInfo.init),
+            wantsLid: engine.wantsLid,
+            leases: live.map { LeaseInfo($0, pendingApproval: approver.pending.contains($0.id)) },
             power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
             thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
             suspensions: state.suspensions.map { String(describing: $0) }.sorted(),
-            notifications: nil, agentLidApproval: nil
+            notifications: notifications, agentLidApproval: settings().agentLidApproval.rawValue
         )
     }
 
