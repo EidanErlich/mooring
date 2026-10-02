@@ -144,10 +144,10 @@ struct CommandRunner {
         }
     }
 
-    /// An acquire at a lid level waits for the user's approval, so it uses the client with the long reply timeout.
+    /// An acquire that may need the user's approval waits for it, so it uses the client with the long reply timeout.
     private func client(for args: RequestArgs) -> any RequestSending {
         guard case .acquire(let acquire) = args else { return env.client }
-        return env.acquireClient(level: acquire.level)
+        return env.acquireClient(kind: acquire.kind, level: acquire.level)
     }
 
     private func report(_ response: Response, to request: Request) -> Int32 {

@@ -114,10 +114,10 @@ struct AnchoredCommand {
         let request = Request(v: WireProtocol.version, id: env.newID(), op: .acquire, args: .acquire(args))
         let problem: String
         do {
-            let response = try await env.acquireClient(level: args.level).send(request, launch: !options.noLaunch)
+            let response = try await env.acquireClient(kind: .anchor, level: args.level).send(request, launch: !options.noLaunch)
             if response.ok { return }
             let error = response.error ?? WireError(code: .internal, message: "Unexpected reply from Mooring")
-            if error.code == .guardrail {
+            if error.code == .guardrail || error.code == .denied {
                 env.writeError("mooring: \(error.message)\n")
                 return
             }

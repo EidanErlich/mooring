@@ -73,11 +73,12 @@ public struct CLIEnvironment: Sendable {
     /// Asks Claude Code about itself, for doctor. Blocks for a few seconds at most; nil when `claude` isn't found.
     public var claude: @Sendable () -> ClaudeSnapshot?
 
-    /// The client for an acquire at `level` (a canonical level name, or nil for the app's default): the long-wait one
-    /// when the level includes lid, since the app may hold the reply for up to a minute while the user approves.
-    func acquireClient(level: String?) -> any RequestSending {
-        guard let level, WireText.parseLevel(level)?.lid == true else { return client }
-        return lidClient
+    /// The client for an acquire of `kind` at `level` (a canonical level name, or nil for the app's default): the long-wait
+    /// one when it may need an approval, since the app can hold the reply for up to a minute. That is a level that includes
+    /// lid, or a plain `on`, which starts at the menu bar's click level, and that can be lid.
+    func acquireClient(kind: AcquireKind, level: String?) -> any RequestSending {
+        guard let level else { return kind == .on ? lidClient : client }
+        return WireText.parseLevel(level)?.lid == true ? lidClient : client
     }
 
     public init(

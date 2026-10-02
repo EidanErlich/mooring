@@ -119,13 +119,13 @@ private let threeLeases = [
 }
 
 @Test func acquireText() async {
-    let turnedOn = Harness(client: RecordingClient(reply: .success(acquired(
+    let turnedOn = Harness(lidClient: RecordingClient(reply: .success(acquired(
         leaseInfo(id: "cli", level: "display,lid", expiresAt: fixedNow.addingTimeInterval(1800))
     ))))
     #expect(await turnedOn.run(["on"]) == 0)
     #expect(turnedOn.capture.stdout == "On · 30m left · screen on · lid mode\n")
 
-    let forever = Harness(client: RecordingClient(reply: .success(acquired(leaseInfo(id: "cli", level: "system")))))
+    let forever = Harness(lidClient: RecordingClient(reply: .success(acquired(leaseInfo(id: "cli", level: "system")))))
     _ = await forever.run(["on"])
     #expect(forever.capture.stdout == "On · until turned off\n")
 
@@ -214,7 +214,7 @@ private let threeLeases = [
         #expect(used.normal.isEmpty && used.lid == [.acquire], "\(arguments)")
     }
     // Everything else stays on the quick client.
-    for arguments in [["on"], ["on", "--level", "display"], ["lease", "acquire", "job"], ["lease", "acquire", "job", "--level", "system"],
+    for arguments in [["on", "--level", "display"], ["lease", "acquire", "job"], ["lease", "acquire", "job", "--level", "system"],
                       ["lease", "renew", "job"], ["lease", "release", "job"], ["off"], ["status"]] {
         let used = await clients(arguments)
         #expect(used.normal.count == 1 && used.lid.isEmpty, "\(arguments)")
@@ -232,4 +232,20 @@ private let threeLeases = [
     #expect(await harness.run(["on", "--level", "lid"]) == 2)
     #expect(harness.capture.stderr == "mooring: Lid mode not approved (denied)\n")
     #expect(harness.capture.stdout.isEmpty)
+}
+
+@Test func plainOnUsesTheLidClient() async {
+    // With no level the app starts at the menu bar's click level, which can be lid.
+    let harness = Harness()
+    _ = await harness.run(["on"])
+    #expect(harness.client.requests.isEmpty)
+    #expect(harness.lidClient.requests.map(\.op) == [.acquire])
+}
+
+@Test func plainAnchorAndLeaseStayOnTheNormalClient() async {
+    // Their default level is system, which never needs an approval.
+    let lease = Harness()
+    _ = await lease.run(["lease", "acquire", "job"])
+    #expect(lease.client.requests.map(\.op) == [.acquire])
+    #expect(lease.lidClient.requests.isEmpty)
 }

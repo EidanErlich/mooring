@@ -131,6 +131,19 @@ import Testing
         #expect(harness.lidClient.requests.map(\.op) == [.acquire])
     }
 
+    @Test func plainAnchorStaysOnTheNormalClient() async {
+        let harness = Harness()
+        #expect(await harness.run(["anchor", "--", "sh", "-c", "exit 0"]) == 0)
+        #expect(harness.client.requests.map(\.op) == [.status, .acquire])
+        #expect(harness.lidClient.requests.isEmpty)
+    }
+
+    @Test func anchorLidDenialPrintsTheReasonAndRunsTheCommand() async {
+        let harness = Harness(lidClient: RecordingClient(reply: .success(.failure(id: "r", .denied, "Lid mode not approved (denied)"))))
+        #expect(await harness.run(["anchor", "--level", "lid", "--", "sh", "-c", "exit 3"]) == 3)
+        #expect(harness.capture.stderr == "mooring: Lid mode not approved (denied)\n")
+    }
+
     @Test func guardrailIsAWarning() async {
         let harness = Harness(lidClient: RecordingClient(reply: .success(.failure(id: "r", .guardrail, "Lid mode paused: battery low"))))
         #expect(await harness.run(["anchor", "--level", "lid", "--", "sh", "-c", "exit 0"]) == 0)
