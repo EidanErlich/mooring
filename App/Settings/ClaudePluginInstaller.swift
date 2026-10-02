@@ -53,11 +53,22 @@ struct ProcessRunner: ToolRunning {
         var value: Data { lock.withLock { data } }
     }
 
+    /// The app's environment with a PATH that suits a tool launched from a GUI app: the tool's own folder first,
+    /// so an npm-installed `claude` (`#!/usr/bin/env node`) finds the `node` beside it, then the usual install folders.
+    static func environment(for executable: String) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        let folder = (executable as NSString).deletingLastPathComponent
+        let fixed = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = folder.isEmpty ? fixed : "\(folder):\(fixed)"
+        return environment
+    }
+
     func run(_ argv: [String]) -> ToolResult {
         guard let executable = argv.first else { return ToolResult(status: 127, stderr: "No command") }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = Array(argv.dropFirst())
+        process.environment = Self.environment(for: executable)
         let (outPipe, errPipe) = (Pipe(), Pipe())
         process.standardOutput = outPipe
         process.standardError = errPipe
@@ -177,7 +188,8 @@ enum ClaudePluginInstaller {
         let result = runner.run(["/bin/zsh", "-lc", "command -v claude"])
         guard result.status == 0 else { return nil }
         let text = String(bytes: result.stdout, encoding: .utf8) ?? ""
-        return text.split(whereSeparator: \.isNewline).first.map(String.init)
+        // A `.zprofile` banner can print before `command -v` does, so the answer is the last absolute line.
+        return text.split(whereSeparator: \.isNewline).last { $0.hasPrefix("/") }.map(String.init)
     }
 
     static func findClaude() -> String? {
