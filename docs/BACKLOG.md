@@ -3,6 +3,11 @@
 Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
 ## Claude Code plugin (2b leftovers)
+- `doctor`'s plugin detail can name the GitHub copy when both copies are enabled and `claude plugin list` lists it first; prefer the app copy explicitly.
+- `doctor` still says "not installed" when both `claude --version` and `plugin list` fail; skip whenever the list is unavailable.
+- SPEC.md's Esc paragraph says an interrupted turn keeps its lease "up to 15 min"; with renewals that only extend, it can last until a long Bash hold or the waiting timeout ends.
+- No tests for the installer failing at `marketplace remove` (must stop before `add`) or at `add` after a successful remove.
+- The moved-app check compares standardized paths without resolving symlinks, so a symlinked app path triggers a needless remove and reinstall.
 - **An npm-installed Claude shows as "node"** for leases the skill creates (`LeaseCommands.swift` `agentName`). Hook leases are fine, because the owner is passed explicitly.
 - **Async renew after the sync `Stop`.** An async `PostToolUse`, `PostToolBatch` or `SubagentStop` can land after the sync `Stop` for a very short final reply, which turns the 2 min grace into 15 min.
 - **"Only when asked" mid-session** also skips the `Stop` and `SessionEnd` releases, so a lease made just before the switch lives out its expiry.
