@@ -17,6 +17,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **On timeout, the runner doesn't kill grandchildren** (`ProcessRunner` has no process group).
 - **The waiting picker** shows no selection for odd stored values (for example after `defaults write`).
 - **`findClaude` and `runBounded` in the CLI are untested.**
+- **A skill or hook change must bump the plugin version** (`plugin.json`) together with `MARKETING_VERSION`; the installed copy is cached by version, so otherwise it keeps the old files and Settings shows no "Needs update".
 
 ## Lid approvals (2c-1 leftovers)
 
