@@ -1,12 +1,14 @@
 import AwakeKit
+import Foundation
 import Testing
 
 struct HookPolicyTests {
     private func action(_ event: String, notificationType: String? = nil, agentID: String? = nil, agentType: String? = nil,
-                        runningBackgroundTasks: Int? = nil, settings: AwakeSettings = AwakeSettings(),
-                        leaseExists: Bool = true) -> HookAction {
+                        runningBackgroundTasks: Int? = nil, toolTimeout: TimeInterval? = nil,
+                        settings: AwakeSettings = AwakeSettings(), leaseExists: Bool = true) -> HookAction {
         HookPolicy.action(HookEvent(name: event, notificationType: notificationType, agentID: agentID, agentType: agentType,
-                                    runningBackgroundTasks: runningBackgroundTasks), settings: settings, leaseExists: leaseExists)
+                                    runningBackgroundTasks: runningBackgroundTasks, toolTimeout: toolTimeout),
+                          settings: settings, leaseExists: leaseExists)
     }
 
     @Test func promptAcquires() {
@@ -49,6 +51,29 @@ struct HookPolicyTests {
     @Test func otherNotificationsAreIgnored() {
         #expect(action("Notification", notificationType: "auth_success") == .ignore)
         #expect(action("Notification") == .ignore)
+    }
+
+    @Test func bashTimeoutExtendsTheRenewal() {
+        #expect(action("PreToolUse", toolTimeout: 1200) == .renewFor(1260))
+        #expect(action("PreToolUse", toolTimeout: 1200, leaseExists: false) == .renewFor(1260))
+    }
+
+    @Test func shortBashTimeoutKeeps15Minutes() {
+        #expect(action("PreToolUse", toolTimeout: 120) == .renewFor(900))
+        #expect(action("PreToolUse", toolTimeout: 840) == .renewFor(900))
+    }
+
+    @Test func bashTimeoutIsCappedAt4Hours() {
+        #expect(action("PreToolUse", toolTimeout: 100_000) == .renewFor(14400))
+    }
+
+    @Test func toolTimeoutOnlyMattersForPreToolUse() {
+        #expect(action("PostToolUse", toolTimeout: 1200) == .renew)
+        #expect(action("PreToolUse", agentID: "a1", toolTimeout: 1200) == .ignore)
+        #expect(action("PreToolUse", agentID: "a1", agentType: "general-purpose", toolTimeout: 1200) == .renewFor(1260))
+        var settings = AwakeSettings()
+        settings.agentKeepAwake = .explicit
+        #expect(action("PreToolUse", toolTimeout: 1200, settings: settings) == .skipped)
     }
 
     @Test func stopReleasesAfterGrace() {
@@ -121,6 +146,7 @@ struct HookPolicyTests {
         #expect(HookAction.acquire.wireName == "acquire")
         #expect(HookAction.renew.wireName == "renew")
         #expect(HookAction.setExpiry(60).wireName == "waiting")
+        #expect(HookAction.renewFor(1260).wireName == "renew")
         #expect(HookAction.releaseAfter(120).wireName == "releaseAfter")
         #expect(HookAction.releaseNow.wireName == "releaseNow")
         #expect(HookAction.ignore.wireName == "ignore")

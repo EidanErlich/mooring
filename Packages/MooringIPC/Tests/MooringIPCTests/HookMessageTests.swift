@@ -8,12 +8,12 @@ private func object(_ line: Data) throws -> [String: Any] {
 
 @Test func hookRequestRoundTrips() throws {
     let args = HookArgs(event: "Notification", sessionId: "s-1", cwd: "/tmp/proj", notificationType: "permission_prompt",
-                        agentID: "a1", agentType: "general-purpose", runningBackgroundTasks: 2, watchPid: 4121)
+                        agentID: "a1", agentType: "general-purpose", runningBackgroundTasks: 2, watchPid: 4121, toolTimeout: 1200)
     let request = Request(v: 1, id: "h1", op: .hook, args: .hook(args))
     let line = try WireCoding.encodeLine(request)
     let wireArgs = try #require(try object(line)["args"] as? [String: Any])
     #expect(wireArgs.keys.sorted() == ["agentID", "agentType", "cwd", "event", "notificationType", "runningBackgroundTasks",
-                                       "sessionId", "watchPid"])
+                                       "sessionId", "toolTimeout", "watchPid"])
     #expect(try object(line)["op"] as? String == "hook")
     #expect(try WireCoding.decodeRequest(line).get() == request)
 

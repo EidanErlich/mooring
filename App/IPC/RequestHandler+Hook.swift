@@ -9,7 +9,7 @@ extension RequestHandler {
         guard CallerPolicy.isValidNamedID(id) else { throw WireError(code: .badRequest, message: "Invalid session id") }
         let event = HookEvent(
             name: args.event, notificationType: args.notificationType, agentID: args.agentID, agentType: args.agentType,
-            runningBackgroundTasks: args.runningBackgroundTasks
+            runningBackgroundTasks: args.runningBackgroundTasks, toolTimeout: args.toolTimeout
         )
         let current = now()
         let exists = engine.leases.contains { $0.id == id && $0.isLive(at: current) }
@@ -19,7 +19,7 @@ extension RequestHandler {
             try acquireSessionLease(id: id, ttl: HookPolicy.activeTTL, hook: args, from: caller)
         case .renew:
             engine.renew(id: id, ttl: HookPolicy.activeTTL)
-        case .setExpiry(let seconds):
+        case .renewFor(let seconds), .setExpiry(let seconds):
             if exists {
                 engine.renew(id: id, ttl: seconds)
             } else {

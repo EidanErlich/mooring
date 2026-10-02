@@ -8,11 +8,12 @@ extension RequestFixture {
     /// Sends a hook event for `sessionId`, with the working directory and watched pid a real session would give.
     func hook(
         _ event: String, session sessionId: String = "s1", cwd: String? = "/Users/test/mooring", watchPid: Int32? = 4242,
-        notificationType: String? = nil, agentID: String? = nil, agentType: String? = nil, runningBackgroundTasks: Int? = nil
+        notificationType: String? = nil, agentID: String? = nil, agentType: String? = nil, runningBackgroundTasks: Int? = nil,
+        toolTimeout: Double? = nil
     ) async -> Response {
         await send(.hook(HookArgs(
             event: event, sessionId: sessionId, cwd: cwd, notificationType: notificationType, agentID: agentID,
-            agentType: agentType, runningBackgroundTasks: runningBackgroundTasks, watchPid: watchPid
+            agentType: agentType, runningBackgroundTasks: runningBackgroundTasks, watchPid: watchPid, toolTimeout: toolTimeout
         )))
     }
 
@@ -62,6 +63,28 @@ struct RequestHandlerHookTests {
         let response = await fixture.hook("PostToolUse")
         #expect(hookAction(response) == "renew")
         #expect(abs(try expiry(fixture) - 900) < 0.001)
+    }
+
+    @Test func longBashCallKeepsTheLease() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit")
+        let response = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(hookAction(response) == "renew")
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
+        // 20 minutes into the call nothing has fired since, and the lease is still there.
+        fixture.advance(1200)
+        fixture.engine.tick()
+        #expect(fixture.lease("claude-s1") != nil)
+        // The call ends and the next event is back to 15 minutes.
+        _ = await fixture.hook("PostToolUse")
+        #expect(abs(try expiry(fixture) - 900) < 0.001)
+    }
+
+    @Test func longBashCallWithoutLeaseAcquiresForItsTimeout() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("PreToolUse", toolTimeout: 1200)
+        #expect(fixture.lease("claude-s1")?.watch?.pid == 4242)
+        #expect(abs(try expiry(fixture) - 1260) < 0.001)
     }
 
     @Test func toolEventAfterReleaseReacquires() async throws {

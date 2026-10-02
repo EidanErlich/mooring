@@ -3,6 +3,8 @@ import Foundation
 /// What a Claude Code hook event means for the session's lease.
 public enum HookAction: Equatable, Sendable {
     case acquire, renew
+    /// Set the expiry to now plus this many seconds, acquiring when the lease is gone (a long tool call).
+    case renewFor(TimeInterval)
     /// Set the expiry to now plus this many seconds (a session waiting on a permission prompt).
     case setExpiry(TimeInterval)
     case releaseAfter(TimeInterval)
@@ -15,7 +17,7 @@ public enum HookAction: Equatable, Sendable {
     public var wireName: String {
         switch self {
         case .acquire: "acquire"
-        case .renew: "renew"
+        case .renew, .renewFor: "renew"
         case .setExpiry: "waiting"
         case .releaseAfter: "releaseAfter"
         case .releaseNow: "releaseNow"
@@ -33,14 +35,17 @@ public struct HookEvent: Equatable, Sendable {
     public var agentType: String?
     /// The number of `background_tasks` entries whose status is `running`.
     public var runningBackgroundTasks: Int?
+    /// How long the tool call that `PreToolUse` announces may run, in seconds (a Bash command's `timeout`).
+    public var toolTimeout: TimeInterval?
 
     public init(name: String, notificationType: String? = nil, agentID: String? = nil, agentType: String? = nil,
-                runningBackgroundTasks: Int? = nil) {
+                runningBackgroundTasks: Int? = nil, toolTimeout: TimeInterval? = nil) {
         self.name = name
         self.notificationType = notificationType
         self.agentID = agentID
         self.agentType = agentType
         self.runningBackgroundTasks = runningBackgroundTasks
+        self.toolTimeout = toolTimeout
     }
 }
 
@@ -51,9 +56,21 @@ public enum HookPolicy {
     /// How long a lease outlives `Stop`, for background shells and quick follow-ups.
     public static let stopGrace: TimeInterval = 120
 
+    /// The most a single tool call can hold the Mac awake past its own start.
+    public static let maxToolHold: TimeInterval = 4 * 3600
+    /// Slack past a tool call's timeout, so it can finish and report before the lease lapses.
+    private static let toolSlack: TimeInterval = 60
+
     private static let renewEvents: Set<String> = [
         "PreToolUse", "PostToolUse", "PostToolBatch", "SubagentStart", "SubagentStop", "PreCompact"
     ]
+
+    /// How long a `PreToolUse` lease must last for a call that may outrun the usual renewal, or nil when 15 minutes do.
+    /// Nothing fires until `PostToolUse`, so a long Bash command needs its own timeout (plus slack) as the lease.
+    private static func toolHold(_ hook: HookEvent) -> TimeInterval? {
+        guard hook.name == "PreToolUse", let timeout = hook.toolTimeout else { return nil }
+        return min(max(activeTTL, timeout + toolSlack), maxToolHold)
+    }
 
     public static func action(_ hook: HookEvent, settings: AwakeSettings, leaseExists: Bool) -> HookAction {
         if settings.agentKeepAwake == .explicit { return .skipped }
@@ -62,7 +79,7 @@ public enum HookPolicy {
         let renewOrAcquire: HookAction = leaseExists ? .renew : .acquire
         switch hook.name {
         case _ where renewEvents.contains(hook.name):
-            return renewOrAcquire
+            return toolHold(hook).map(HookAction.renewFor) ?? renewOrAcquire
         case "UserPromptSubmit":
             return .acquire
         case "PermissionRequest":

@@ -69,9 +69,11 @@ public struct HookArgs: Codable, Sendable, Equatable {
     /// The number of `background_tasks` entries whose status is `running`.
     public var runningBackgroundTasks: Int?
     public var watchPid: Int32?
+    /// For `PreToolUse` of a Bash command: its `timeout` in seconds.
+    public var toolTimeout: Double?
 
     public init(event: String, sessionId: String, cwd: String?, notificationType: String?, agentID: String?, agentType: String?,
-                runningBackgroundTasks: Int?, watchPid: Int32?) {
+                runningBackgroundTasks: Int?, watchPid: Int32?, toolTimeout: Double? = nil) {
         self.event = event
         self.sessionId = sessionId
         self.cwd = cwd
@@ -80,6 +82,7 @@ public struct HookArgs: Codable, Sendable, Equatable {
         self.agentType = agentType
         self.runningBackgroundTasks = runningBackgroundTasks
         self.watchPid = watchPid
+        self.toolTimeout = toolTimeout
     }
 }
 

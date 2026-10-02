@@ -78,6 +78,31 @@ func everyFixtureSendsOneHookRequest(name: String) async throws {
     #expect(try hookArgs(internalAgent).agentType?.isEmpty ?? true)
 }
 
+@Test func preToolUseForwardsBashTimeout() async throws {
+    let payload = Data(
+        #"{"session_id":"s","cwd":"/p","tool_name":"Bash","tool_input":{"command":"sleep 1200","timeout":1200000}}"#.utf8)
+    let bash = Harness(table: claudeTable, input: payload)
+    _ = await bash.run(["hook", "PreToolUse"])
+    #expect(try hookArgs(bash).toolTimeout == 1200)
+
+    // No timeout, another tool, another event or a bad value forwards nothing.
+    let cases: [(String, String)] = [
+        ("PreToolUse", #"{"session_id":"s","tool_name":"Bash","tool_input":{"command":"ls"}}"#),
+        ("PreToolUse", #"{"session_id":"s","tool_name":"mcp__x__y","tool_input":{"timeout":1200000}}"#),
+        ("PostToolUse", #"{"session_id":"s","tool_name":"Bash","tool_input":{"timeout":1200000}}"#),
+        ("PreToolUse", #"{"session_id":"s","tool_name":"Bash","tool_input":{"timeout":"soon"}}"#),
+        ("PreToolUse", #"{"session_id":"s","tool_name":"Bash","tool_input":{"timeout":-5}}"#)
+    ]
+    for (event, json) in cases {
+        let harness = Harness(table: claudeTable, input: Data(json.utf8))
+        _ = await harness.run(["hook", event])
+        #expect(try hookArgs(harness).toolTimeout == nil, "\(event) \(json)")
+    }
+    let plain = Harness(table: claudeTable, input: try fixture("PreToolUse"))
+    _ = await plain.run(["hook", "PreToolUse"])
+    #expect(try hookArgs(plain).toolTimeout == nil)
+}
+
 @Test func runningBackgroundTasksAreCounted() async throws {
     let withTask = Harness(table: claudeTable, input: try fixture("Stop-withBackgroundTask"))
     _ = await withTask.run(["hook", "Stop"])

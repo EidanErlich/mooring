@@ -56,7 +56,16 @@ struct HookCommand: ParsableCommand, CLICommand {
             notificationType: object["notification_type"] as? String,
             agentID: object["agent_id"] as? String, agentType: object["agent_type"] as? String,
             runningBackgroundTasks: running,
-            watchPid: ProcessTree.autoWatch(from: env.parentPID, in: env.processes)?.pid
+            watchPid: ProcessTree.autoWatch(from: env.parentPID, in: env.processes)?.pid,
+            toolTimeout: bashTimeout(event: event, object)
         )
+    }
+
+    /// A Bash command's `tool_input.timeout` (milliseconds in the payload) in seconds, for `PreToolUse` only.
+    private static func bashTimeout(event: String, _ object: [String: Any]) -> Double? {
+        guard event == "PreToolUse", object["tool_name"] as? String == "Bash",
+              let milliseconds = (object["tool_input"] as? [String: Any])?["timeout"] as? Double, milliseconds > 0
+        else { return nil }
+        return milliseconds / 1000
     }
 }
