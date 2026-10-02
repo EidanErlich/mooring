@@ -146,7 +146,8 @@ struct CommandRunner {
             if options.json {
                 printJSON(result)
             } else {
-                env.write(CLIText.human(result, for: request.args, now: env.now()) + trailingNewline(for: result))
+                let text = CLIText.human(result, for: request.args, now: env.now(), processes: env.processes)
+                env.write(text + trailingNewline(for: result))
             }
             return 0
         }

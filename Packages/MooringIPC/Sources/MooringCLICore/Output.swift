@@ -42,9 +42,10 @@ enum CLIText {
     }
 
     /// The success line for a request's result.
-    static func human(_ result: ResponseResult, for args: RequestArgs, now: Date) -> String {
+    static func human(_ result: ResponseResult, for args: RequestArgs, now: Date, processes: any ProcessTable) -> String {
         switch (result, args) {
-        case (.acquire(let acquired), .acquire(let request)): acquire(acquired, kind: request.kind, now: now)
+        case (.acquire(let acquired), .acquire(let request)):
+            acquire(acquired, kind: request.kind, now: now, processes: processes)
         case (.renew(let lease), _): "Renewed \(lease.id) · \(timeText(lease, now: now))"
         case (.release(let released), .release(let request)): release(released, request: request)
         case (.status(let status), _): StatusText.human(status, now: now)
@@ -52,9 +53,9 @@ enum CLIText {
         }
     }
 
-    private static func acquire(_ result: AcquireResult, kind: AcquireKind, now: Date) -> String {
+    private static func acquire(_ result: AcquireResult, kind: AcquireKind, now: Date, processes: any ProcessTable) -> String {
         let lease = result.lease
-        let time = timeText(lease, now: now)
+        let time = acquireTimeText(lease, now: now, processes: processes)
         var line = switch kind {
         case .on: "On · \(time)"
         case .anchor: "Anchored \(lease.id) · \(time)"
@@ -68,6 +69,16 @@ enum CLIText {
             line += " (capped at \(remaining(expiry.timeIntervalSince(now))))"
         }
         return line
+    }
+
+    /// `timeText`, but a watched process is named: "while Claude Code (80) runs · 4h cap", or "while process 80 runs"
+    /// when the process is already gone.
+    private static func acquireTimeText(_ lease: LeaseInfo, now: Date, processes: any ProcessTable) -> String {
+        guard let pid = lease.watchPid else { return timeText(lease, now: now) }
+        let who = processes.entry(pid).map { "\(ProcessTree.agentName(for: $0.name)) (\(pid))" } ?? "process \(pid)"
+        let watching = "while \(who) runs"
+        guard let expiry = lease.expiresAt else { return watching }
+        return "\(watching) · \(remaining(expiry.timeIntervalSince(now))) cap"
     }
 
     private static func release(_ result: ReleaseResult, request: ReleaseArgs) -> String {
