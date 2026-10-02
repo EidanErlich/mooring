@@ -365,7 +365,7 @@ Pressing Esc to interrupt fires no `Stop`, so an interrupted turn keeps its leas
 - Hooks never launch the app, and if `mooring` isn't installed the script is a no-op.
 - Hook events and fields change over time; `mooring doctor` flags (without failing) its "Claude Code version" check when `claude --version` reports a different major.minor than the plugin was tested with.
 
-Sketch of `hooks/hooks.json` (every event has the same shape; the real file lists all eleven):
+Sketch of `hooks/hooks.json` (every event has the same shape; the real file lists all twelve):
 
 ```json
 {
