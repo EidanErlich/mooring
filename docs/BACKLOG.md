@@ -3,6 +3,7 @@
 Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
 ## Claude Code plugin (2b leftovers)
+- **Sessions without a project folder all read "Claude Code · session".** Sessions whose `cwd` is `/` or missing (for example Claude sessions started outside any project) get the same label, so several look identical in the menu and `mooring status`. Show something that tells them apart, e.g. the session's start time ("Claude Code · session 14:32") or a short id ("Claude Code · session 1a2b").
 - A short tool event (e.g. a parallel `Read`) resets the expiry to 15 min, which can cut short the longer hold a long Bash command set; renew should never shorten a hold set by `PreToolUse` with a timeout.
 - A failing `claude` step with empty stderr (e.g. a runner timeout) shows a blank red line on the Agents page; say "timed out" or the exit status instead.
 
