@@ -9,6 +9,8 @@ public enum ClaudeCode {
     public static let appPluginID = "mooring@mooring-app"
     /// The plugin installed from the GitHub marketplace.
     public static let repoPluginID = "mooring@mooring"
+    /// The marketplace the app registers for its bundled copy of the plugin.
+    public static let appMarketplaceName = "mooring-app"
 
     public struct InstalledPlugin: Equatable, Sendable {
         public var id: String
@@ -48,6 +50,12 @@ public enum ClaudeCode {
             return InstalledPlugin(id: id, version: object["version"] as? String, enabled: object["enabled"] as? Bool ?? true,
                                    installPath: object["installPath"] as? String)
         }
+    }
+
+    /// The names in `claude plugin marketplace list --json`, ignoring fields it doesn't know. nil when it isn't a JSON array.
+    public static func parseMarketplaceNames(_ json: Data) -> [String]? {
+        guard let items = (try? JSONSerialization.jsonObject(with: json)) as? [Any] else { return nil }
+        return items.compactMap { ($0 as? [String: Any])?["name"] as? String }
     }
 
     /// Mooring's plugin among the installed ones, preferring the copy installed from the app.

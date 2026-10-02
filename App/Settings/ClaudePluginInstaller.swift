@@ -154,9 +154,16 @@ enum ClaudePluginInstaller {
         return ClaudeCode.mooringPlugin(in: plugins).map { !$0.enabled } ?? false
     }
 
-    static func installCommands(claude: String, bundlePlugin: String) -> [[String]] {
-        [[claude, "plugin", "marketplace", "add", bundlePlugin, "-y"],
-         [claude, "plugin", "install", ClaudeCode.appPluginID, "-y"]]
+    /// Registers the bundled marketplace, or refreshes it when it is already registered (`add` refuses a known name).
+    static func marketplaceCommand(claude: String, bundlePlugin: String, registered: Bool) -> [String] {
+        registered
+            ? [claude, "plugin", "marketplace", "update", ClaudeCode.appMarketplaceName]
+            : [claude, "plugin", "marketplace", "add", bundlePlugin]
+    }
+
+    /// Installs the plugin, or updates it when it is already installed from the app's marketplace.
+    static func pluginCommand(claude: String, installed: Bool) -> [String] {
+        [claude, "plugin", installed ? "update" : "install", ClaudeCode.appPluginID, "-y"]
     }
 
     /// The login shell's `claude` first (it sees the user's PATH), then the usual install locations.
@@ -178,7 +185,7 @@ enum ClaudePluginInstaller {
     }
 
     /// Links `mooring` onto the PATH first (an installed plugin runs from Claude's cache, so its hook finds `mooring` there),
-    /// then runs both commands, stopping at the first failure.
+    /// then registers or refreshes the marketplace and installs or updates the plugin, stopping at the first failure.
     static func install(claude: String, bundlePlugin: String, runner: ToolRunning,
                         ensureCLI: () throws -> Void) -> Result<Void, InstallError> {
         do {
@@ -186,13 +193,22 @@ enum ClaudePluginInstaller {
         } catch {
             return .failure(.cli(error.localizedDescription))
         }
-        for argv in installCommands(claude: claude, bundlePlugin: bundlePlugin) {
+        func run(_ argv: [String]) -> Result<Data, InstallError> {
             let result = runner.run(argv)
-            if result.status != 0 {
+            guard result.status == 0 else {
                 return .failure(.command(String(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))))
             }
+            return .success(result.stdout)
         }
-        return .success(())
+        let marketplaces = run([claude, "plugin", "marketplace", "list", "--json"])
+        guard case .success(let marketplaceJSON) = marketplaces else { return marketplaces.map { _ in () } }
+        let registered = ClaudeCode.parseMarketplaceNames(marketplaceJSON)?.contains(ClaudeCode.appMarketplaceName) ?? false
+        let marketplace = run(marketplaceCommand(claude: claude, bundlePlugin: bundlePlugin, registered: registered))
+        guard case .success = marketplace else { return marketplace.map { _ in () } }
+        let plugins = run([claude, "plugin", "list", "--json"])
+        guard case .success(let pluginJSON) = plugins else { return plugins.map { _ in () } }
+        let installed = ClaudeCode.parsePluginList(pluginJSON)?.contains { $0.id == ClaudeCode.appPluginID } ?? false
+        return run(pluginCommand(claude: claude, installed: installed)).map { _ in () }
     }
 
     /// Links `mooring` into `~/.local/bin` when that isn't already done.

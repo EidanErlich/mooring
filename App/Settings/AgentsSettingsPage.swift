@@ -9,6 +9,7 @@ struct AgentsSettingsPage: View {
     @State private var disabled = false
     @State private var installing = false
     @State private var error: String?
+    @State private var updated = false
 
     let appVersion: String
     let bundlePlugin: String
@@ -36,6 +37,9 @@ struct AgentsSettingsPage: View {
                 }
                 if let error {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                }
+                if updated {
+                    Text("Restart Claude Code sessions to use the new version.").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("Keeps your Mac awake while Claude Code works. Installs Mooring's plugin into Claude Code.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -78,6 +82,8 @@ struct AgentsSettingsPage: View {
     private func install() {
         installing = true
         error = nil
+        updated = false
+        let wasUpdate = { if case .needsUpdate = status { return true } else { return false } }()
         let (bundlePlugin, runner) = (bundlePlugin, runner)
         Task {
             let result = await Task.detached { () -> Result<Void, ClaudePluginInstaller.InstallError> in
@@ -85,7 +91,10 @@ struct AgentsSettingsPage: View {
                 return ClaudePluginInstaller.install(claude: claude, bundlePlugin: bundlePlugin, runner: runner,
                                                      ensureCLI: ClaudePluginInstaller.ensureCLILinked)
             }.value
-            if case .failure(let failure) = result { error = failure.message }
+            switch result {
+            case .failure(let failure): error = failure.message
+            case .success: updated = wasUpdate
+            }
             await refresh()
             installing = false
         }

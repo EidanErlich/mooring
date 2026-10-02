@@ -56,3 +56,12 @@ private let listJSON = Data("""
     #expect(ClaudeCode.repoPluginID == "mooring@mooring")
     #expect(ClaudeCode.candidatePaths == ["~/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"])
 }
+
+@Test func parsesMarketplaceNames() {
+    let json = #"[{"name":"mooring-app","source":"directory","path":"/x"},{"name":"claude-plugins-official","source":"github"}]"#
+    #expect(ClaudeCode.parseMarketplaceNames(Data(json.utf8)) == ["mooring-app", "claude-plugins-official"])
+    #expect(ClaudeCode.parseMarketplaceNames(Data("[]".utf8)) == [])
+    #expect(ClaudeCode.parseMarketplaceNames(Data(#"[{"source":"x"},{"name":"a"}]"#.utf8)) == ["a"])
+    #expect(ClaudeCode.parseMarketplaceNames(Data("nope".utf8)) == nil)
+    #expect(ClaudeCode.parseMarketplaceNames(Data()) == nil)
+}

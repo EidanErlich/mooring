@@ -93,11 +93,18 @@ struct ClaudePluginInstallerTests {
         #expect(ClaudePluginInstaller.Status.claudeNotFound.buttonTitle == nil)
     }
 
-    @Test func installCommandLines() {
-        #expect(ClaudePluginInstaller.installCommands(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin") == [
-            ["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin", "-y"],
-            ["/x/claude", "plugin", "install", "mooring@mooring-app", "-y"]
-        ])
+    @Test func marketplaceCommandAddsWhenNotRegisteredAndUpdatesWhenRegistered() {
+        #expect(ClaudePluginInstaller.marketplaceCommand(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: false)
+            == ["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin"])
+        #expect(ClaudePluginInstaller.marketplaceCommand(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", registered: true)
+            == ["/x/claude", "plugin", "marketplace", "update", "mooring-app"])
+    }
+
+    @Test func pluginCommandInstallsWhenAbsentAndUpdatesWhenInstalled() {
+        #expect(ClaudePluginInstaller.pluginCommand(claude: "/x/claude", installed: false)
+            == ["/x/claude", "plugin", "install", "mooring@mooring-app", "-y"])
+        #expect(ClaudePluginInstaller.pluginCommand(claude: "/x/claude", installed: true)
+            == ["/x/claude", "plugin", "update", "mooring@mooring-app", "-y"])
     }
 
     @Test func findClaudePrefersTheLoginShell() {
@@ -122,38 +129,75 @@ struct ClaudePluginInstallerTests {
         #expect(ClaudePluginInstaller.findClaude(loginShellLookup: { nil }, isExecutable: { _ in false }) == nil)
     }
 
-    @Test func installEnsuresTheCLIFirstThenRunsBothCommands() {
+    private static let marketplaceList = ToolResult(status: 0, stdout: Data(#"[{"name":"mooring-app","source":"directory"}]"#.utf8))
+    private static let otherMarketplaces = ToolResult(status: 0, stdout: Data(#"[{"name":"claude-plugins-official"}]"#.utf8))
+    private static let pluginListWithApp = ToolResult(
+        status: 0, stdout: listJSON([Entry(id: "mooring@mooring-app", version: "0.9", enabled: true)]))
+    private static let pluginListWithout = ToolResult(status: 0, stdout: listJSON([]))
+
+    private func install(_ runner: FakeRunner, ensureCLI: () throws -> Void = {}) -> Result<Void, ClaudePluginInstaller.InstallError> {
+        ClaudePluginInstaller.install(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", runner: runner, ensureCLI: ensureCLI)
+    }
+
+    @Test func firstInstallListsThenAddsAndInstalls() {
+        let runner = FakeRunner([Self.otherMarketplaces, ToolResult(status: 0), Self.pluginListWithout, ToolResult(status: 0)])
         var order: [String] = []
-        let runner = FakeRunner([ToolResult(status: 0), ToolResult(status: 0)])
-        let result = ClaudePluginInstaller.install(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", runner: runner,
-                                                   ensureCLI: { order.append("cli"); if !runner.calls.isEmpty { order.append("late") } })
+        let result = install(runner, ensureCLI: { order.append("cli"); if !runner.calls.isEmpty { order.append("late") } })
         #expect(throws: Never.self) { try result.get() }
         #expect(order == ["cli"])
-        #expect(runner.calls == ClaudePluginInstaller.installCommands(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin"))
+        #expect(runner.calls == [
+            ["/x/claude", "plugin", "marketplace", "list", "--json"],
+            ["/x/claude", "plugin", "marketplace", "add", "/App/ClaudePlugin"],
+            ["/x/claude", "plugin", "list", "--json"],
+            ["/x/claude", "plugin", "install", "mooring@mooring-app", "-y"]
+        ])
+    }
+
+    @Test func updateRefreshesTheMarketplaceThenUpdatesThePlugin() {
+        let runner = FakeRunner([Self.marketplaceList, ToolResult(status: 0), Self.pluginListWithApp, ToolResult(status: 0)])
+        let result = install(runner)
+        #expect(throws: Never.self) { try result.get() }
+        #expect(runner.calls == [
+            ["/x/claude", "plugin", "marketplace", "list", "--json"],
+            ["/x/claude", "plugin", "marketplace", "update", "mooring-app"],
+            ["/x/claude", "plugin", "list", "--json"],
+            ["/x/claude", "plugin", "update", "mooring@mooring-app", "-y"]
+        ])
+    }
+
+    @Test func registeredMarketplaceWithoutThePluginInstalls() {
+        let runner = FakeRunner([Self.marketplaceList, ToolResult(status: 0), Self.pluginListWithout, ToolResult(status: 0)])
+        _ = install(runner)
+        #expect(runner.calls[1] == ["/x/claude", "plugin", "marketplace", "update", "mooring-app"])
+        #expect(runner.calls[3] == ["/x/claude", "plugin", "install", "mooring@mooring-app", "-y"])
     }
 
     @Test func installStopsIfTheCLILinkFails() {
         let runner = FakeRunner([])
-        let result = ClaudePluginInstaller.install(claude: "/x/claude", bundlePlugin: "/p", runner: runner,
-                                                   ensureCLI: { throw CLIInstallerError.notALink })
+        let result = install(runner, ensureCLI: { throw CLIInstallerError.notALink })
         #expect(failure(result) == .cli(CLIInstallerError.notALink.errorDescription ?? ""))
         #expect(runner.calls.isEmpty)
     }
 
     @Test func installStopsAtTheFirstFailureAndTrimsStderr() {
         let long = String(repeating: "x", count: 500)
-        let runner = FakeRunner([ToolResult(status: 1, stderr: "  \(long)\n"), ToolResult(status: 0)])
-        let result = ClaudePluginInstaller.install(claude: "/x/claude", bundlePlugin: "/p", runner: runner, ensureCLI: {})
-        let error = failure(result)
-        #expect(runner.calls.count == 1)
+        let runner = FakeRunner([Self.otherMarketplaces, ToolResult(status: 1, stderr: "  \(long)\n"), Self.pluginListWithout])
+        let error = failure(install(runner))
+        #expect(runner.calls.count == 2)
         #expect((error?.message.count ?? 999) <= 300)
         #expect(error?.message.hasPrefix("xxx") == true)
     }
 
-    @Test func installFailureOnTheSecondCommand() {
-        let runner = FakeRunner([ToolResult(status: 0), ToolResult(status: 2, stderr: "no such plugin\n")])
-        let result = ClaudePluginInstaller.install(claude: "/x/claude", bundlePlugin: "/p", runner: runner, ensureCLI: {})
-        #expect(failure(result) == .command("no such plugin"))
-        #expect(runner.calls.count == 2)
+    @Test func installStopsWhenAListFails() {
+        let runner = FakeRunner([ToolResult(status: 1, stderr: "boom\n")])
+        #expect(failure(install(runner)) == .command("boom"))
+        #expect(runner.calls.count == 1)
+    }
+
+    @Test func installFailureOnTheLastCommand() {
+        let runner = FakeRunner([Self.marketplaceList, ToolResult(status: 0), Self.pluginListWithout,
+                                 ToolResult(status: 2, stderr: "no such plugin\n")])
+        #expect(failure(install(runner)) == .command("no such plugin"))
+        #expect(runner.calls.count == 4)
     }
 }
