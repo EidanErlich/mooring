@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import MooringCLICore
+import MooringIPC
 
 /// The absolute, symlink-free path of this executable, for doctor's PATH check.
 func ownExecutablePath() -> String {

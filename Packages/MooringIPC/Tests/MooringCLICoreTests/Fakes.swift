@@ -114,7 +114,8 @@ func leaseInfo(
     id: String = "job", owner: OwnerInfo = OwnerInfo(kind: "agent", name: "Claude Code"), reason: String = "tests",
     level: String = "system", expiresAt: Date? = nil, watchPid: Int32? = nil, ttl: Double? = nil
 ) -> LeaseInfo {
-    LeaseInfo(id: id, owner: owner, reason: reason, level: level, expiresAt: expiresAt, watchPid: watchPid, ttl: ttl)
+    LeaseInfo(id: id, owner: owner, reason: reason, level: level, expiresAt: expiresAt, watchPid: watchPid, ttl: ttl,
+              pendingApproval: false)
 }
 
 func acquired(_ lease: LeaseInfo, clamped: Bool = false) -> Response {

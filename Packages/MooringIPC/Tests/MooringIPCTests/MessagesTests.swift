@@ -8,7 +8,7 @@ private func object(_ line: Data) throws -> [String: Any] {
 
 private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_000_000)) -> LeaseInfo {
     LeaseInfo(id: "job", owner: OwnerInfo(kind: "cli", name: "Claude Code"), reason: "Churn", level: "display",
-              expiresAt: expiresAt, watchPid: 4121, ttl: 900)
+              expiresAt: expiresAt, watchPid: 4121, ttl: 900, pendingApproval: false)
 }
 
 @Test func acquireRequestMatchesTheSpecShape() throws {
@@ -118,7 +118,8 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
         systemAssertion: true,
         displayAssertion: true, lidSleepDisabled: false, helperSleepDisabled: nil, wantsLid: false,
         leases: [sampleLease(), sampleLease(expiresAt: nil)], power: PowerInfo(onAC: false, batteryPercent: nil),
-        thermal: "nominal", lidClosed: nil, helper: "notRegistered", suspensions: ["battery"])
+        thermal: "nominal", lidClosed: nil, helper: "notRegistered", suspensions: ["battery"],
+        notifications: nil, agentLidApproval: nil)
     let response = Response.success(id: "st", .status(status))
     let line = try WireCoding.encodeLine(response)
     let text = try #require(String(bytes: line, encoding: .utf8))
@@ -140,4 +141,34 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
     #expect(throws: (any Error).self) { try WireCoding.decodeResponse(missingResult, op: .status) }
     let missingError = Data(#"{"v":1,"id":"x","ok":false}"#.utf8)
     #expect(throws: (any Error).self) { try WireCoding.decodeResponse(missingError, op: .status) }
+}
+
+@Test func pendingApprovalDecodesFalseWhenAbsent() throws {
+    let old = Data(#"{"id":"job","owner":{"kind":"cli","name":"Terminal"},"reason":"x","level":"lid","expiresAt":null}"#.utf8)
+    let decoded = try JSONDecoder().decode(LeaseInfo.self, from: old)
+    #expect(!decoded.pendingApproval)
+    var pending = sampleLease()
+    pending.pendingApproval = true
+    let line = try WireCoding.encodeLine(Response.success(id: "p", .renew(pending)))
+    let result = try #require(try object(line)["result"] as? [String: Any])
+    #expect(result["pendingApproval"] as? Bool == true)
+    #expect((try object(try WireCoding.encodeLine(Response.success(id: "q", .renew(sampleLease()))))["result"]
+        as? [String: Any])?["pendingApproval"] as? Bool == false)
+    #expect(try WireCoding.decodeResponse(line, op: .renew) == Response.success(id: "p", .renew(pending)))
+}
+
+@Test func statusLidFieldsRoundTrip() throws {
+    var status = StatusResult(summary: "Off", effective: LevelInfo(system: false, display: false, lid: false),
+        systemAssertion: false, displayAssertion: false, lidSleepDisabled: false, helperSleepDisabled: false, wantsLid: false,
+        leases: [], power: PowerInfo(onAC: true, batteryPercent: nil), thermal: "nominal", lidClosed: false,
+        helper: "enabled", suspensions: [], notifications: nil, agentLidApproval: nil)
+    let bare = try object(WireCoding.encodeLine(Response.success(id: "a", .status(status))))["result"] as? [String: Any]
+    #expect(bare?["notifications"] == nil && bare?["agentLidApproval"] == nil)
+    status.notifications = "granted"
+    status.agentLidApproval = "ask"
+    let response = Response.success(id: "b", .status(status))
+    let line = try WireCoding.encodeLine(response)
+    let result = try #require(try object(line)["result"] as? [String: Any])
+    #expect(result["notifications"] as? String == "granted" && result["agentLidApproval"] as? String == "ask")
+    #expect(try WireCoding.decodeResponse(line, op: .status) == response)
 }

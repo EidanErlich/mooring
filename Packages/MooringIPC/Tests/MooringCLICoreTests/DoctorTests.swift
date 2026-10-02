@@ -8,7 +8,8 @@ private func doctorStatus(helper: String = "enabled", helperSleepDisabled: Bool?
         summary: "On · 1h left", effective: LevelInfo(system: true, display: false, lid: lidSleepDisabled),
         systemAssertion: true, displayAssertion: false, lidSleepDisabled: lidSleepDisabled,
         helperSleepDisabled: helperSleepDisabled, wantsLid: lidSleepDisabled, leases: [],
-        power: PowerInfo(onAC: true, batteryPercent: 90), thermal: "nominal", lidClosed: false, helper: helper, suspensions: []
+        power: PowerInfo(onAC: true, batteryPercent: 90), thermal: "nominal", lidClosed: false, helper: helper, suspensions: [],
+        notifications: nil, agentLidApproval: nil
     )
 }
 

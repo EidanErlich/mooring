@@ -1,4 +1,5 @@
 import Darwin
+import MooringIPC
 import Testing
 @testable import MooringCLICore
 

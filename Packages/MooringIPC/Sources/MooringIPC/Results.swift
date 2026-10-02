@@ -20,8 +20,11 @@ public struct LeaseInfo: Codable, Sendable, Equatable {
     public var expiresAt: Date?
     public var watchPid: Int32?
     public var ttl: Double?
+    /// True while the lease waits for a lid-mode approval. Absent on the wire from older apps, so it decodes to false.
+    public var pendingApproval: Bool
 
-    public init(id: String, owner: OwnerInfo, reason: String, level: String, expiresAt: Date?, watchPid: Int32?, ttl: Double?) {
+    public init(id: String, owner: OwnerInfo, reason: String, level: String, expiresAt: Date?, watchPid: Int32?, ttl: Double?,
+                pendingApproval: Bool) {
         self.id = id
         self.owner = owner
         self.reason = reason
@@ -29,6 +32,21 @@ public struct LeaseInfo: Codable, Sendable, Equatable {
         self.expiresAt = expiresAt
         self.watchPid = watchPid
         self.ttl = ttl
+        self.pendingApproval = pendingApproval
+    }
+
+    enum CodingKeys: String, CodingKey { case id, owner, reason, level, expiresAt, watchPid, ttl, pendingApproval }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        owner = try container.decode(OwnerInfo.self, forKey: .owner)
+        reason = try container.decode(String.self, forKey: .reason)
+        level = try container.decode(String.self, forKey: .level)
+        expiresAt = try container.decode(Date?.self, forKey: .expiresAt)
+        watchPid = try container.decodeIfPresent(Int32.self, forKey: .watchPid)
+        ttl = try container.decodeIfPresent(Double.self, forKey: .ttl)
+        pendingApproval = try container.decodeIfPresent(Bool.self, forKey: .pendingApproval) ?? false
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -40,6 +58,7 @@ public struct LeaseInfo: Codable, Sendable, Equatable {
         try container.encode(expiresAt, forKey: .expiresAt)
         try container.encodeIfPresent(watchPid, forKey: .watchPid)
         try container.encodeIfPresent(ttl, forKey: .ttl)
+        try container.encode(pendingApproval, forKey: .pendingApproval)
     }
 }
 
@@ -116,10 +135,14 @@ public struct StatusResult: Codable, Sendable, Equatable {
     public var lidClosed: Bool?
     public var helper: String
     public var suspensions: [String]
+    /// The notification permission as the app sees it: `granted`, `denied` or `unknown`. Absent from older apps.
+    public var notifications: String?
+    /// The agent lid-mode setting: `ask`, `always` or `never`. Absent from older apps.
+    public var agentLidApproval: String?
 
     public init(summary: String, effective: LevelInfo, systemAssertion: Bool, displayAssertion: Bool, lidSleepDisabled: Bool,
                 helperSleepDisabled: Bool?, wantsLid: Bool, leases: [LeaseInfo], power: PowerInfo, thermal: String,
-                lidClosed: Bool?, helper: String, suspensions: [String]) {
+                lidClosed: Bool?, helper: String, suspensions: [String], notifications: String?, agentLidApproval: String?) {
         self.summary = summary
         self.effective = effective
         self.systemAssertion = systemAssertion
@@ -133,6 +156,8 @@ public struct StatusResult: Codable, Sendable, Equatable {
         self.lidClosed = lidClosed
         self.helper = helper
         self.suspensions = suspensions
+        self.notifications = notifications
+        self.agentLidApproval = agentLidApproval
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -150,6 +175,8 @@ public struct StatusResult: Codable, Sendable, Equatable {
         try container.encode(lidClosed, forKey: .lidClosed)
         try container.encode(helper, forKey: .helper)
         try container.encode(suspensions, forKey: .suspensions)
+        try container.encodeIfPresent(notifications, forKey: .notifications)
+        try container.encodeIfPresent(agentLidApproval, forKey: .agentLidApproval)
     }
 }
 

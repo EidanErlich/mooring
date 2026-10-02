@@ -101,6 +101,8 @@ targets:
     dependencies:
       - package: MooringIPC
         product: MooringCLICore
+      - package: MooringIPC
+        product: MooringIPC
     settings:
       base:
         PRODUCT_NAME: mooring

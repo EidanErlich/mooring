@@ -10,7 +10,8 @@ private func status(
     StatusResult(
         summary: "On · lid mode · 1h 12m left", effective: LevelInfo(system: true, display: false, lid: false),
         systemAssertion: true, displayAssertion: false, lidSleepDisabled: false, helperSleepDisabled: nil, wantsLid: true,
-        leases: leases, power: power, thermal: "nominal", lidClosed: lidClosed, helper: "enabled", suspensions: suspensions
+        leases: leases, power: power, thermal: "nominal", lidClosed: lidClosed, helper: "enabled", suspensions: suspensions,
+        notifications: nil, agentLidApproval: nil
     )
 }
 

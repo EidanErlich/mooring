@@ -21,7 +21,8 @@ extension LeaseInfo {
         self.init(
             id: lease.id, owner: OwnerInfo(kind: kind, name: LeaseText.owner(lease.owner)), reason: lease.reason,
             level: WireText.levelName(display: lease.level.display, lid: lease.level.lid),
-            expiresAt: lease.expiresAt, watchPid: lease.watch?.pid, ttl: lease.ttl
+            expiresAt: lease.expiresAt, watchPid: lease.watch?.pid, ttl: lease.ttl,
+            pendingApproval: false
         )
     }
 }
@@ -278,7 +279,8 @@ final class RequestHandler {
             wantsLid: engine.wantsLid, leases: live.map(LeaseInfo.init),
             power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
             thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
-            suspensions: state.suspensions.map { String(describing: $0) }.sorted()
+            suspensions: state.suspensions.map { String(describing: $0) }.sorted(),
+            notifications: nil, agentLidApproval: nil
         )
     }
 
