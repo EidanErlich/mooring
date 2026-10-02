@@ -43,6 +43,8 @@ final class RequestHandler {
     /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied: it isn't asked
     /// again in that lifetime (stage 2c-1 spec).
     var deniedLid: [String: Date] = [:]
+    /// Leases with an ask under way, from before its first suspension until it's answered: at most one ask per lease.
+    var asking: Set<String> = []
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
     /// The id `mooring on` used before it became the menu's On switch.
     private static let legacyCLILeaseID = "cli"
@@ -148,6 +150,8 @@ final class RequestHandler {
         let step = request.map(lidStep) ?? .grant
         let lease = try grant(args, plan: step == .grant ? plan : plan.withoutLid()).lease
         if case .ask(let agent) = step {
+            // Marked now, not when the task starts, so the session's next hook event isn't asked again.
+            asking.insert(lease.id)
             Task { @MainActor in _ = try? await self.ask(agent, about: lease) }
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
@@ -157,7 +161,10 @@ final class RequestHandler {
 
     /// Named leases always end: the cap bounds them, and an anchor watches its process.
     private func lidRequest(for plan: Plan, agent: String?) -> LidRequest {
-        LidRequest(leaseID: plan.id, agent: agent, hasEnd: true, existing: liveLease(plan.id))
+        let existing = liveLease(plan.id)
+        return LidRequest(
+            leaseID: plan.id, agent: agent, hasEnd: true, existing: existing, existingCovers: existing?.level.lid == true
+        )
     }
 
     /// Creates or updates the lease `plan` describes, merging with a named lease that exists.
@@ -208,9 +215,12 @@ final class RequestHandler {
             let defaults = settings()
             let requested = level ?? engine.sessionLevel ?? defaults.clickLevel
             let duration = ttl ?? defaults.clickDuration
+            let existing = session.flatMap { liveLease($0.id) }
+            // `on` replaces the session, and may drop its end, so only an open-ended lid session already covers it.
+            let covers = existing.map { $0.level.lid && $0.expiresAt == nil && $0.watch == nil } ?? false
             let request = LidRequest(
                 leaseID: AwakeEngine.menuLeaseID, agent: agent(of: caller), hasEnd: duration != nil,
-                existing: session.flatMap { liveLease($0.id) }
+                existing: existing, existingCovers: covers
             )
             lease = try await approvingLid(requested.lid ? request : nil) { withLid in
                 engine.turnOnMenu(duration: duration, level: withLid ? requested : requested.withoutLid)
@@ -281,6 +291,9 @@ final class RequestHandler {
         return nil
     }
 
+}
+
+extension RequestHandler {
     // MARK: - renew and release
 
     private func renew(_ args: RenewArgs) throws -> LeaseInfo {
@@ -324,9 +337,7 @@ final class RequestHandler {
         }
         return ended
     }
-}
 
-extension RequestHandler {
     // MARK: - status
 
     private func status() async -> StatusResult {
@@ -342,7 +353,7 @@ extension RequestHandler {
             systemAssertion: state.systemAssertion, displayAssertion: state.displayAssertion,
             lidSleepDisabled: state.lidSleepDisabled, helperSleepDisabled: helperSleepDisabled,
             wantsLid: engine.wantsLid,
-            leases: live.map { LeaseInfo($0, pendingApproval: approver.pending.contains($0.id)) },
+            leases: live.map { LeaseInfo($0, pendingApproval: asking.contains($0.id) || approver.pending.contains($0.id)) },
             power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
             thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
             suspensions: state.suspensions.map { String(describing: $0) }.sorted(),

@@ -11,6 +11,8 @@ struct LidRequest {
     let hasEnd: Bool
     /// The live lease the request changes, if there is one.
     let existing: Lease?
+    /// `existing` already has lid mode and ends no later than this request would, so there is nothing to ask.
+    let existingCovers: Bool
 }
 
 /// What to do with an acquire that wants lid mode.
@@ -29,6 +31,7 @@ enum LidMessage {
     static let never = "Lid mode not approved (lid mode for agents is set to Never)"
     static let waiting = "Lid mode not approved (waiting for your answer to an earlier request)"
     static let unavailable = "Turn on notifications for Mooring in System Settings to approve lid mode"
+    static let changed = "Lid mode not approved (the request changed while you were deciding)"
 }
 
 extension AwakeLevel {
@@ -74,37 +77,54 @@ extension RequestHandler {
         case .allow: return .grant
         case .refuse: return .refuse(LidMessage.never)
         case .ask:
-            if request.existing?.level.lid == true { return .grant }
+            if request.existingCovers { return .grant }
             // A denial lasts for that lease's lifetime: one that ended (or was replaced) is asked afresh.
             deniedLid = deniedLid.filter { id, created in liveLease(id)?.createdAt == created }
             if let existing = request.existing, deniedLid[existing.id] == existing.createdAt {
                 return .refuse(LidMessage.denied)
             }
-            if approver.pending.contains(request.leaseID) { return .refuse(LidMessage.waiting) }
+            if asking.contains(request.leaseID) || approver.pending.contains(request.leaseID) {
+                return .refuse(LidMessage.waiting)
+            }
             return .ask(agent)
         }
     }
 
     /// Asks the person whether `agent` may add lid mode to `lease`, then applies the answer: lid on Allow, if the
-    /// lease is still live; otherwise a `denied` error (or `notFound` when the lease ended while waiting).
+    /// lease is still the one they were told about; otherwise a `denied` error (or `notFound` when it ended).
     func ask(_ agent: String, about lease: Lease) async throws -> Lease {
+        // Marked before the first suspension, so a second request for this lease is refused rather than asked again.
+        asking.insert(lease.id)
+        defer { asking.remove(lease.id) }
         let answer = await approver.ask(leaseID: lease.id, agent: agent, body: approvalBody(lease))
+        let current = liveLease(lease.id)
         switch answer {
         case .allowOnce, .alwaysAllow:
             if answer == .alwaysAllow { alwaysAllow(agent) }
-            guard let current = liveLease(lease.id) else {
+            guard let current else {
                 throw WireError(code: .notFound, message: "\(lease.id) ended before lid mode was approved")
             }
+            guard Self.endsAsTold(current, asked: lease) else { throw WireError(code: .denied, message: LidMessage.changed) }
             engine.setLevel(current.level.union(AwakeLevel(display: false, lid: true)), forLease: current.id)
             return liveLease(lease.id) ?? current
         case .deny:
-            if let current = liveLease(lease.id) { deniedLid[current.id] = current.createdAt }
+            if let current, current.createdAt == lease.createdAt { deniedLid[current.id] = current.createdAt }
             throw WireError(code: .denied, message: LidMessage.denied)
         case .timeout:
             throw WireError(code: .denied, message: LidMessage.timeout)
         case .unavailable:
             throw WireError(code: .denied, message: LidMessage.unavailable)
         }
+    }
+
+    /// `current` is the lease the person was asked about, in the same lifetime, and it ends no later than the
+    /// notification said: while the same process runs, or by the expiry shown. "With no end time" can't get weaker.
+    private static func endsAsTold(_ current: Lease, asked: Lease) -> Bool {
+        guard current.createdAt == asked.createdAt else { return false }
+        // The body names the process when there is one, and that is the end the person approved.
+        if let pid = asked.watch?.pid { return current.watch?.pid == pid }
+        guard let expiry = asked.expiresAt else { return true }
+        return current.expiresAt.map { $0 <= expiry } ?? false
     }
 
     /// "<reason> · <with no end time | for 30m | while <process> runs>"; the center adds the agent's name.

@@ -38,23 +38,27 @@ final class FakeLidApprover: LidApproving {
 
     /// The answers to give, in order; `.timeout` once they run out.
     var answers: [LidAnswer] = []
-    /// When true, each ask waits for `resolve(_:with:)`.
+    /// When true, each ask waits for `resolve(_:with:)`, showing as pending meanwhile.
     var holds = false
+    /// When true, each ask waits for `resolve(_:with:)` without ever showing as pending, like the center while it
+    /// awaits notification permission.
+    var holdsBeforePending = false
     var pending: Set<String> = []
     private(set) var calls: [Call] = []
-    private var held: [String: CheckedContinuation<LidAnswer, Never>] = [:]
+    private var held: [String: [CheckedContinuation<LidAnswer, Never>]] = [:]
 
     func ask(leaseID: String, agent: String, body: String) async -> LidAnswer {
         calls.append(Call(leaseID: leaseID, agent: agent, body: body))
-        guard holds else { return answers.isEmpty ? .timeout : answers.removeFirst() }
-        pending.insert(leaseID)
-        let answer = await withCheckedContinuation { held[leaseID] = $0 }
-        pending.remove(leaseID)
+        guard holds || holdsBeforePending else { return answers.isEmpty ? .timeout : answers.removeFirst() }
+        if holds { pending.insert(leaseID) }
+        let answer = await withCheckedContinuation { held[leaseID, default: []].append($0) }
+        if holds { pending.remove(leaseID) }
         return answer
     }
 
+    /// Answers every held ask for `leaseID`.
     func resolve(_ leaseID: String, with answer: LidAnswer) {
-        held.removeValue(forKey: leaseID)?.resume(returning: answer)
+        for continuation in held.removeValue(forKey: leaseID) ?? [] { continuation.resume(returning: answer) }
     }
 
     /// Waits until `count` asks have been made (or about 2 s pass).

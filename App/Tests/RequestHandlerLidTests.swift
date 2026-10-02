@@ -18,9 +18,17 @@ extension RequestFixture {
     }
 }
 
-private let lidOnly = AwakeLevel(display: false, lid: true)
+/// Lid mode without the screen, as `--level lid` asks.
+let lidOnly = AwakeLevel(display: false, lid: true)
 
-private func denied(_ message: String) -> WireError {
+/// A reply that arrives in the background.
+@MainActor
+private final class ReplyBox {
+    var reply: Response?
+}
+
+/// The `denied` reply carrying `message`.
+func denied(_ message: String) -> WireError {
     WireError(code: .denied, message: message)
 }
 
@@ -173,6 +181,27 @@ struct RequestHandlerLidTests {
         #expect(try #require(fixture.lease("menu")).level == lidOnly)
     }
 
+    @Test func secondRequestDuringAuthorizationIsNotAskedAgain() async throws {
+        let fixture = RequestFixture.agent()
+        fixture.approver.holdsBeforePending = true
+
+        let first = Task { await fixture.acquire(.on, level: "lid") }
+        await fixture.approver.waitForCalls(1)
+        // Not awaited directly: a second ask would hold it until the end.
+        let second = ReplyBox()
+        Task { second.reply = await fixture.acquire(.on, level: "lid") }
+        await fixture.waitUntil { second.reply != nil || fixture.approver.calls.count > 1 }
+        let status = await fixture.send(.status)
+
+        #expect(second.reply.flatMap(wireFailure) == denied("Lid mode not approved (waiting for your answer to an earlier request)"))
+        #expect(fixture.approver.calls.count == 1)
+        guard case .status(let info)? = status.result else { Issue.record("no status"); return }
+        #expect(info.leases.first { $0.id == "menu" }?.pendingApproval == true)
+        fixture.approver.resolve("menu", with: .allowOnce)
+        #expect(await first.value.ok)
+        #expect(try #require(fixture.lease("menu")).level == lidOnly)
+    }
+
     @Test func concurrentAsksResolveIndependently() async throws {
         let fixture = RequestFixture.agent()
         fixture.knobs.settings.agentLidApproval = .alwaysAsk
@@ -233,13 +262,13 @@ struct RequestHandlerLidTests {
         fixture.approver.holds = true
 
         let response = await fixture.hook("UserPromptSubmit")
+        // Before the background ask has started: still not asked twice.
+        _ = await fixture.hook("UserPromptSubmit")
 
         #expect(response.ok)
         #expect(try #require(fixture.lease("claude-s1")).level == .system)
-        await fixture.approver.waitForCalls(1)
-        #expect(fixture.approver.calls.first?.agent == "Claude Code")
-        _ = await fixture.hook("UserPromptSubmit")
-        #expect(fixture.approver.calls.count == 1)
+        await fixture.approver.waitForCalls(2)
+        #expect(fixture.approver.calls.map(\.agent) == ["Claude Code"])
 
         fixture.approver.resolve("claude-s1", with: .allowOnce)
         await fixture.waitUntil { fixture.lease("claude-s1")?.level == lidOnly }
