@@ -48,12 +48,17 @@ public struct CLIEnvironment: Sendable {
     public var ownBinaryPath: String
     /// The caller's `PATH`, or nil when it has none.
     public var pathEnv: String?
+    /// Reads at most the given number of bytes from stdin.
+    public var readInput: @Sendable (Int) -> Data
+    /// What `mooring hook` sends through: a quick client that gives up fast.
+    public var hookClient: any RequestSending
 
     public init(
         client: any RequestSending, processes: any ProcessTable, ownPID: Int32, parentPID: Int32,
         write: @escaping @Sendable (String) -> Void, writeError: @escaping @Sendable (String) -> Void,
         newID: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date,
-        ownBinaryPath: String, pathEnv: String?
+        ownBinaryPath: String, pathEnv: String?,
+        readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending
     ) {
         self.client = client
         self.processes = processes
@@ -65,5 +70,7 @@ public struct CLIEnvironment: Sendable {
         self.now = now
         self.ownBinaryPath = ownBinaryPath
         self.pathEnv = pathEnv
+        self.readInput = readInput
+        self.hookClient = hookClient
     }
 }

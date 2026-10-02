@@ -6,6 +6,8 @@ import MooringIPC
 public enum MooringCLI {
     /// Parses `arguments` (without the program name), runs the command and returns the exit status.
     public static func run(_ arguments: [String], environment: CLIEnvironment) async -> Int32 {
+        // `hook` runs inside Claude Code's own hooks, where any output or failure would reach Claude.
+        let isHook = arguments.first == "hook"
         do {
             var parsed = try MooringCommand.parseAsRoot(arguments)
             if let command = parsed as? any CLICommand { return await command.execute(environment) }
@@ -17,6 +19,7 @@ public enum MooringCLI {
                 environment.write(MooringCommand.fullMessage(for: error) + "\n")
                 return 0
             }
+            if isHook { return 0 }
             if wantsJSON(arguments) {
                 environment.write(CLIJSON.errorLine(code: "usage", message: usageMessage(for: error)))
             } else {
@@ -74,7 +77,7 @@ struct MooringCommand: ParsableCommand {
             mooring anchor -- <command>
         """,
         version: "mooring 0.2.0-dev",
-        subcommands: [OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self]
+        subcommands: [OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self]
     )
 }
 

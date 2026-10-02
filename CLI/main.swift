@@ -19,6 +19,19 @@ func writer(to handle: FileHandle) -> @Sendable (String) -> Void {
     { text in handle.write(Data(text.utf8)) }
 }
 
+/// Reads at most `limit` bytes from stdin, stopping early at end of input.
+func readStandardInput(limit: Int) -> Data {
+    var data = Data()
+    var chunk = [UInt8](repeating: 0, count: 65_536)
+    while data.count < limit {
+        let count = read(STDIN_FILENO, &chunk, min(chunk.count, limit - data.count))
+        if count < 0, errno == EINTR { continue }
+        guard count > 0 else { break }
+        data.append(contentsOf: chunk[..<count])
+    }
+    return data
+}
+
 let environment = CLIEnvironment(
     client: SocketClient(path: SocketClient.defaultPath),
     processes: SystemProcessTable(),
@@ -29,7 +42,9 @@ let environment = CLIEnvironment(
     newID: { UUID().uuidString },
     now: { Date() },
     ownBinaryPath: ownExecutablePath(),
-    pathEnv: ProcessInfo.processInfo.environment["PATH"]
+    pathEnv: ProcessInfo.processInfo.environment["PATH"],
+    readInput: readStandardInput(limit:),
+    hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {})
 )
 
 let arguments = Array(CommandLine.arguments.dropFirst())
