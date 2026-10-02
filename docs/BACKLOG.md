@@ -4,21 +4,28 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## Before or during stage 2b (Claude Code plugin)
 
-- **Misleading "isn't running" error.** Every failure after a connection reads "Mooring isn't running and couldn't be started" (exit 3): a reply timeout, a sandbox refusal, the 16-connection cap. Use a distinct "Mooring didn't answer" message. After an `acquire` timeout, the lease may exist anyway.
-- **`--json` usage errors.** Usage errors print nothing on stdout under `--json`, and parse-time versus execute-time usage errors use two formats. Emit `{"ok":false,"error":{"code":"usage",…}}`. The skill will teach `--json`, so fix this first.
-- **Re-acquire replaces a hold.** Re-acquiring an id replaces its TTL, watch and owner wholesale, so a nested `--ttl 10m` turns a watched hold into a 10-minute unwatched one. Consider keeping an existing watch and never shortening the expiry.
 - **Skill guidance for `--watch-pid auto`:**
   - always `release`;
   - call `mooring` directly, not through wrappers, because `timeout`, `xargs`, `make`, `npx` and scripts become the watched process;
   - an npm-installed Claude shows as "node";
   - Claude Code's sandbox may need the socket path allowed.
-- **Human output doesn't name the watched process.**
 
 ## Before stage 2c (approvals)
 
 - **Policy is advisory.** An agent can skip the named-lease limits (4 h cap, no lid) by calling `mooring on --level lid` or `mooring anchor`, because the client picks the request kind. Decide which of these approvals gate.
 
 ## CLI and IPC (stage 2a leftovers)
+
+- **Re-acquire edge cases (from the 2b-prep fixes):**
+  - re-acquiring a lease whose watched process just died fails with "Process N isn't running", even when only `--ttl` was given;
+  - re-acquiring an expired, not-yet-ticked lease silently revives its old watch, level and reason;
+  - a raw wire client can re-acquire a watched lease without `ttl` or `watchPid`, because the merged watch satisfies the policy check (the CLI blocks this);
+  - a pre-`ttl` lease re-acquired with `--ttl 60` gets a 60 s renew length.
+- **Connect failures from a full backlog** (`ECONNREFUSED` or `EAGAIN` at the 16-connection cap) still say "isn't running" rather than "didn't answer".
+- **Small code and test leftovers:**
+  - `Plan.reasonGiven` duplicates the handler's `cleaned(_:)`;
+  - the `blocked` socket test returns early as root instead of using `.enabled(if:)`;
+  - there's no test for `anchor -- cmd --json` keeping anchor's own errors human, or for the ttl after a longer re-acquire.
 
 - **Silent 12 h cap on `on`.** `mooring on --for 24h` caps at 12 h without saying so (`clamped` is always false for `on`). SPEC 1.7 says the clamp is reported. It's a one-line fix in `RequestHandler.turnOn`.
 - **`on` can reply with an expired session.** With no flags, it can reply with a just-expired, not-yet-ticked menu lease, a window of up to 5 s. Filter with `isLive(at:)`.

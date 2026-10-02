@@ -13,14 +13,31 @@ public enum MooringCLI {
             try parsed.run()
             return 0
         } catch {
-            let message = MooringCommand.fullMessage(for: error) + "\n"
             if MooringCommand.exitCode(for: error) == .success {
-                environment.write(message)
+                environment.write(MooringCommand.fullMessage(for: error) + "\n")
                 return 0
             }
-            environment.writeError(message)
+            if wantsJSON(arguments) {
+                environment.write(CLIJSON.errorLine(code: "usage", message: usageMessage(for: error)))
+            } else {
+                environment.writeError(MooringCommand.fullMessage(for: error) + "\n")
+            }
             return 1
         }
+    }
+
+    /// Whether `--json` is among the flags, which end at a `--` that starts an `anchor` command.
+    private static func wantsJSON(_ arguments: [String]) -> Bool {
+        arguments.prefix { $0 != "--" }.contains("--json")
+    }
+
+    /// Just the complaint, without the "Error:" prefix, the usage line or the pointer to --help.
+    private static func usageMessage(for error: any Error) -> String {
+        let message = MooringCommand.message(for: error)
+        if let first = message.split(whereSeparator: \.isNewline).first { return String(first) }
+        let lines = MooringCommand.fullMessage(for: error).split(whereSeparator: \.isNewline)
+        let complaint = lines.prefix { !$0.hasPrefix("Usage:") }.joined(separator: " ")
+        return complaint.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "Error: ", with: "", options: .anchored)
     }
 }
 
@@ -106,21 +123,18 @@ struct CommandRunner {
         do {
             args = try makeArgs()
         } catch CLIError.usage(let message) {
-            env.writeError("mooring: \(message)\n")
-            return 1
+            return usageError(message)
         } catch {
-            env.writeError("mooring: \(error)\n")
-            return 1
+            return usageError("\(error)")
         }
         let request = Request(v: WireProtocol.version, id: env.newID(), op: Self.op(of: args), args: args)
         do {
             let response = try await env.client.send(request, launch: !options.noLaunch)
             return report(response, to: request)
-        } catch CLIError.unreachable {
-            return unreachable()
+        } catch let error as CLIError where error.unavailableMessage != nil {
+            return unavailable(error)
         } catch CLIError.usage(let message) {
-            env.writeError("mooring: \(message)\n")
-            return 1
+            return usageError(message)
         } catch {
             env.writeError("mooring: Couldn't talk to Mooring\n")
             return 4
@@ -132,7 +146,8 @@ struct CommandRunner {
             if options.json {
                 printJSON(result)
             } else {
-                env.write(CLIText.human(result, for: request.args, now: env.now()) + trailingNewline(for: result))
+                let text = CLIText.human(result, for: request.args, now: env.now(), processes: env.processes)
+                env.write(text + trailingNewline(for: result))
             }
             return 0
         }
@@ -145,11 +160,22 @@ struct CommandRunner {
         return WireText.exitCode(for: error.code)
     }
 
-    /// Reports that the app can't be reached, as text or `--json`, and returns exit code 3.
-    func unreachable() -> Int32 {
-        let message = "Mooring isn't running and couldn't be started"
+    /// Reports a usage error, as text on stderr or as a `--json` object on stdout, and returns exit code 1.
+    func usageError(_ message: String) -> Int32 {
         if options.json {
-            env.write(#"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+            env.write(CLIJSON.errorLine(code: "usage", message: message))
+        } else {
+            env.writeError("mooring: \(message)\n")
+        }
+        return 1
+    }
+
+    /// Reports that the app can't be used (`error` is `.unreachable`, `.noAnswer` or `.blocked`), as text or `--json`,
+    /// and returns exit code 3.
+    func unavailable(_ error: CLIError) -> Int32 {
+        let message = error.unavailableMessage ?? CLIError.unreachable.unavailableMessage ?? ""
+        if options.json {
+            env.write(CLIJSON.errorLine(code: "unreachable", message: message))
         } else {
             env.writeError("mooring: \(message)\n")
         }

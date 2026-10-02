@@ -79,17 +79,49 @@ final class RequestHandler {
         let ttl: TimeInterval?
         let watchPID: Int32?
         let caller: CallerKind
+
+        /// This plan for a named lease that already exists, so that acquiring it again never weakens it: it keeps the
+        /// existing watch, level, reason and owner unless the request gives its own (a level only ever adds to the old one).
+        func merged(with existing: Lease, args: AcquireArgs) -> Plan {
+            let ownerGiven = args.agent.map(CallerPolicy.cleanAgentName).map { !$0.isEmpty } ?? false
+            return Plan(
+                id: id, owner: ownerGiven ? owner : existing.owner,
+                reason: reasonGiven(args) ? reason : existing.reason,
+                level: level.union(existing.level), ttl: ttl, watchPID: watchPID ?? existing.watch?.pid, caller: caller
+            )
+        }
+
+        private func reasonGiven(_ args: AcquireArgs) -> Bool {
+            args.reason.map(CallerPolicy.cleanReason).map { !$0.isEmpty } ?? false
+        }
+    }
+
+    /// The duration to grant when a named lease is acquired again: `granted`, unless the lease already runs longer
+    /// (a lease with no expiry keeps none), within the cap on named leases.
+    private static func keepingLater(_ granted: TimeInterval?, of existing: Lease, at current: Date) -> TimeInterval? {
+        guard let expiry = existing.expiresAt else { return nil }
+        let remaining = expiry.timeIntervalSince(current)
+        return granted.map { min(max($0, remaining), CallerPolicy.maxNamedLease) }
     }
 
     private func acquire(_ args: AcquireArgs, from caller: Caller) throws -> MooringIPC.AcquireResult {
-        let plan = try plan(for: args, from: caller)
+        var plan = try plan(for: args, from: caller)
         let current = now()
-        let granted = try grantedDuration(
-            for: plan, liveLeases: engine.leases.filter { $0.isLive(at: current) }.count,
-            exists: engine.leases.contains { $0.id == plan.id }
+        let existing = args.kind == .lease ? engine.leases.first { $0.id == plan.id } : nil
+        if let existing { plan = plan.merged(with: existing, args: args) }
+        let requested = try grantedDuration(
+            for: plan, liveLeases: engine.leases.filter { $0.isLive(at: current) }.count, exists: existing != nil
         )
+        var granted = requested
+        var renewLength = requested
+        if let existing {
+            granted = Self.keepingLater(requested, of: existing, at: current)
+            // The length `renew` reuses is the longest asked for, not the time left, so repeated acquires don't shrink it.
+            renewLength = granted.map { _ in min(max(existing.ttl ?? 0, requested ?? 0), CallerPolicy.maxNamedLease) }
+        }
         guard let outcome = engine.acquire(
-            id: plan.id, owner: plan.owner, reason: plan.reason, level: plan.level, duration: granted, watchPID: plan.watchPID
+            id: plan.id, owner: plan.owner, reason: plan.reason, level: plan.level, duration: granted,
+            watchPID: plan.watchPID, ttl: renewLength
         ) else {
             throw plan.watchPID.map { WireError(code: .badRequest, message: "Process \($0) isn't running") }
                 ?? WireError(code: .internal, message: "Couldn't create the lease")

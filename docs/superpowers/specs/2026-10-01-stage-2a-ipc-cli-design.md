@@ -29,7 +29,7 @@ Everything an agent does for a job runs inside the agent's own process tree: sub
 | One long command, including a background script that outlives the agent's turn | `mooring anchor -- ./run-analysis.sh` | The command exits. `anchor` returns its exit code. |
 
 - **`--watch-pid auto`** resolves the nearest ancestor that isn't a shell. For Claude Code's Bash tool, that is the Claude process.
-- **Repeated acquires:** re-acquiring the same id renews it, so nested steps never end each other's hold. Different ids are separate holds.
+- **Repeated acquires:** re-acquiring the same id renews it without weakening it, so nested steps never end each other's hold (rule under Commands). Different ids are separate holds.
 - **Help text:** `mooring --help` has a short "For agents" section with exactly these two patterns.
 - **2b follow-up:** the Claude plugin's skill teaches these patterns, and its `SessionEnd` hook releases holds created in that session.
 
@@ -77,10 +77,17 @@ Pure and in AwakeKit, applied by the request handler:
 
 Shared behaviour:
 
-- **Reaching the app:** if the socket doesn't answer, the CLI runs `open -gj -b dev.mooring.app` and waits up to 3 s. Otherwise it prints "Mooring isn't running and couldn't be started" and exits 3. `--no-launch` (used by 2b's hooks) skips the launch.
+- **Reaching the app:** if nothing listens on the socket, the CLI runs `open -gj -b dev.mooring.app` and waits up to 3 s. Otherwise it prints "Mooring isn't running and couldn't be started" and exits 3. `--no-launch` (used by 2b's hooks) skips the launch.
+- **Three exit-3 messages:**
+  - "Mooring isn't running and couldn't be started": connect fails with `ENOENT`, `ECONNREFUSED` or `ENOTSOCK` (after the launch and retry), or the path is too long. Any other connect error counts here too.
+  - "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`.": connected, but the write failed, the reply timed out, ended before a newline, was over `maxLineBytes`, or wouldn't decode.
+  - "Can't reach Mooring's socket (permission denied). If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock": connect fails with `EPERM` or `EACCES`; never retried or launched.
+
+  `anchor` treats all three as "not reachable" and doesn't start the command. `doctor` treats all three as no status, with App detail "not running", "didn't answer" or "permission denied".
 - **Waiting for a reply:** 5 s. 2c raises it to 60 s for approvals.
 - **Flag placement:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`).
 - **Output:** human text by default, with errors on stderr as `mooring: <message>`. With `--json`, stdout carries the `result`, or `{"ok":false,"error":{…}}`.
+- **Usage errors under `--json`:** when `--json` is among the arguments, every usage error (ArgumentParser errors, bad durations, levels or pids, and execute-time ones such as "Couldn't find a process to watch") prints exactly one line on stdout, `{"ok":false,"error":{"code":"usage","message":"<message>"}}`, nothing on stderr, and exits 1. For ArgumentParser errors the message is the first line of the error, without the "Usage:" block. `--help` and `--version` are unchanged.
 - **Exit codes:**
   - 0: success;
   - 1: usage error, `bad_request` or `not_found`;
@@ -96,7 +103,7 @@ Shared behaviour:
 | `off` | ends the menu session | Ends the `menu` lease and any picked apps, like a left click while on. Also releases a `cli` lease an earlier build left. Idempotent: prints "Already off" and exits 0 when nothing was on. Never touches agent leases or anchors. |
 | `anchor [--level] [--reason] -- <cmd …>` | `anchor-<childpid>`, watched | Checks the app is reachable first, so it fails fast with 3. The child inherits stdio, the working directory and the environment. INT, TERM and HUP are forwarded to it. Exits with the child's code. Level defaults to `system`, reason to the command line (trimmed). |
 | `anchor --pid <pid>` | `anchor-<pid>`, watched | Returns immediately. Exits 1 if the process isn't running. |
-| `lease acquire <id> (--ttl … \| --watch-pid <pid>\|auto) [--level] [--reason] [--agent]` | `<id>` | Policy above. Re-acquiring renews. |
+| `lease acquire <id> (--ttl … \| --watch-pid <pid>\|auto) [--level] [--reason] [--agent]` | `<id>` | Policy above. Re-acquiring renews and never weakens: the later expiry wins (`max(granted, what the lease has left)`, still within the 4 h cap; a lease with no expiry keeps none), the existing watch is kept unless `--watch-pid` is given, the level is the union of old and new (policy runs on the union, so lid stays denied), `--reason` replaces the reason only when given, and the owner is kept unless `--agent` is given. `lease renew --ttl` stays an explicit reset; `on` and `anchor` are unchanged. A lease or `anchor --pid` acquire with a watch prints `Lease <id> · while <name> (<pid>) runs · <cap> cap` or `Anchored <id> · while <name> (<pid>) runs`, with `process <pid>` when the process can't be found. |
 | `lease renew <id> [--ttl]` | | Reuses the last TTL when `--ttl` is omitted. Exits 1 if the lease is missing. |
 | `lease release <id> [--after 2m]` | | `--after` only ever shortens the expiry. Releasing a lease that is already gone exits 0. |
 | `status [--json]` | | See below. |

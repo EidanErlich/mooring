@@ -301,7 +301,7 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 | `mooring off` | End the menu session (the `menu` lease and any picked apps), like a left click while on. Also ends a `cli` lease an earlier build left. Never touches agent leases or anchors. Idempotent: prints "Already off" and exits 0 when nothing was on |
 | `mooring anchor [--level …] [--reason …] -- <command …>` | Lease tied to the child process; exits with the child's exit code |
 | `mooring anchor --pid <pid> [--level …]` | Lease until that process exits |
-| `mooring lease acquire <id> (--ttl 15m \| --watch-pid <pid>\|auto) [--level …] [--reason …] [--agent "<name>"]` | Named lease; needs `--ttl` or `--watch-pid`; re-acquiring an existing id renews it |
+| `mooring lease acquire <id> (--ttl 15m \| --watch-pid <pid>\|auto) [--level …] [--reason …] [--agent "<name>"]` | Named lease; needs `--ttl` or `--watch-pid`; re-acquiring an existing id renews it without weakening it (see Re-acquiring below) |
 | `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
 | `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
 | `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]` |
@@ -312,6 +312,15 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 - **Flags:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`), not before it. `--no-launch` skips starting the app (the hooks use it).
 - **Durations:** `90s`, `15m`, `2h`, `1h30m`. A bare number, zero or an unknown unit is a usage error.
 - **Exit codes:** 0 success; 1 usage error, `bad_request` or `not_found`; 2 request refused by a guardrail or by policy (the reason is printed); 3 app unreachable; 4 `internal`.
+- **Exit 3 messages:** all three print `mooring: <message>` on stderr (under `--json`, `{"ok":false,"error":{"code":"unreachable","message":"<message>"}}` on stdout):
+  - not running: "Mooring isn't running and couldn't be started" (nothing listens on the socket, even after the launch attempt);
+  - no answer: "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`." (connected, but the write failed, the reply timed out, ended early, was over 64 KiB or couldn't be read);
+  - blocked: "Can't reach Mooring's socket (permission denied). If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock" (never retried or launched).
+
+  `anchor` treats all three as "the app isn't reachable" and doesn't start the command. `doctor`'s App check reads "not running", "didn't answer" or "permission denied".
+- **Usage errors under `--json`:** when `--json` is among the arguments, every usage error (a parse or validation failure, or one found while running, such as "Couldn't find a process to watch") prints one line on stdout, `{"ok":false,"error":{"code":"usage","message":"<message>"}}`, nothing on stderr, and exits 1. `--help` and `--version` still print their text and exit 0. Without `--json`, the message goes to stderr as `mooring: <message>`.
+- **Re-acquiring** a named lease with `lease acquire` never weakens it: the later expiry wins (the new length, or what the lease has left, whichever is longer, within the 4 h cap), the existing watch is kept unless `--watch-pid` is given, the level is the union of the old and new, the reason and owner are kept unless `--reason` or `--agent` is given. `lease renew --ttl` is an explicit reset and is unchanged, and so are `on` and `anchor`.
+- **Acquire output:** a lease or `anchor --pid` acquire that watches a process names it: `Lease job · while Claude Code (80) runs · 4h cap`, `Anchored anchor-80 · while Codex (80) runs`, or `while process 80 runs` when it can't be found. `status` and `--json` are unchanged.
 - **Owner label:** "Terminal" by default for `anchor` and `lease` without an agent (`on` and `off` act on the menu session, labelled "Menu bar"). With `--watch-pid auto` it is the agent's name (`claude` → "Claude Code", `codex` → "Codex", otherwise the process name). `--agent "<name>"` overrides it.
 - **Watching:** `--watch-pid auto` resolves the nearest ancestor process that isn't a shell, which for a hook or Claude's Bash tool is the Claude Code process.
 

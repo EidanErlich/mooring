@@ -163,6 +163,110 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
     #expect(harness.capture.stderr.isEmpty)
 }
 
+@Test func noAnswerPrintsDidntAnswer() async {
+    let message = "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`."
+    let human = Harness(client: RecordingClient(reply: .failure(.noAnswer)))
+    #expect(await human.run(["status"]) == 3)
+    #expect(human.capture.stderr == "mooring: \(message)\n")
+    #expect(human.capture.stdout.isEmpty)
+
+    let json = Harness(client: RecordingClient(reply: .failure(.noAnswer)))
+    #expect(await json.run(["status", "--json"]) == 3)
+    #expect(json.capture.stdout == #"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+    #expect(json.capture.stderr.isEmpty)
+}
+
+@Test func blockedPrintsPermissionDenied() async {
+    let message = "Can't reach Mooring's socket (permission denied). "
+        + "If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock"
+    let human = Harness(client: RecordingClient(reply: .failure(.blocked)))
+    #expect(await human.run(["status"]) == 3)
+    #expect(human.capture.stderr == "mooring: \(message)\n")
+    #expect(human.capture.stdout.isEmpty)
+
+    let json = Harness(client: RecordingClient(reply: .failure(.blocked)))
+    #expect(await json.run(["status", "--json"]) == 3)
+    #expect(json.capture.stdout == #"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+    #expect(json.capture.stderr.isEmpty)
+}
+
+private func usageObject(_ message: String) -> String {
+    #"{"ok":false,"error":{"code":"usage","message":"\#(message)"}}"# + "\n"
+}
+
+@Test func jsonBadDurationIsAUsageObject() async {
+    let harness = Harness()
+    #expect(await harness.run(["on", "--for", "5", "--json"]) == 1)
+    #expect(harness.capture.stdout == usageObject("Invalid duration '5' for --for. Use forms like 90s, 15m, 2h or 1h30m"))
+    #expect(harness.capture.stderr.isEmpty)
+    #expect(harness.client.requests.isEmpty)
+}
+
+@Test func jsonParseErrorsAreUsageObjects() async {
+    let cases: [([String], String)] = [
+        (["status", "--bogus", "--json"], "Unknown option '--bogus'"),
+        (["--json", "status", "--bogus"], ""),
+        (["lease", "acquire", "--json"], "Missing expected argument '<id>'"),
+        (["lease", "acquire", "job", "--watch-pid", "x\"y", "--json"], "--watch-pid takes auto or a process id, not 'x\"y'"),
+        (["--json", "frobnicate"], "")
+    ]
+    for (arguments, message) in cases {
+        let harness = Harness()
+        #expect(await harness.run(arguments) == 1)
+        let lines = harness.capture.stdout.split(separator: "\n", omittingEmptySubsequences: false)
+        #expect(lines.count == 2 && lines[1].isEmpty, "\(arguments)")
+        #expect(lines.first?.hasPrefix(#"{"ok":false,"error":{"code":"usage","message":""#) == true, "\(arguments)")
+        #expect(message.isEmpty || harness.capture.stdout.contains(message.replacingOccurrences(of: "\"", with: "\\\"")), "\(arguments)")
+        #expect(harness.capture.stderr.isEmpty)
+    }
+}
+
+@Test func jsonAutoWatchFailureIsAUsageObject() async {
+    let table = FakeProcessTable([proc(100, 90, "zsh"), proc(90, 1, "bash"), proc(1, 0, "launchd")])
+    let harness = Harness(table: table)
+    #expect(await harness.run(["lease", "acquire", "job", "--watch-pid", "auto", "--json"]) == 1)
+    #expect(harness.capture.stdout == usageObject("Couldn't find a process to watch"))
+    #expect(harness.capture.stderr.isEmpty)
+    #expect(harness.client.requests.isEmpty)
+}
+
+@Test func jsonAnchorUsageErrorsAreUsageObjects() async {
+    let harness = Harness()
+    #expect(await harness.run(["anchor", "--json"]) == 1)
+    #expect(harness.capture.stdout == usageObject("Give --pid <pid> or -- <command>"))
+    #expect(await harness.run(["anchor", "--pid", "4", "--json", "--", "sleep", "1"]) == 1)
+    #expect(harness.capture.stdout.hasSuffix(usageObject("Use either --pid or -- <command>")))
+    #expect(harness.capture.stderr.isEmpty)
+    #expect(harness.client.requests.isEmpty)
+}
+
+@Test func jsonHelpAndVersionAreUnchanged() async {
+    let harness = Harness()
+    #expect(await harness.run(["--version", "--json"]) == 0)
+    #expect(harness.capture.stdout == "mooring 0.2.0-dev\n")
+    #expect(await harness.run(["status", "--help", "--json"]) == 0)
+    #expect(harness.capture.stdout.contains("USAGE: mooring status"))
+    #expect(harness.capture.stderr.isEmpty)
+}
+
+@Test func humanUsageErrorsUnchanged() async {
+    let parse = Harness()
+    #expect(await parse.run(["on", "--for", "5"]) == 1)
+    #expect(parse.capture.stdout.isEmpty)
+    #expect(parse.capture.stderr == """
+    Error: Invalid duration '5' for --for. Use forms like 90s, 15m, 2h or 1h30m
+    Usage: mooring on [--level <level>] [--for <for>] [--reason <reason>] [--json] [--no-launch]
+      See 'mooring on --help' for more information.
+
+    """)
+
+    let table = FakeProcessTable([proc(100, 90, "zsh"), proc(90, 1, "bash"), proc(1, 0, "launchd")])
+    let execute = Harness(table: table)
+    #expect(await execute.run(["lease", "acquire", "job", "--watch-pid", "auto"]) == 1)
+    #expect(execute.capture.stdout.isEmpty)
+    #expect(execute.capture.stderr == "mooring: Couldn't find a process to watch\n")
+}
+
 @Test func noLaunchFlagIsPassedThrough() async {
     let harness = Harness()
     _ = await harness.run(["status", "--no-launch"])

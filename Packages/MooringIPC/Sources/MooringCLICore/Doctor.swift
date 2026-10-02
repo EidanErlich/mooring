@@ -21,10 +21,14 @@ public enum Doctor {
         }
     }
 
-    /// The five checks in order. `status` is nil when the app didn't answer; `resolve` follows symlinks.
-    public static func checks(status: StatusResult?, pathEnv: String?, ownBinary: String, resolve: (String) -> String?) -> [Check] {
+    /// The five checks in order. `status` is nil when the app didn't answer, and `unavailable` says why;
+    /// `resolve` follows symlinks.
+    public static func checks(
+        status: StatusResult?, unavailable: CLIError = .unreachable, pathEnv: String?, ownBinary: String,
+        resolve: (String) -> String?
+    ) -> [Check] {
         [
-            appCheck(status),
+            appCheck(status, unavailable: unavailable),
             pathCheck(pathEnv: pathEnv, ownBinary: ownBinary, resolve: resolve),
             helperCheck(status),
             lidCheck(status),
@@ -52,8 +56,15 @@ public enum Doctor {
         return String(cString: resolved)
     }
 
-    private static func appCheck(_ status: StatusResult?) -> Check {
-        guard let status else { return Check(name: "App", state: "fail", detail: "not running", fix: "Open Mooring") }
+    private static func appCheck(_ status: StatusResult?, unavailable: CLIError) -> Check {
+        guard let status else {
+            let detail = switch unavailable {
+            case .noAnswer: "didn't answer"
+            case .blocked: "permission denied"
+            case .unreachable, .usage: "not running"
+            }
+            return Check(name: "App", state: "fail", detail: detail, fix: "Open Mooring")
+        }
         return Check(name: "App", state: "pass", detail: status.summary, fix: nil)
     }
 
@@ -104,8 +115,10 @@ struct DoctorCommand: ParsableCommand, CLICommand {
     @OptionGroup var output: OutputOptions
 
     func execute(_ env: CLIEnvironment) async -> Int32 {
+        let (status, unavailable) = await currentStatus(env)
         let checks = Doctor.checks(
-            status: await currentStatus(env), pathEnv: env.pathEnv, ownBinary: env.ownBinaryPath, resolve: Doctor.resolvePath
+            status: status, unavailable: unavailable, pathEnv: env.pathEnv, ownBinary: env.ownBinaryPath,
+            resolve: Doctor.resolvePath
         )
         if output.json {
             let encoder = JSONEncoder()
@@ -121,11 +134,18 @@ struct DoctorCommand: ParsableCommand, CLICommand {
         return checks.contains { $0.state == "fail" } ? 1 : 0
     }
 
-    /// The app's status, never launching it, so a stopped app shows as a failed check; nil on any failure.
-    private func currentStatus(_ env: CLIEnvironment) async -> StatusResult? {
+    /// The app's status, never launching it, so a stopped app shows as a failed check; nil on any failure,
+    /// with the reason it couldn't be read (`.unreachable` when the app answered with something else).
+    private func currentStatus(_ env: CLIEnvironment) async -> (StatusResult?, CLIError) {
         let request = Request(v: WireProtocol.version, id: env.newID(), op: .status, args: .status)
-        guard let response = try? await env.client.send(request, launch: false),
-              case .status(let status)? = response.result else { return nil }
-        return status
+        do {
+            let response = try await env.client.send(request, launch: false)
+            guard case .status(let status)? = response.result else { return (nil, .unreachable) }
+            return (status, .unreachable)
+        } catch let error as CLIError {
+            return (nil, error)
+        } catch {
+            return (nil, .unreachable)
+        }
     }
 }

@@ -120,13 +120,50 @@ private let threeLeases = [
 
     let anchor = Harness(client: RecordingClient(reply: .success(acquired(leaseInfo(id: "anchor-9", watchPid: 9)))))
     _ = await anchor.run(["anchor", "--pid", "9"])
-    #expect(anchor.capture.stdout == "Anchored anchor-9 · while running\n")
+    #expect(anchor.capture.stdout == "Anchored anchor-9 · while process 9 runs\n")
 
     let capped = Harness(client: RecordingClient(reply: .success(acquired(
         leaseInfo(expiresAt: fixedNow.addingTimeInterval(4 * 3600), watchPid: 9), clamped: true
     ))))
     _ = await capped.run(["lease", "acquire", "job", "--watch-pid", "9"])
-    #expect(capped.capture.stdout == "Lease job · while running · 4h cap (capped at 4h)\n")
+    #expect(capped.capture.stdout == "Lease job · while process 9 runs · 4h cap (capped at 4h)\n")
+}
+
+@Test func leaseAcquireNamesTheWatchedProcess() async {
+    let reply = acquired(leaseInfo(expiresAt: fixedNow.addingTimeInterval(4 * 3600), watchPid: 80))
+    let harness = Harness(
+        client: RecordingClient(reply: .success(reply)), table: FakeProcessTable([proc(80, 1, "claude")])
+    )
+    #expect(await harness.run(["lease", "acquire", "job", "--watch-pid", "80"]) == 0)
+    #expect(harness.capture.stdout == "Lease job · while Claude Code (80) runs · 4h cap\n")
+
+    let other = Harness(
+        client: RecordingClient(reply: .success(reply)), table: FakeProcessTable([proc(80, 1, "make")])
+    )
+    _ = await other.run(["lease", "acquire", "job", "--watch-pid", "80"])
+    #expect(other.capture.stdout == "Lease job · while make (80) runs · 4h cap\n")
+}
+
+@Test func anchorPidNamesTheWatchedProcess() async {
+    let reply = acquired(leaseInfo(id: "anchor-80", watchPid: 80))
+    let harness = Harness(
+        client: RecordingClient(reply: .success(reply)), table: FakeProcessTable([proc(80, 1, "codex")])
+    )
+    #expect(await harness.run(["anchor", "--pid", "80"]) == 0)
+    #expect(harness.capture.stdout == "Anchored anchor-80 · while Codex (80) runs\n")
+}
+
+@Test func watchedProcessNameLeavesJSONAndStatusAlone() async throws {
+    let reply = acquired(leaseInfo(expiresAt: fixedNow.addingTimeInterval(600), watchPid: 80))
+    let harness = Harness(
+        client: RecordingClient(reply: .success(reply)), table: FakeProcessTable([proc(80, 1, "claude")])
+    )
+    _ = await harness.run(["lease", "acquire", "job", "--watch-pid", "80", "--json"])
+    #expect(!harness.capture.stdout.contains("while"))
+    #expect(!harness.capture.stdout.contains("(80)"))
+
+    let lease = leaseInfo(expiresAt: fixedNow.addingTimeInterval(600), watchPid: 80)
+    #expect(CLIText.timeText(lease, now: fixedNow) == "while running · 10m cap")
 }
 
 @Test func renewAndReleaseText() async {

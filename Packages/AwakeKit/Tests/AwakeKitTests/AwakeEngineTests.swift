@@ -192,6 +192,21 @@ struct AssertionFailureTests {
         #expect(open.lease.ttl == nil)
     }
 
+    @Test func acquireStoresAnExplicitTTL() throws {
+        let harness = EngineHarness()
+        let longer = try #require(harness.engine.acquire(
+            id: "a", owner: .menu, reason: "r", level: .system, duration: 600, ttl: 3600
+        ))
+        #expect(longer.lease.ttl == 3600)
+        #expect(longer.lease.expiresAt == harness.clock.addingTimeInterval(600))
+        let clamped = try #require(harness.engine.acquire(
+            id: "b", owner: .menu, reason: "r", level: .system, duration: 600, ttl: 13 * 3600
+        ))
+        #expect(clamped.lease.ttl == 43_200)
+        let unchanged = try #require(harness.engine.acquire(id: "c", owner: .menu, reason: "r", level: .system, duration: 600))
+        #expect(unchanged.lease.ttl == 600)
+    }
+
     @Test func renewReusesTheLastTTL() throws {
         let harness = EngineHarness()
         harness.engine.acquire(id: "x", owner: .menu, reason: "r", level: .system, duration: 600)
