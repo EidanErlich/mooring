@@ -18,7 +18,8 @@ public enum ProcessTree {
         return nil
     }
 
-    /// The owner name for a watched process: a known agent gets its display name, anything else keeps its name.
+    /// The owner name for a watched process: an agent CLI (matched exactly, as `AgentDetection` does) gets its display
+    /// name; anything else, a desktop app included, keeps its own.
     public static func agentName(for processName: String) -> String {
         AgentDetection.agents[AgentDetection.normalized(processName)] ?? processName
     }

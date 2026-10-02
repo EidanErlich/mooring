@@ -26,8 +26,24 @@ private struct FakeTable: ProcessTable {
 }
 
 @Test func codexIsDetected() {
-    let table = FakeTable([proc(100, 90, "sh"), proc(90, 1, "Codex")])
+    let table = FakeTable([proc(100, 90, "sh"), proc(90, 1, "codex")])
     #expect(AgentDetection.agent(for: 100, in: table) == "Codex")
+}
+
+@Test func desktopClaudeAppIsAPerson() {
+    // The Claude desktop app's terminal panel: a person typing, not Claude Code.
+    let table = FakeTable([proc(100, 90, "zsh"), proc(90, 80, "Claude Helper"), proc(80, 1, "Claude")])
+    #expect(AgentDetection.agent(for: 100, in: table) == nil)
+}
+
+@Test func claudeCodeCLIIsAnAgent() {
+    let table = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "claude")])
+    #expect(AgentDetection.agent(for: 100, in: table) == "Claude Code")
+}
+
+@Test func codexDesktopIsAPerson() {
+    let table = FakeTable([proc(100, 90, "zsh"), proc(90, 80, "Codex Helper"), proc(80, 1, "Codex")])
+    #expect(AgentDetection.agent(for: 100, in: table) == nil)
 }
 
 @Test func pidItselfCanBeTheAgent() {

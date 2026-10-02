@@ -1,6 +1,10 @@
 /// Tells agent callers from people by walking the caller's process ancestry.
+///
+/// Names match the agent CLIs exactly, case included, so the Claude and Codex desktop apps (`Claude`, `Codex`) and
+/// the terminals inside them count as people. The trade-off: a process a desktop app launches directly (an MCP
+/// server Claude.app starts, say) counts as a person too, unless it runs under one of the CLIs.
 public enum AgentDetection {
-    /// Process names of known agents, lowercased, and the name shown for each.
+    /// Process names of the agent CLIs, exactly as they run, and the name shown for each.
     public static let agents: [String: String] = [
         "claude": "Claude Code", "codex": "Codex", "cursor-agent": "Cursor Agent",
         "gemini": "Gemini CLI", "aider": "Aider", "opencode": "OpenCode"
@@ -19,8 +23,8 @@ public enum AgentDetection {
         return nil
     }
 
-    /// Lowercased, without the leading `-` that marks a login shell.
+    /// Without the leading `-` that marks a login shell; case is kept.
     public static func normalized(_ name: String) -> String {
-        name.drop { $0 == "-" }.lowercased()
+        String(name.drop { $0 == "-" })
     }
 }
