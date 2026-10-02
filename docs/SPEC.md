@@ -305,7 +305,7 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 | `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
 | `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
 | `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]` |
-| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Claude plugin installed (arrives in 2b). Exits 1 if any check fails |
+| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Mooring's Claude Code plugin is installed and enabled, and Claude Code's major.minor version is the one the plugin was tested with. Exits 1 if any check fails |
 | `mooring mcp` | Run the MCP server over stdio (2.5; arrives in 2c) |
 
 **Conventions:**
@@ -332,44 +332,57 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 
 ### 2.3 Claude Code plugin
 
-The plugin lives in `Integrations/claude-code-plugin/` and is installable from the repo as a plugin marketplace. It contains `hooks/hooks.json`, a skill, and an `.mcp.json` pointing at `mooring mcp`. Every hook command calls a small script, `${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook`, that reads the hook's JSON from stdin, takes `session_id`, and calls the CLI.
+The plugin lives in `Integrations/claude-code-plugin/` (stage 2c adds an `.mcp.json` pointing at `mooring mcp`). It contains `.claude-plugin/plugin.json`, `hooks/hooks.json`, `scripts/mooring-hook`, `skills/mooring/SKILL.md` and `mooring.json` (`{"testedWithClaudeCode": "2.1"}`, the Claude Code major.minor it was tested with; `mooring doctor` reads it). Every hook command calls a small POSIX `sh` script, `${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook <Event>`, which finds `mooring` (`$MOORING_BIN`, `~/.local/bin/mooring`, `PATH`, the app's `Contents/Helpers/mooring`, then `/Applications/Mooring.app/...`) and runs `mooring hook <Event>`.
 
-**Lease lifecycle for one session** (lease id `claude-<session_id>`):
+**Two ways to install it:**
 
-| Hook event | Action | Why |
-| --- | --- | --- |
-| `UserPromptSubmit` | `acquire` with TTL 15 min, `--watch-pid auto`, reason from the first 60 characters of the prompt | Work starts when you send a prompt |
-| `PostToolUse`, `PostToolBatch` | `renew` (async hook) | Heartbeat: an active agent keeps its lease fresh |
-| `SubagentStart` / `SubagentStop` | `renew` | Long subagent runs count as work |
-| `PermissionRequest`, `Notification` | Shorten to the "waiting for you" timeout (default 30 min) | Claude is blocked on you; don't burn battery for hours |
-| `Stop` | `release --after 2m` | Grace period covers background shells and quick follow-ups |
-| `StopFailure` | `release --after 2m` | An API error ends the turn the same way |
-| `SessionEnd` | `release` now | Hard stop |
+- **From the app:** Settings → Awake → Agents → Install runs `claude plugin marketplace add <Mooring.app>/Contents/Resources/ClaudePlugin -y` and `claude plugin install mooring@mooring-app -y`, so the plugin's version always matches the app.
+- **From GitHub:** `/plugin marketplace add EidanErlich/mooring`, then `/plugin install mooring@mooring`. The repo's root `.claude-plugin/marketplace.json` publishes it.
 
-If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute TTL is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid`.
+**`mooring hook <event>`** (hidden from `--help`) reads up to 1 MiB of the hook's JSON from stdin and takes `session_id`, `cwd`, `notification_type`, `agent_id`, `agent_type`, whether any `background_tasks` entry is `running`, and the watched pid (resolved like `--watch-pid auto`: Claude's own process). It sends the wire op `hook` without launching the app and with a 1.5 s reply limit. It **always exits 0 and never prints to stdout** (Claude Code parses a hook's stdout); errors go to the `hook` log category. The prompt text is never read.
+
+**Lease lifecycle for one session** (lease id `claude-<session_id>`, owner `.agent(name: "Claude Code")`, reason "Claude Code · <last path component of cwd>", level `system`, watching the Claude process). The events are the ones Claude Code 2.1.285 was recorded sending (`Packages/MooringIPC/Tests/MooringCLICoreTests/Fixtures/hooks/`), decided by `HookPolicy` in AwakeKit:
+
+| Event | Action |
+| --- | --- |
+| Any event with an `agent_id` and an empty `agent_type` | **Ignored.** It's an internal helper agent, such as prompt suggestions after `Stop`. Counting it would keep the Mac awake for 15 min after every turn. |
+| `UserPromptSubmit` | Acquire: watched, expiry 15 min. Re-acquire merging applies, so it never shortens an existing lease. |
+| `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PreCompact` | Renew: expiry = now + 15 min. If the lease is gone, acquire it as for `UserPromptSubmit`. |
+| `PermissionRequest`, and `Notification` with `notification_type` `permission_prompt` | Expiry = now + the waiting timeout (Settings, default 30 min). Both fire for one prompt; the second is a no-op. |
+| `Notification` of any other type (including `idle_prompt`) | **Ignored.** Claude sends the idle prompt after finishing a turn, while it waits for the next message. Counting it as waiting would keep the Mac awake for 30 min after every turn. |
+| `Stop` with any `background_tasks` entry whose `status` is `running` | Renew, as for tool events. Claude is still working in the background. |
+| `Stop` with no running background task | Release after 2 min, so the grace period covers background shells and quick follow-ups. |
+| `SessionEnd` | Release now. |
+| `SessionStart`, `StopFailure` or any unknown event | Ignored, so a future Claude Code version can't break anything. |
+
+If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the `system` level. Lid mode for agents follows the approval setting in "Agent control and approvals" below; a per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
 
 **Hook rules** so Mooring can never break a Claude session:
 
-- Every hook script exits 0, even on errors; failures go to Mooring's log, not to Claude.
-- Renew hooks run with `"async": true`. Acquire and release are synchronous but time out at 2 s.
-- If `mooring` isn't installed, the script is a no-op.
-- Hook events and fields change over time; the plugin pins the events above, which match the current [hooks reference](https://code.claude.com/docs/en/hooks), and `mooring doctor` warns when the installed Claude Code reports an unknown version.
+- Every hook exits 0 with no output, even on errors; failures go to Mooring's log, not to Claude.
+- `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop` and `PreCompact` run with `"async": true` and `timeout: 5`. `UserPromptSubmit`, `Stop`, `Notification` and `PermissionRequest` are synchronous with `timeout: 2`; `SessionEnd` is synchronous with `timeout: 1`.
+- Hooks never launch the app, and if `mooring` isn't installed the script is a no-op.
+- Hook events and fields change over time; `mooring doctor` fails its "Claude Code version" check when `claude --version` reports a different major.minor than the plugin was tested with.
 
-Sketch of `hooks/hooks.json`:
+Sketch of `hooks/hooks.json` (every event has the same shape; the real file lists all eleven):
 
 ```json
 {
   "description": "Keep the Mac awake while Claude works",
   "hooks": {
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook acquire", "timeout": 2 }] }],
-    "PostToolUse":      [{ "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook renew", "async": true }] }],
-    "Stop":             [{ "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook release --after 2m", "timeout": 2 }] }],
-    "SessionEnd":       [{ "hooks": [{ "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook release", "timeout": 1 }] }]
+    "UserPromptSubmit":  [{ "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" UserPromptSubmit", "timeout": 2 }] }],
+    "Stop":              [{ "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" Stop", "timeout": 2 }] }],
+    "Notification":      [{ "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" Notification", "timeout": 2 }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" PermissionRequest", "timeout": 2 }] }],
+    "SessionEnd":        [{ "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" SessionEnd", "timeout": 1 }] }],
+    "PreToolUse":        [{ "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook\" PreToolUse", "timeout": 5, "async": true }] }]
   }
 }
 ```
 
-**Skill** (`skills/mooring/SKILL.md`): tells Claude that the Mac stays awake automatically while it works, and that for jobs which outlive the turn (a background build, a long download) it should wrap them in `mooring anchor --reason "…" -- <cmd>`. It also tells Claude never to disable Mooring or change its settings.
+(`PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop` and `PreCompact` are the same as `PreToolUse`.)
+
+**Skill** (`skills/mooring/SKILL.md`): tells Claude that the Mac stays awake automatically while it works and that it should never disable Mooring or change its settings. For jobs which outlive the turn (a background build, a long download) it should wrap them in `mooring anchor --reason "…" -- <cmd>`; for a long multi-step job it takes a named lease with `--watch-pid auto` and always releases it. It also says to call `mooring` directly (a wrapper such as `timeout`, `xargs` or `npx` would become the watched process), what to tell the user when the sandbox blocks the socket, and that exit code 2 means Mooring declined or paused the hold.
 
 ### Agent control and approvals
 
@@ -377,7 +390,8 @@ Agents act automatically by default; Settings → Awake → Agents lets the user
 
 | Setting | Options | Default |
 | --- | --- | --- |
-| Keep awake while agents work | **Automatic** (hooks anchor every session) · Explicit (hooks are no-ops; only `mooring anchor` or `keep_awake` calls count) | Automatic |
+| Keep awake while agents work | **Automatic** (hooks anchor every session) · Only when asked (hooks are no-ops; only `mooring anchor`, named leases or `keep_awake` calls count) | Automatic |
+| When Claude is waiting for you, stay awake for | 10 · **30** · 60 min (how long a session blocked on a permission prompt keeps the Mac awake) | 30 min |
 | Lid mode for agents | **Ask each time** · Always allow · Never | Ask each time |
 | Window arrangement by agents | **Automatic** · Ask first · Off | Automatic |
 
@@ -812,9 +826,10 @@ struct AwakeSettings: Codable, Equatable {
   var lidBatteryThreshold: Int? = 20                        // nil = off
   var allBatteryThreshold: Int? = 10                        // nil = off
   var thermalCutoff = true
-  var agentKeepAwake: AgentMode = .automatic                // .automatic, .explicit
+  var agentKeepAwake: AgentMode = .automatic                // .automatic, .explicit ("Only when asked")
   var agentLid: AgentLidMode = .askEachTime                 // .askEachTime, .alwaysAllow, .never
   var agentWindows: AgentWindowMode = .automatic            // .automatic, .askFirst, .off
+  var agentWaitingTimeout: TimeInterval = 1800              // 10, 30 or 60 min; a permission prompt holds this long
 }
 ```
 
@@ -842,13 +857,13 @@ struct AwakeSettings: Codable, Equatable {
 
 **Stage 2 details**
 
-- **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` and `not_found` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. An Ask-each-time approval holds the connection open for up to 60 s.
-- **Hooks:** `hooks.json` registers every event in the 2.3 table (`UserPromptSubmit`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PermissionRequest`, `Notification`, `Stop`, `StopFailure`, `SessionEnd`). Renewals are `async`; the others time out at 2 s. Hooks never launch the app: if the socket is missing, `mooring-hook` exits 0 immediately, which keeps hook cost under 50 ms. Auto-launch applies only to interactive CLI use.
+- **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|hook|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` and `not_found` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. An Ask-each-time approval holds the connection open for up to 60 s.
+- **Hooks:** the plugin's hooks all run `mooring hook <Event>`, which forwards the event over the socket as the additive protocol-v1 op `hook` (`args: {event, sessionId, cwd, notificationType?, agentID?, agentType?, runningBackgroundTasks?, watchPid?}`, result `{action}`; unknown fields are ignored). The decision lives in `HookPolicy` in AwakeKit, a pure function `(event, notificationType, settings, leaseExists) → HookAction` (`acquire`, `renew`, `setExpiry(seconds)`, `releaseAfter(seconds)`, `releaseNow` or `ignore`); the request handler applies the action through the engine's acquire, `renew`, `shorten` and `release`, under the same caller policy as named leases. `hooks.json` registers every event in the 2.3 table; synchronous hooks time out at 2 s (`SessionEnd` at 1 s) and the rest are `async`. Hooks never launch the app: `mooring hook` sends with a 1.5 s reply limit and `launch: false`, and `mooring-hook` exits 0 when there is no `mooring`, which keeps hook cost under 50 ms. Auto-launch applies only to interactive CLI use.
 - **MCP:** runs inside the CLI (`mooring mcp`); there is no separate server package. The client id is the slugified `clientInfo.name` from the MCP `initialize` request.
 - The `mooring://` URL scheme and the awake App Intents ship in stage 2c.
 - **CLI packaging:** the command-line logic lives in the `MooringCLICore` library target of `Packages/MooringIPC` (argument parsing with `swift-argument-parser`, the socket client, `anchor`, `doctor`), so tests drive it without a socket. `CLI/main.swift` is a thin entry point that builds the real environment and exits with the result.
 - **`mooring doctor` and lid sleep:** doctor reads `SleepDisabled` from the app's `status` reply, which asks the helper. The CLI never runs `pmset`.
-- `mooring doctor` records the Claude Code version the plugin was tested with in `plugin.json` and warns when `claude --version` reports a different major version.
+- **`mooring doctor` and Claude Code:** the plugin records the Claude Code major.minor it was tested with as `testedWithClaudeCode` in its `mooring.json`. Doctor finds `claude` (`PATH`, then `~/.local/bin`, `/opt/homebrew/bin`, `/usr/local/bin`), runs `claude --version` and `claude plugin list --json` with a 3 s limit each, and reads `mooring.json` from the installed plugin's `installPath`. Its "Claude plugin" check passes for an enabled `mooring@mooring-app` or `mooring@mooring`; its "Claude Code version" check fails when the major.minor differs (so `doctor` exits 1), and is skipped when either value is unknown.
 
 **Stage 3 additions to the Loop file map**
 
@@ -884,7 +899,7 @@ Each stage is one branch and one pull request titled `Stage N: …`, and ends at
 | 1b Awake engine | Leases, reconciler, assertions, On defaults, the dropdown menu with the Awake section, General and Awake settings | Unit tests; `pmset -g assertions` shows Mooring's assertion; left click toggles | Uses it for a day |
 | 1c Lid and guardrails | Lid level, watchdog, heartbeat, launch reset, battery and thermal guardrails, battery opt-in sheet | Scripted `kill -9` of the app returns SleepDisabled to 0 within 15 s | Closes the lid for 10 min with `ping -i 5 1.1.1.1 > ~/lidtest.log` running, on AC and on battery; checks the log has no gap |
 | 2a IPC and CLI | Socket, all `mooring` commands in 2.2, `doctor`, CLI install, agent holds (`--watch-pid auto`, the "For agents" patterns), the dropdown lease-row fix (rows update in place by id) | `mooring anchor -- sleep 20` shows in `mooring status --json`; exit codes match 2.2 | None |
-| 2b Claude Code plugin | Hooks, skill, installable marketplace | Sample hook JSON piped to `mooring-hook` acquires, renews and releases a lease | Runs a real Claude Code session with the lid closed |
+| 2b Claude Code plugin | The `hook` op and `HookPolicy`; `mooring hook`; the plugin (hooks, skill, `mooring-hook`) with an in-app and a GitHub marketplace; Settings → Awake → Agents; `doctor`'s plugin and Claude Code version checks | Recorded hook payloads piped to `mooring hook` acquire, renew and release a lease; the plugin files and both marketplaces validate | Installs the plugin from Settings; sees "Claude Code · <folder>" in the menu, the lease end after Claude stops or is killed, and the permission-prompt timeout (the lid-closed run waits for 2c's agent lid approval) |
 | 2c Approvals and MCP | Allow once / Always / Deny notifications; `mooring mcp` awake tools; the `mooring://` URL scheme and awake App Intents | MCP calls from a test client; the deny path exits 2 | Clicks each notification button |
 | 3a WindowKit | Vendored Loop, radial menu, keybinds, Windows settings, Accessibility flow | With Windows off, no Accessibility prompt and WindowKit not loaded; frame-resolver unit tests | Grants Accessibility; tries the radial menu and keybinds |
 | 3b Agent windows | `mooring win list / arrange / undo / layout`, MCP window tools, skill update | Arranging three TextEdit windows returns `ok` frames; `undo` restores them | Asks Claude for the Chrome / iTerm / Slack layout |

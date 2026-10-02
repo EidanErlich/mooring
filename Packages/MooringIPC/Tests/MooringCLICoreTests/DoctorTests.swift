@@ -27,9 +27,22 @@ private final class BinFolder {
 }
 
 /// The checks with the real symlink resolver.
-private func runChecks(_ status: StatusResult?, pathEnv: String?, ownBinary: String) -> [Doctor.Check] {
-    Doctor.checks(status: status, pathEnv: pathEnv, ownBinary: ownBinary, resolve: Doctor.resolvePath)
+private func runChecks(
+    _ status: StatusResult?, pathEnv: String?, ownBinary: String, claude: ClaudeSnapshot? = nil
+) -> [Doctor.Check] {
+    Doctor.checks(status: status, pathEnv: pathEnv, ownBinary: ownBinary, resolve: Doctor.resolvePath, claude: claude)
 }
+
+private func plugin(_ id: String, version: String = "0.1.0", enabled: Bool = true) -> ClaudeCode.InstalledPlugin {
+    ClaudeCode.InstalledPlugin(id: id, version: version, enabled: enabled, installPath: nil)
+}
+
+/// The plugin and version checks for a snapshot.
+private func claudeChecks(_ claude: ClaudeSnapshot?) -> [Doctor.Check] {
+    Array(Doctor.checks(status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 }, claude: claude).suffix(2))
+}
+
+private let pluginFix = "Settings → Awake → Agents → Install"
 
 @Test func allPass() throws {
     let bin = try BinFolder()
@@ -39,7 +52,8 @@ private func runChecks(_ status: StatusResult?, pathEnv: String?, ownBinary: Str
         Doctor.Check(name: "Command on PATH", state: "pass", detail: bin.binary, fix: nil),
         Doctor.Check(name: "Helper", state: "pass", detail: "enabled", fix: nil),
         Doctor.Check(name: "Lid sleep", state: "pass", detail: "matches", fix: nil),
-        Doctor.Check(name: "Claude plugin", state: "skip", detail: "arrives in 2b", fix: nil)
+        Doctor.Check(name: "Claude plugin", state: "skip", detail: "Claude Code not found", fix: nil),
+        Doctor.Check(name: "Claude Code version", state: "skip", detail: "unknown", fix: nil)
     ])
 }
 
@@ -96,23 +110,82 @@ private func runChecks(_ status: StatusResult?, pathEnv: String?, ownBinary: Str
     #expect(lidCheck(doctorStatus(helperSleepDisabled: nil)).state == "skip")
 }
 
-@Test func pluginIsSkipped() throws {
-    let checks = Doctor.checks(status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 })
-    #expect(checks.last == Doctor.Check(name: "Claude plugin", state: "skip", detail: "arrives in 2b", fix: nil))
+@Test func pluginFromAppPasses() {
+    let snapshot = ClaudeSnapshot(version: "2.1.285", plugins: [plugin("other@x"), plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
+    #expect(claudeChecks(snapshot)[0] == Doctor.Check(name: "Claude plugin", state: "pass", detail: "mooring@mooring-app 0.1.0", fix: nil))
+}
+
+@Test func pluginFromGitHubPasses() {
+    let snapshot = ClaudeSnapshot(version: "2.1.285", plugins: [plugin(ClaudeCode.repoPluginID, version: "0.2.0")], testedWith: "2.1")
+    #expect(claudeChecks(snapshot)[0] == Doctor.Check(name: "Claude plugin", state: "pass", detail: "mooring@mooring 0.2.0", fix: nil))
+}
+
+@Test func disabledPluginFails() {
+    let snapshot = ClaudeSnapshot(version: "2.1.285", plugins: [plugin(ClaudeCode.appPluginID, enabled: false)], testedWith: nil)
+    #expect(claudeChecks(snapshot)[0] == Doctor.Check(name: "Claude plugin", state: "fail", detail: "disabled", fix: pluginFix))
+}
+
+@Test func noPluginFails() {
+    let expected = Doctor.Check(name: "Claude plugin", state: "fail", detail: "not installed", fix: pluginFix)
+    #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: [plugin("other@x")], testedWith: nil))[0] == expected)
+    #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: [], testedWith: nil))[0] == expected)
+    // `claude plugin list` failing leaves no list at all, which reads the same.
+    #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: nil, testedWith: nil))[0] == expected)
+}
+
+@Test func noClaudeSkips() {
+    #expect(claudeChecks(nil) == [
+        Doctor.Check(name: "Claude plugin", state: "skip", detail: "Claude Code not found", fix: nil),
+        Doctor.Check(name: "Claude Code version", state: "skip", detail: "unknown", fix: nil)
+    ])
+}
+
+@Test func versionMatchPasses() {
+    let snapshot = ClaudeSnapshot(version: "2.1.285", plugins: [], testedWith: "2.1")
+    #expect(claudeChecks(snapshot)[1] == Doctor.Check(name: "Claude Code version", state: "pass", detail: "2.1.285", fix: nil))
+}
+
+@Test func versionMismatchFails() {
+    let snapshot = ClaudeSnapshot(version: "2.2.0", plugins: [], testedWith: "2.1")
+    #expect(claudeChecks(snapshot)[1] == Doctor.Check(
+        name: "Claude Code version", state: "fail", detail: "tested with 2.1; you have 2.2.0", fix: nil
+    ))
+}
+
+@Test func versionUnknownSkips() {
+    let skip = Doctor.Check(name: "Claude Code version", state: "skip", detail: "unknown", fix: nil)
+    #expect(claudeChecks(ClaudeSnapshot(version: nil, plugins: [], testedWith: "2.1"))[1] == skip)
+    #expect(claudeChecks(ClaudeSnapshot(version: "2.1.285", plugins: [], testedWith: nil))[1] == skip)
+    // A version string that isn't major.minor can't be compared either.
+    #expect(claudeChecks(ClaudeSnapshot(version: "banana", plugins: [], testedWith: "2.1"))[1] == skip)
 }
 
 @Test func humanFormatUsesMarks() {
     let text = Doctor.human([
         Doctor.Check(name: "App", state: "pass", detail: "On · 1h left", fix: nil),
         Doctor.Check(name: "Command on PATH", state: "fail", detail: "not found on PATH", fix: "Install it"),
-        Doctor.Check(name: "Claude plugin", state: "skip", detail: "arrives in 2b", fix: nil)
+        Doctor.Check(name: "Claude plugin", state: "skip", detail: "Claude Code not found", fix: nil)
     ])
     #expect(text == """
     ✓ App              On · 1h left
     ✗ Command on PATH  not found on PATH — Install it
-    – Claude plugin    arrives in 2b
+    – Claude plugin    Claude Code not found
 
     """)
+}
+
+@Test func humanOutputListsSixChecks() async throws {
+    let bin = try BinFolder()
+    let snapshot = ClaudeSnapshot(version: "2.2.0", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
+    let harness = Harness(
+        client: RecordingClient(reply: .success(.success(id: "r", .status(doctorStatus())))),
+        ownBinaryPath: bin.binary, pathEnv: bin.path, claude: snapshot
+    )
+    #expect(await harness.run(["doctor"]) == 1)
+    let lines = harness.capture.stdout.split(separator: "\n").map(String.init)
+    #expect(lines.count == 6)
+    #expect(lines[4] == "✓ Claude plugin        mooring@mooring-app 0.1.0")
+    #expect(lines[5] == "✗ Claude Code version  tested with 2.1; you have 2.2.0")
 }
 
 @Test func doctorExitCodes() async throws {
@@ -157,6 +230,6 @@ private func runChecks(_ status: StatusResult?, pathEnv: String?, ownBinary: Str
     #expect(text.contains(#""detail":"\#(bin.binary)""#))
     #expect(text.filter { $0 == "\n" }.count == 1)
     let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: [[String: String]]])
-    #expect(object["checks"]?.count == 5)
+    #expect(object["checks"]?.count == 6)
     #expect(object["checks"]?[2]["fix"] == "Settings → Lid & Battery → Approve")
 }

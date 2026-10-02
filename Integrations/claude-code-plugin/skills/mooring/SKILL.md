@@ -28,4 +28,4 @@ mooring lease release job-<slug>
 
 - Call `mooring` directly. Never run it through `timeout`, `xargs`, `npx` or a wrapper script: the wrapper would become the process Mooring watches and the hold would end with it.
 - If you see "Can't reach Mooring's socket (permission denied)", the sandbox is blocking it. Tell the user to add `~/Library/Application Support/Mooring/mooring.sock` to `sandbox.network.allowUnixSockets` in their Claude Code settings. Do not retry in a loop.
-- Exit code 2 means a guardrail paused the hold. The hold still exists and still needs releasing.
+- Exit code 2 means Mooring declined or paused the hold. If you acquired a lease, still release it.

@@ -3,6 +3,9 @@
   "owner": {
     "name": "Eidan Erlich"
   },
+  "metadata": {
+    "description": "Mooring keeps your Mac awake while Claude Code works."
+  },
   "plugins": [
     {
       "name": "mooring",

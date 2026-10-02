@@ -44,7 +44,8 @@ let environment = CLIEnvironment(
     ownBinaryPath: ownExecutablePath(),
     pathEnv: ProcessInfo.processInfo.environment["PATH"],
     readInput: readStandardInput(limit:),
-    hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {})
+    hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {}),
+    claude: { probeClaude(pathEnv: ProcessInfo.processInfo.environment["PATH"]) }
 )
 
 let arguments = Array(CommandLine.arguments.dropFirst())

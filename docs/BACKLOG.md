@@ -2,14 +2,6 @@
 
 Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
-## Before or during stage 2b (Claude Code plugin)
-
-- **Skill guidance for `--watch-pid auto`:**
-  - always `release`;
-  - call `mooring` directly, not through wrappers, because `timeout`, `xargs`, `make`, `npx` and scripts become the watched process;
-  - an npm-installed Claude shows as "node";
-  - Claude Code's sandbox may need the socket path allowed.
-
 ## Before stage 2c (approvals)
 
 - **Policy is advisory.** An agent can skip the named-lease limits (4 h cap, no lid) by calling `mooring on --level lid` or `mooring anchor`, because the client picks the request kind. Decide which of these approvals gate.

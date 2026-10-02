@@ -21,18 +21,19 @@ public enum Doctor {
         }
     }
 
-    /// The five checks in order. `status` is nil when the app didn't answer, and `unavailable` says why;
-    /// `resolve` follows symlinks.
+    /// The six checks in order. `status` is nil when the app didn't answer, and `unavailable` says why;
+    /// `resolve` follows symlinks; `claude` is nil when Claude Code wasn't found.
     public static func checks(
         status: StatusResult?, unavailable: CLIError = .unreachable, pathEnv: String?, ownBinary: String,
-        resolve: (String) -> String?
+        resolve: (String) -> String?, claude: ClaudeSnapshot?
     ) -> [Check] {
         [
             appCheck(status, unavailable: unavailable),
             pathCheck(pathEnv: pathEnv, ownBinary: ownBinary, resolve: resolve),
             helperCheck(status),
             lidCheck(status),
-            Check(name: "Claude plugin", state: "skip", detail: "arrives in 2b", fix: nil)
+            pluginCheck(claude),
+            claudeVersionCheck(claude)
         ]
     }
 
@@ -102,6 +103,31 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: "matches", fix: nil)
     }
 
+    private static func pluginCheck(_ claude: ClaudeSnapshot?) -> Check {
+        let name = "Claude plugin"
+        guard let claude else { return Check(name: name, state: "skip", detail: "Claude Code not found", fix: nil) }
+        let fix = "Settings → Awake → Agents → Install"
+        guard let plugin = ClaudeCode.mooringPlugin(in: claude.plugins ?? []) else {
+            return Check(name: name, state: "fail", detail: "not installed", fix: fix)
+        }
+        guard plugin.enabled else { return Check(name: name, state: "fail", detail: "disabled", fix: fix) }
+        let detail = [plugin.id, plugin.version].compactMap { $0 }.joined(separator: " ")
+        return Check(name: name, state: "pass", detail: detail, fix: nil)
+    }
+
+    /// Passes when Claude Code's major.minor is the one the plugin was tested with.
+    private static func claudeVersionCheck(_ claude: ClaudeSnapshot?) -> Check {
+        let name = "Claude Code version"
+        guard let version = claude?.version, let tested = claude?.testedWith,
+              let installed = ClaudeCode.majorMinor(version) else {
+            return Check(name: name, state: "skip", detail: "unknown", fix: nil)
+        }
+        guard installed == tested else {
+            return Check(name: name, state: "fail", detail: "tested with \(tested); you have \(version)", fix: nil)
+        }
+        return Check(name: name, state: "pass", detail: version, fix: nil)
+    }
+
     private static func isExecutableFile(_ path: String) -> Bool {
         var isFolder: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isFolder) && !isFolder.boolValue
@@ -118,7 +144,7 @@ struct DoctorCommand: ParsableCommand, CLICommand {
         let (status, unavailable) = await currentStatus(env)
         let checks = Doctor.checks(
             status: status, unavailable: unavailable, pathEnv: env.pathEnv, ownBinary: env.ownBinaryPath,
-            resolve: Doctor.resolvePath
+            resolve: Doctor.resolvePath, claude: env.claude()
         )
         if output.json {
             let encoder = JSONEncoder()

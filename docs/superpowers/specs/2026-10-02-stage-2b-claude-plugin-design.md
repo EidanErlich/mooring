@@ -89,8 +89,8 @@ One lease per session, `claude-<session_id>`:
 | `HookPolicy` | AwakeKit, pure | `(event, notificationType, settings, leaseExists) → HookAction`, where the action is `acquire`, `renew`, `setExpiry(seconds)`, `releaseAfter(seconds)`, `releaseNow` or `ignore`. |
 | Agent settings | `AwakeSettings` (AwakeKit) plus the Defaults key `awake` | `agentsAutomatic: Bool = true` and `agentWaitingTimeout: TimeInterval = 1800`. Both decode from older saved settings with these defaults. |
 | Request handler | `App/IPC/RequestHandler.swift` | Handles `op: hook`: builds the session lease, applies the `HookPolicy` action through the existing engine API (acquire with merge, `renew`, `shorten`, `release`), and replies `HookResult`. Caller policy applies as for named leases (reserved ids, the 4 h cap, the 32-lease limit). |
-| `mooring hook <event>` | `MooringCLICore` | Reads up to 1 MiB of JSON from stdin. Takes `session_id`, `cwd` and the notification type. Resolves the watched pid the same way as `--watch-pid auto`. Sends `op: hook` without launching the app and with a 1.5 s reply limit. **Always exits 0 and never prints to stdout;** errors go to the `ipc` log. Hidden from `--help`. |
-| Plugin | `Integrations/claude-code-plugin/` | `.claude-plugin/plugin.json` (name `mooring`, version = app version, `testedWith`), `hooks/hooks.json`, `scripts/mooring-hook` and `skills/mooring/SKILL.md`. |
+| `mooring hook <event>` | `MooringCLICore` | Reads up to 1 MiB of JSON from stdin. Takes `session_id`, `cwd` and the notification type. Resolves the watched pid the same way as `--watch-pid auto`. Sends `op: hook` without launching the app and with a 1.5 s reply limit. **Always exits 0 and never prints to stdout;** errors go to the `hook` log category. Hidden from `--help`. |
+| Plugin | `Integrations/claude-code-plugin/` | `.claude-plugin/plugin.json` (name `mooring`, version = app version), `mooring.json` (`testedWithClaudeCode`), `hooks/hooks.json`, `scripts/mooring-hook` and `skills/mooring/SKILL.md`. |
 | `mooring-hook` | `scripts/mooring-hook`, POSIX `sh` | Finds `mooring` (see below), then `exec mooring hook "$1"`. With no `mooring` found, exits 0 silently. |
 | Repo marketplace | `.claude-plugin/marketplace.json` at the repo root | Marketplace `mooring`, plugin `mooring`, source `./Integrations/claude-code-plugin`. |
 | Bundled marketplace | `Mooring.app/Contents/Resources/ClaudePlugin/` (a copy-files build phase) | The plugin folder plus its own `marketplace.json`, with marketplace `mooring-app`. |
@@ -110,9 +110,9 @@ It tries these in order, using the first that is executable:
 
 ### `hooks/hooks.json`
 
-- **Synchronous, `timeout: 2`:** `UserPromptSubmit`, `Stop`, `Notification`.
+- **Synchronous, `timeout: 2`:** `UserPromptSubmit`, `Stop`, `Notification`, `PermissionRequest`.
 - **`SessionEnd`:** synchronous, `timeout: 1`.
-- **Background (`"async": true`):** `PreToolUse`, `PostToolUse`, `SubagentStop`, `PreCompact`.
+- **Background (`"async": true`, `timeout: 5`):** `PreToolUse`, `PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop`, `PreCompact`.
 - Every command is `${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook <EventName>`.
 
 ### Skill, `skills/mooring/SKILL.md`
@@ -146,12 +146,21 @@ About 30 lines. It says:
 - **"Keep awake while agents work":** Automatic / Only when asked.
 - **"When Claude is waiting for you, stay awake for":** 10 / 30 / 60 min.
 
-### `doctor` check 5, "Claude plugin"
+### `doctor` checks 5 and 6
 
-- ✓ when `claude plugin list --json` shows `mooring@mooring-app` or `mooring@mooring` enabled.
-- ✗ "not installed", fix "Settings → Awake → Agents → Install".
+**Check 5, "Claude plugin":**
+
+- ✓ "<id> <version>" when `claude plugin list --json` shows `mooring@mooring-app` or `mooring@mooring` enabled.
+- ✗ "not installed" (or "disabled" when it is installed but switched off), fix "Settings → Awake → Agents → Install".
 - – "Claude Code not found".
-- **A separate warning line** appears when `claude --version`'s major or minor version differs from `testedWith` in the installed `plugin.json`.
+
+**Check 6, "Claude Code version":**
+
+- ✓ "<version>" when `claude --version`'s major.minor equals `testedWithClaudeCode` in the installed plugin's `mooring.json`.
+- ✗ "tested with <testedWith>; you have <version>", no fix. Like any failed check it makes `doctor` exit 1; the line explains why.
+- – "unknown" when either value is missing.
+
+`mooring` finds `claude` on its own `PATH`, then in `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`, and runs each `claude` command with a 3 s limit.
 
 ## Testing
 

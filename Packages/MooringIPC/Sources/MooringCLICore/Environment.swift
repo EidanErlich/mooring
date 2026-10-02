@@ -34,6 +34,22 @@ extension CLIError {
     }
 }
 
+/// What `claude` reported to `mooring doctor`. A nil member means that part couldn't be read.
+public struct ClaudeSnapshot: Sendable, Equatable {
+    /// `claude --version`, e.g. "2.1.285".
+    public var version: String?
+    /// `claude plugin list --json`.
+    public var plugins: [ClaudeCode.InstalledPlugin]?
+    /// The Claude Code major.minor the installed plugin was tested with (its `mooring.json`).
+    public var testedWith: String?
+
+    public init(version: String?, plugins: [ClaudeCode.InstalledPlugin]?, testedWith: String?) {
+        self.version = version
+        self.plugins = plugins
+        self.testedWith = testedWith
+    }
+}
+
 /// Everything a command touches outside its own arguments, so tests can replace it.
 public struct CLIEnvironment: Sendable {
     public var client: any RequestSending
@@ -52,13 +68,16 @@ public struct CLIEnvironment: Sendable {
     public var readInput: @Sendable (Int) -> Data
     /// What `mooring hook` sends through: a quick client that gives up fast.
     public var hookClient: any RequestSending
+    /// Asks Claude Code about itself, for doctor. Blocks for a few seconds at most; nil when `claude` isn't found.
+    public var claude: @Sendable () -> ClaudeSnapshot?
 
     public init(
         client: any RequestSending, processes: any ProcessTable, ownPID: Int32, parentPID: Int32,
         write: @escaping @Sendable (String) -> Void, writeError: @escaping @Sendable (String) -> Void,
         newID: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date,
         ownBinaryPath: String, pathEnv: String?,
-        readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending
+        readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending,
+        claude: @escaping @Sendable () -> ClaudeSnapshot?
     ) {
         self.client = client
         self.processes = processes
@@ -72,5 +91,6 @@ public struct CLIEnvironment: Sendable {
         self.pathEnv = pathEnv
         self.readInput = readInput
         self.hookClient = hookClient
+        self.claude = claude
     }
 }
