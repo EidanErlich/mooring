@@ -14,13 +14,42 @@ protocol ToolRunning: Sendable {
 }
 
 /// Runs a command with `Process`, killing it after `timeout` seconds. Blocks, so call it off the main actor.
+/// Never blocks past the limit plus a few seconds, even when the command's children keep its pipes open.
 struct ProcessRunner: ToolRunning {
     var timeout: TimeInterval = 30
 
+    /// Collects one pipe's output and leaves `group` once, when the pipe reaches end of file.
     private final class Output: @unchecked Sendable {
         private let lock = NSLock()
         private var data = Data()
-        func append(_ chunk: Data) { lock.withLock { data.append(chunk) } }
+        private var finished = false
+        private let group: DispatchGroup
+
+        init(group: DispatchGroup) {
+            self.group = group
+            group.enter()
+        }
+
+        func attach(to pipe: Pipe) {
+            pipe.fileHandleForReading.readabilityHandler = { [self] handle in
+                let chunk = handle.availableData
+                if chunk.isEmpty {
+                    handle.readabilityHandler = nil
+                    finish()
+                } else {
+                    lock.withLock { data.append(chunk) }
+                }
+            }
+        }
+
+        private func finish() {
+            let first = lock.withLock { () -> Bool in
+                defer { finished = true }
+                return !finished
+            }
+            if first { group.leave() }
+        }
+
         var value: Data { lock.withLock { data } }
     }
 
@@ -33,28 +62,34 @@ struct ProcessRunner: ToolRunning {
         process.standardOutput = outPipe
         process.standardError = errPipe
         process.standardInput = FileHandle.nullDevice
-        let (out, err) = (Output(), Output())
-        outPipe.fileHandleForReading.readabilityHandler = { out.append($0.availableData) }
-        errPipe.fileHandleForReading.readabilityHandler = { err.append($0.availableData) }
-        let finished = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in finished.signal() }
+        let eof = DispatchGroup()
+        let (out, err) = (Output(group: eof), Output(group: eof))
+        out.attach(to: outPipe)
+        err.attach(to: errPipe)
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+        func detach() {
+            outPipe.fileHandleForReading.readabilityHandler = nil
+            errPipe.fileHandleForReading.readabilityHandler = nil
+        }
         do {
             try process.run()
         } catch {
+            detach()
             return ToolResult(status: 127, stderr: error.localizedDescription)
         }
-        let timedOut = finished.wait(timeout: .now() + timeout) == .timedOut
+        let timedOut = exited.wait(timeout: .now() + timeout) == .timedOut
         if timedOut {
             process.terminate()
-            _ = finished.wait(timeout: .now() + 2)
+            if exited.wait(timeout: .now() + 2) == .timedOut { kill(process.processIdentifier, SIGKILL) }
         }
-        outPipe.fileHandleForReading.readabilityHandler = nil
-        errPipe.fileHandleForReading.readabilityHandler = nil
-        out.append((try? outPipe.fileHandleForReading.readToEnd()) ?? Data())
-        err.append((try? errPipe.fileHandleForReading.readToEnd()) ?? Data())
+        // Children can keep the pipes open after the command is gone, so give end of file a moment, then move on.
+        _ = eof.wait(timeout: .now() + 1)
+        detach()
         var message = String(bytes: err.value, encoding: .utf8) ?? ""
         if timedOut { message += "\nTimed out after \(Int(timeout)) seconds." }
-        return ToolResult(status: timedOut ? 124 : process.terminationStatus, stdout: out.value, stderr: message)
+        let status = timedOut || process.isRunning ? 124 : process.terminationStatus
+        return ToolResult(status: status, stdout: out.value, stderr: message)
     }
 }
 
