@@ -29,11 +29,11 @@ extension LeaseInfo {
 /// Turns a decoded CLI request into engine calls, through `CallerPolicy`, and builds the reply.
 @MainActor
 final class RequestHandler {
-    private let engine: AwakeEngine
-    private let settings: @MainActor () -> AwakeSettings
+    let engine: AwakeEngine
+    let settings: @MainActor () -> AwakeSettings
     private let helperStatus: @MainActor () -> String
     private let readHelperSleepDisabled: @MainActor () async -> Bool?
-    private let now: @MainActor () -> Date
+    let now: @MainActor () -> Date
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
     /// The id `mooring on` used before it became the menu's On switch.
     private static let legacyCLILeaseID = "cli"
@@ -59,7 +59,7 @@ final class RequestHandler {
             case .renew(let args): return .success(id: request.id, .renew(try renew(args)))
             case .release(let args): return .success(id: request.id, .release(try release(args)))
             case .status: return .success(id: request.id, .status(await status()))
-            case .hook: throw WireError(code: .internal, message: "Not implemented")
+            case .hook(let args): return .success(id: request.id, .hook(try hook(args, from: caller)))
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")
@@ -105,7 +105,7 @@ final class RequestHandler {
         return granted.map { min(max($0, remaining), CallerPolicy.maxNamedLease) }
     }
 
-    private func acquire(_ args: AcquireArgs, from caller: Caller) throws -> MooringIPC.AcquireResult {
+    func acquire(_ args: AcquireArgs, from caller: Caller) throws -> MooringIPC.AcquireResult {
         var plan = try plan(for: args, from: caller)
         let current = now()
         let existing = args.kind == .lease ? engine.leases.first { $0.id == plan.id } : nil
