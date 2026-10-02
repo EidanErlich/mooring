@@ -48,12 +48,21 @@ struct RequestHandlerHookTests {
 
     @Test func reasonWithoutCwdSaysSession() async throws {
         let fixture = RequestFixture()
-        _ = await fixture.hook("UserPromptSubmit", session: "a", cwd: nil)
-        _ = await fixture.hook("UserPromptSubmit", session: "b", cwd: "")
-        _ = await fixture.hook("UserPromptSubmit", session: "c", cwd: "/")
-        for id in ["claude-a", "claude-b", "claude-c"] {
-            #expect(try #require(fixture.lease(id)).reason == "Claude Code · session")
-        }
+        _ = await fixture.hook("UserPromptSubmit", session: "1a2b3c4d", cwd: nil)
+        _ = await fixture.hook("UserPromptSubmit", session: "5e6f7a8b", cwd: "")
+        _ = await fixture.hook("UserPromptSubmit", session: "ab", cwd: "/")
+        #expect(try #require(fixture.lease("claude-1a2b3c4d")).reason == "Claude Code · session 1a2b")
+        #expect(try #require(fixture.lease("claude-5e6f7a8b")).reason == "Claude Code · session 5e6f")
+        #expect(try #require(fixture.lease("claude-ab")).reason == "Claude Code · session ab")
+    }
+
+    @Test func twoFolderlessSessionsHaveDifferentLabels() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.hook("UserPromptSubmit", session: "1a2b-first", cwd: "/")
+        _ = await fixture.hook("UserPromptSubmit", session: "9c8d-second", cwd: nil)
+        let first = try #require(fixture.lease("claude-1a2b-first")).reason
+        let second = try #require(fixture.lease("claude-9c8d-second")).reason
+        #expect(first != second)
     }
 
     @Test func toolEventRenewsTo15Minutes() async throws {

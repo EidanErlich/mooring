@@ -53,7 +53,7 @@ extension RequestHandler {
     /// Acquires the session's lease through the same path as `mooring lease acquire`, so re-acquiring merges.
     private func acquireSessionLease(id: String, ttl: TimeInterval, hook: HookArgs, from caller: Caller) throws {
         let folder = hook.cwd.flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0).lastPathComponent } ?? ""
-        let name = folder.isEmpty || folder == "/" ? "session" : folder
+        let name = folder.isEmpty || folder == "/" ? "session \(hook.sessionId.prefix(4))" : folder
         _ = try acquire(
             AcquireArgs(
                 kind: .lease, id: id, level: nil, ttl: ttl, watchPid: hook.watchPid, reason: "Claude Code · \(name)",

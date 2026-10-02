@@ -22,7 +22,7 @@ This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--wat
 | Question | Decision |
 | --- | --- |
 | How the plugin is installed | **Both.** A button in Settings → Awake → Agents installs it from inside `Mooring.app`, so its version always matches the app. The repo also publishes a marketplace for `/plugin marketplace add EidanErlich/mooring`. |
-| What the menu shows for a session | **The project folder:** "Claude Code · <folder>". No prompt text is ever stored or shown. |
+| What the menu shows for a session | **The project folder:** "Claude Code · <folder>" ("Claude Code · session 1a2b" with no folder). No prompt text is ever stored or shown. |
 | The Settings → Awake → Agents page | The install and status row, plus "Keep awake while agents work: Automatic / Only when asked", plus "When Claude is waiting for you, stay awake for: 10 / 30 / 60 min" (default 30). |
 | Where the hook logic lives | **In the app.** `mooring hook <event>` forwards the raw event, and a pure `HookPolicy` in AwakeKit decides what happens. |
 
@@ -61,7 +61,7 @@ This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--wat
 One lease per session, `claude-<session_id>`:
 
 - owner `.agent(name: "Claude Code")`;
-- reason "Claude Code · <last path component of cwd>";
+- reason "Claude Code · <last path component of cwd>", or "Claude Code · session <first 4 characters of the session id>" when there is no folder (cwd missing or `/`), so folderless sessions can be told apart;
 - level `system` (lid for agents arrives with 2c);
 - watched pid: the nearest non-shell ancestor of the hook, i.e. the Claude process.
 
