@@ -26,14 +26,31 @@ enum GuardrailNotifier {
         }
     }
 
+    /// Whether `suspension` is worth a notification, given the ids of the live leases that want lid mode. A Claude
+    /// Code session (`claude-…`) wants lid on every turn, so lid guardrails held back only for sessions stay quiet.
+    static func shouldNotify(_ suspension: Suspension, lidLeaseIDs: [String]) -> Bool {
+        switch suspension {
+        case .lidNeedsAC, .lowBatteryLid:
+            lidLeaseIDs.contains { !$0.hasPrefix(sessionLeasePrefix) }
+        case .lowBatteryAll, .thermal:
+            true
+        }
+    }
+
+    /// The id prefix of a Claude Code session's lease.
+    private static let sessionLeasePrefix = "claude-"
+
     @MainActor
-    static func post(_ added: Set<Suspension>) {
+    static func post(_ added: Set<Suspension>, lidLeaseIDs: [String]) {
         guard Defaults[.notifyGuardrails] else { return }
         let settings = Defaults[.awake]
-        let messages = added.map { (id: "guardrail-\($0)", text: message(for: $0, settings: settings)) }
+        let messages = added.filter { shouldNotify($0, lidLeaseIDs: lidLeaseIDs) }
+            .map { (id: "guardrail-\($0)", text: message(for: $0, settings: settings)) }
+        guard !messages.isEmpty else { return }
         Task {
             let center = UNUserNotificationCenter.current()
-            guard (try? await center.requestAuthorization(options: [.alert])) == true else {
+            // The same options as the lid approvals, so whichever asks first, approvals keep their sound.
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
                 Logger(subsystem: "dev.mooring", category: "guardrail").notice("notifications not allowed")
                 return
             }

@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import MooringCLICore
+import MooringIPC
 
 /// The absolute, symlink-free path of this executable, for doctor's PATH check.
 func ownExecutablePath() -> String {
@@ -45,6 +46,7 @@ let environment = CLIEnvironment(
     pathEnv: ProcessInfo.processInfo.environment["PATH"],
     readInput: readStandardInput(limit:),
     hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {}),
+    lidClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 65),
     claude: { probeClaude(pathEnv: ProcessInfo.processInfo.environment["PATH"]) }
 )
 

@@ -68,8 +68,18 @@ public struct CLIEnvironment: Sendable {
     public var readInput: @Sendable (Int) -> Data
     /// What `mooring hook` sends through: a quick client that gives up fast.
     public var hookClient: any RequestSending
+    /// What an acquire whose level includes lid goes through: it waits long enough for the user to answer an approval.
+    public var lidClient: any RequestSending
     /// Asks Claude Code about itself, for doctor. Blocks for a few seconds at most; nil when `claude` isn't found.
     public var claude: @Sendable () -> ClaudeSnapshot?
+
+    /// The client for an acquire of `kind` at `level` (a canonical level name, or nil for the app's default): the long-wait
+    /// one when it may need an approval, since the app can hold the reply for up to a minute. That is a level that includes
+    /// lid, or a plain `on`, which starts at the menu bar's click level, and that can be lid.
+    func acquireClient(kind: AcquireKind, level: String?) -> any RequestSending {
+        guard let level else { return kind == .on ? lidClient : client }
+        return WireText.parseLevel(level)?.lid == true ? lidClient : client
+    }
 
     public init(
         client: any RequestSending, processes: any ProcessTable, ownPID: Int32, parentPID: Int32,
@@ -77,7 +87,7 @@ public struct CLIEnvironment: Sendable {
         newID: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date,
         ownBinaryPath: String, pathEnv: String?,
         readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending,
-        claude: @escaping @Sendable () -> ClaudeSnapshot?
+        lidClient: any RequestSending, claude: @escaping @Sendable () -> ClaudeSnapshot?
     ) {
         self.client = client
         self.processes = processes
@@ -91,6 +101,7 @@ public struct CLIEnvironment: Sendable {
         self.pathEnv = pathEnv
         self.readInput = readInput
         self.hookClient = hookClient
+        self.lidClient = lidClient
         self.claude = claude
     }
 }

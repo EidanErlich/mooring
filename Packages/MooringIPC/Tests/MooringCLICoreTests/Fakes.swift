@@ -70,6 +70,8 @@ struct Harness {
     let client: RecordingClient
     /// What `mooring hook` sends through, kept apart from `client` so a test can tell them apart.
     let hookClient: RecordingClient
+    /// What an acquire at a lid level goes through, kept apart from `client` so a test can tell them apart.
+    let lidClient: RecordingClient
     let capture = Capture()
     let table: FakeProcessTable
     let parentPID: Int32
@@ -82,12 +84,14 @@ struct Harness {
 
     init(
         client: RecordingClient = RecordingClient(), hookClient: RecordingClient = RecordingClient(),
+        lidClient: RecordingClient = RecordingClient(),
         table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100,
         ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil, input: Data = Data(),
         claude: ClaudeSnapshot? = nil
     ) {
         self.client = client
         self.hookClient = hookClient
+        self.lidClient = lidClient
         self.input = input
         self.claude = claude
         self.table = table
@@ -104,7 +108,7 @@ struct Harness {
             client: client, processes: table, ownPID: 500, parentPID: parentPID,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv,
-            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, claude: { claude }
+            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, lidClient: lidClient, claude: { claude }
         )
         return await MooringCLI.run(arguments, environment: environment)
     }
@@ -112,9 +116,11 @@ struct Harness {
 
 func leaseInfo(
     id: String = "job", owner: OwnerInfo = OwnerInfo(kind: "agent", name: "Claude Code"), reason: String = "tests",
-    level: String = "system", expiresAt: Date? = nil, watchPid: Int32? = nil, ttl: Double? = nil
+    level: String = "system", expiresAt: Date? = nil, watchPid: Int32? = nil, ttl: Double? = nil,
+    pendingApproval: Bool = false
 ) -> LeaseInfo {
-    LeaseInfo(id: id, owner: owner, reason: reason, level: level, expiresAt: expiresAt, watchPid: watchPid, ttl: ttl)
+    LeaseInfo(id: id, owner: owner, reason: reason, level: level, expiresAt: expiresAt, watchPid: watchPid, ttl: ttl,
+              pendingApproval: pendingApproval)
 }
 
 func acquired(_ lease: LeaseInfo, clamped: Bool = false) -> Response {

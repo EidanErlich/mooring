@@ -11,7 +11,7 @@ struct OnCommand: ParsableCommand, CLICommand {
     @Option(name: .customLong("for"), help: "How long: 90s, 15m, 2h or 1h30m. Defaults to the menu bar click duration.")
     var duration: String?
 
-    @Option(help: "Ignored; the menu shows \"Turned on from the menu bar\". Accepted for compatibility.")
+    @Option(help: "Shown if lid mode needs approval; the menu still shows \"Turned on from the menu bar\".")
     var reason: String?
 
     @OptionGroup var output: OutputOptions

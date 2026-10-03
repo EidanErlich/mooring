@@ -65,6 +65,12 @@ struct DropdownMenuTests {
         #expect(apps.title == "While an app runs…" && apps.state == .off)
     }
 
+    @Test func pendingLeaseRowSaysWaiting() {
+        let lease = Lease(id: "job", owner: .menu, reason: "r", level: .system, expiresAt: nil, createdAt: Date())
+        #expect(LeaseRow.trailingText(for: lease, pending: true, now: Date()) == "waiting for your approval")
+        #expect(LeaseRow.trailingText(for: lease, pending: false, now: Date()) == "Until turned off")
+    }
+
     @Test func leaseRowsFollowTheEngineWhileOpen() async {
         let (menu, engine) = makeMenuAndEngine()
         menu.menuWillOpen(menu.root)

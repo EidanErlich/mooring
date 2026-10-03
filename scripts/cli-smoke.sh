@@ -14,13 +14,13 @@ fi
 passed=0
 failed=0
 
-# check <name> <expected-exit> <command…>
+# check <name> <expected-exit…> <command…>: the expected exits are one, or several in quotes ("0 2").
 check() {
     local name="$1" expected="$2"
     shift 2
     "$@" >/dev/null 2>&1
     local got=$?
-    if [[ "$got" -eq "$expected" ]]; then
+    if [[ " $expected " == *" $got "* ]]; then
         echo "PASS $name"
         passed=$((passed + 1))
     else
@@ -53,7 +53,9 @@ check "anchor lease is listed" 0 anchor_listed yes
 check "lease acquire" 0 "$MOORING" lease acquire smoke-test --ttl 1m
 check "lease release" 0 "$MOORING" lease release smoke-test
 check "lease release is idempotent" 0 "$MOORING" lease release smoke-test
-check "lid lease is refused" 2 "$MOORING" lease acquire smoke-lid --ttl 1m --level lid
+# On battery a guardrail holds lid mode back: the lease is still held, and the reply is exit 2.
+check "bounded lid lease is allowed" "0 2" "$MOORING" lease acquire smoke-lid --ttl 1m --level lid
+check "bounded lid lease release" 0 "$MOORING" lease release smoke-lid
 check "bare number duration is a usage error" 1 "$MOORING" on --for 5
 check "renew of a missing lease" 1 "$MOORING" lease renew no-such-lease
 

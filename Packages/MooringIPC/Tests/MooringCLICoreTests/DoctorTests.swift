@@ -3,12 +3,16 @@ import MooringIPC
 import Testing
 @testable import MooringCLICore
 
-private func doctorStatus(helper: String = "enabled", helperSleepDisabled: Bool? = false, lidSleepDisabled: Bool = false) -> StatusResult {
+private func doctorStatus(
+    helper: String = "enabled", helperSleepDisabled: Bool? = false, lidSleepDisabled: Bool = false,
+    notifications: String? = "allowed", agentLidApproval: String? = "askWhenOpenEnded"
+) -> StatusResult {
     StatusResult(
         summary: "On · 1h left", effective: LevelInfo(system: true, display: false, lid: lidSleepDisabled),
         systemAssertion: true, displayAssertion: false, lidSleepDisabled: lidSleepDisabled,
         helperSleepDisabled: helperSleepDisabled, wantsLid: lidSleepDisabled, leases: [],
-        power: PowerInfo(onAC: true, batteryPercent: 90), thermal: "nominal", lidClosed: false, helper: helper, suspensions: []
+        power: PowerInfo(onAC: true, batteryPercent: 90), thermal: "nominal", lidClosed: false, helper: helper, suspensions: [],
+        notifications: notifications, agentLidApproval: agentLidApproval
     )
 }
 
@@ -37,9 +41,9 @@ private func plugin(_ id: String, version: String = "0.1.0", enabled: Bool = tru
     ClaudeCode.InstalledPlugin(id: id, version: version, enabled: enabled, installPath: nil)
 }
 
-/// The plugin and version checks for a snapshot.
+/// The plugin and version checks (the fifth and sixth) for a snapshot.
 private func claudeChecks(_ claude: ClaudeSnapshot?) -> [Doctor.Check] {
-    Array(Doctor.checks(status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 }, claude: claude).suffix(2))
+    Array(Doctor.checks(status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 }, claude: claude)[4...5])
 }
 
 private let pluginFix = "Settings → Awake → Agents → Install"
@@ -53,7 +57,8 @@ private let pluginFix = "Settings → Awake → Agents → Install"
         Doctor.Check(name: "Helper", state: "pass", detail: "enabled", fix: nil),
         Doctor.Check(name: "Lid sleep", state: "pass", detail: "matches", fix: nil),
         Doctor.Check(name: "Claude plugin", state: "skip", detail: "Claude Code not found", fix: nil),
-        Doctor.Check(name: "Claude Code version", state: "skip", detail: "unknown", fix: nil)
+        Doctor.Check(name: "Claude Code version", state: "skip", detail: "unknown", fix: nil),
+        Doctor.Check(name: "Notifications", state: "pass", detail: "allowed", fix: nil)
     ])
 }
 
@@ -181,6 +186,47 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     #expect(claudeChecks(ClaudeSnapshot(version: "banana", plugins: [], testedWith: "2.1"))[1] == skip)
 }
 
+/// Check 7 for a status with the given notification permission and lid-approval setting.
+private func notificationsCheck(_ notifications: String?, _ approval: String?) throws -> Doctor.Check {
+    let bin = try BinFolder()
+    let status = doctorStatus(notifications: notifications, agentLidApproval: approval)
+    return runChecks(status, pathEnv: bin.path, ownBinary: bin.binary)[6]
+}
+
+@Test func notificationsCheckPassesWhenAllowed() throws {
+    #expect(try notificationsCheck("allowed", "askWhenOpenEnded")
+        == Doctor.Check(name: "Notifications", state: "pass", detail: "allowed", fix: nil))
+}
+
+@Test func notificationsCheckSkipsWhenNotAskedYet() throws {
+    #expect(try notificationsCheck("notDetermined", "askWhenOpenEnded")
+        == Doctor.Check(name: "Notifications", state: "skip", detail: "not asked yet", fix: nil))
+}
+
+@Test func notificationsCheckFailsWhenDeniedAndApprovalsAreNeeded() throws {
+    let expected = Doctor.Check(name: "Notifications", state: "fail", detail: "denied",
+                                fix: "System Settings → Notifications → Mooring")
+    #expect(try notificationsCheck("denied", "askWhenOpenEnded") == expected)
+    #expect(try notificationsCheck("denied", "alwaysAsk") == expected)
+}
+
+@Test func notificationsCheckSkipsWhenDeniedButNotNeeded() throws {
+    let expected = Doctor.Check(name: "Notifications", state: "skip", detail: "denied (not needed)", fix: nil)
+    #expect(try notificationsCheck("denied", "alwaysAllow") == expected)
+    #expect(try notificationsCheck("denied", "never") == expected)
+}
+
+@Test func notificationsCheckSkipsWhenUnknown() throws {
+    let expected = Doctor.Check(name: "Notifications", state: "skip", detail: "unknown", fix: nil)
+    #expect(try notificationsCheck(nil, "askWhenOpenEnded") == expected)
+}
+
+@Test func notificationsCheckNeedsTheApp() throws {
+    let bin = try BinFolder()
+    let check = runChecks(nil, pathEnv: bin.path, ownBinary: bin.binary)[6]
+    #expect(check == Doctor.Check(name: "Notifications", state: "skip", detail: "needs the app", fix: nil))
+}
+
 @Test func humanFormatUsesMarks() {
     let text = Doctor.human([
         Doctor.Check(name: "App", state: "pass", detail: "On · 1h left", fix: nil),
@@ -195,7 +241,7 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     """)
 }
 
-@Test func humanOutputListsSixChecks() async throws {
+@Test func humanOutputListsSevenChecks() async throws {
     let bin = try BinFolder()
     let snapshot = ClaudeSnapshot(version: "2.2.0", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
     let harness = Harness(
@@ -204,9 +250,10 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     )
     #expect(await harness.run(["doctor"]) == 0)
     let lines = harness.capture.stdout.split(separator: "\n").map(String.init)
-    #expect(lines.count == 6)
+    #expect(lines.count == 7)
     #expect(lines[4] == "✓ Claude plugin        mooring@mooring-app 0.1.0")
     #expect(lines[5] == "– Claude Code version  tested with 2.1; you have 2.2.0")
+    #expect(lines[6] == "✓ Notifications        allowed")
 }
 
 @Test func versionMismatchDoesNotFailDoctor() async throws {
@@ -273,6 +320,6 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     #expect(text.contains(#""detail":"\#(bin.binary)""#))
     #expect(text.filter { $0 == "\n" }.count == 1)
     let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: [[String: String]]])
-    #expect(object["checks"]?.count == 6)
+    #expect(object["checks"]?.count == 7)
     #expect(object["checks"]?[2]["fix"] == "Settings → Lid & Battery → Approve")
 }

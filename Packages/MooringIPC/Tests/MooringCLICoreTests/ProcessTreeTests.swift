@@ -1,4 +1,5 @@
 import Darwin
+import MooringIPC
 import Testing
 @testable import MooringCLICore
 
@@ -35,4 +36,7 @@ import Testing
     #expect(ProcessTree.agentName(for: "claude") == "Claude Code")
     #expect(ProcessTree.agentName(for: "codex") == "Codex")
     #expect(ProcessTree.agentName(for: "Terminal") == "Terminal")
+    // The desktop apps aren't the CLIs.
+    #expect(ProcessTree.agentName(for: "Claude") == "Claude")
+    #expect(ProcessTree.agentName(for: "-claude") == "Claude Code")
 }

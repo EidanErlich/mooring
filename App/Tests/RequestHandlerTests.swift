@@ -203,11 +203,11 @@ struct RequestHandlerTests {
         #expect(wireFailure(response) == WireError(code: .badRequest, message: "Missing lease id"))
     }
 
-    @Test func leaseLidIsDenied() async {
+    @Test func leaseLidIsGrantedWhenBounded() async throws {
         let fixture = RequestFixture()
         let response = await fixture.acquire(.lease, id: "job", level: "lid", ttl: 60)
-        #expect(wireFailure(response)?.code == .denied)
-        #expect(fixture.engine.leases.isEmpty)
+        #expect(acquireResult(response)?.lease.level == "lid")
+        #expect(try #require(fixture.lease("job")).level == AwakeLevel(display: false, lid: true))
     }
 
     @Test func leaseTTLIsCapped() async throws {

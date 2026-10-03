@@ -132,7 +132,7 @@ struct CommandRunner {
         }
         let request = Request(v: WireProtocol.version, id: env.newID(), op: Self.op(of: args), args: args)
         do {
-            let response = try await env.client.send(request, launch: !options.noLaunch)
+            let response = try await client(for: args).send(request, launch: !options.noLaunch)
             return report(response, to: request)
         } catch let error as CLIError where error.unavailableMessage != nil {
             return unavailable(error)
@@ -142,6 +142,12 @@ struct CommandRunner {
             env.writeError("mooring: Couldn't talk to Mooring\n")
             return 4
         }
+    }
+
+    /// An acquire that may need the user's approval waits for it, so it uses the client with the long reply timeout.
+    private func client(for args: RequestArgs) -> any RequestSending {
+        guard case .acquire(let acquire) = args else { return env.client }
+        return env.acquireClient(kind: acquire.kind, level: acquire.level)
     }
 
     private func report(_ response: Response, to request: Request) -> Int32 {

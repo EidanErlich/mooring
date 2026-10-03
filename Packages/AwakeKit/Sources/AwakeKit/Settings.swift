@@ -28,7 +28,14 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
     public var allBatteryThreshold: Int? = 10
     public var thermalCutoff = true
     public var agentKeepAwake = AgentMode.automatic
+    /// Superseded by `agentLidApproval`; no screen sets it and nothing reads it.
     public var agentLid = AgentLidMode.askEachTime
+    /// "Lid mode for agents".
+    public var agentLidApproval = AgentLidApproval.askWhenOpenEnded
+    /// Claude Code sessions' leases use lid mode ("Keep working with the lid closed").
+    public var agentSessionLid = true
+    /// Agents the person chose "Always allow" for.
+    public var agentLidAlwaysAllowed: [String] = []
     public var agentWindows = AgentWindowMode.automatic
     /// How long a session waiting on a permission prompt keeps the Mac awake.
     public var agentWaitingTimeout: TimeInterval = 1800
@@ -42,6 +49,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         case clickLevel, clickDuration, endMenuLeaseAfterSleep, allowLidOnBattery
         case lidBatteryThreshold, allBatteryThreshold, thermalCutoff
         case agentKeepAwake, agentLid, agentWindows, agentWaitingTimeout
+        case agentLidApproval, agentSessionLid, agentLidAlwaysAllowed
     }
 
     public init(from decoder: any Decoder) throws {
@@ -61,6 +69,9 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         agentLid = try value(.agentLid, defaults.agentLid)
         agentWindows = try value(.agentWindows, defaults.agentWindows)
         agentWaitingTimeout = try value(.agentWaitingTimeout, defaults.agentWaitingTimeout)
+        agentLidApproval = try value(.agentLidApproval, defaults.agentLidApproval)
+        agentSessionLid = try value(.agentSessionLid, defaults.agentSessionLid)
+        agentLidAlwaysAllowed = try value(.agentLidAlwaysAllowed, defaults.agentLidAlwaysAllowed)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -76,6 +87,9 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         try container.encode(agentLid, forKey: .agentLid)
         try container.encode(agentWindows, forKey: .agentWindows)
         try container.encode(agentWaitingTimeout, forKey: .agentWaitingTimeout)
+        try container.encode(agentLidApproval, forKey: .agentLidApproval)
+        try container.encode(agentSessionLid, forKey: .agentSessionLid)
+        try container.encode(agentLidAlwaysAllowed, forKey: .agentLidAlwaysAllowed)
     }
 }
 
