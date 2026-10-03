@@ -27,6 +27,15 @@ Other commands:
 | `make reset-sleep` | Runs `sudo pmset -a disablesleep 0`, in case sleep is ever left disabled |
 | `make clean` | Removes build output and the generated project |
 
+## Use from Raycast, Shortcuts and MCP clients
+
+Everything below ends in the same lease engine as the menu and the `mooring` command.
+
+- **Raycast, Alfred and scripts:** open `mooring://on?for=1h&level=lid`, `mooring://off` or `mooring://toggle`. `for` takes `90s`, `15m`, `2h` or `1h30m`; `level` is `system`, `display`, `lid` or `display,lid`. A link counts as an agent, named after the app that sent it, so a lid link with no end asks first. Mistakes show up as a notification.
+- **Shortcuts, Siri and Spotlight:** "Keep Mac Awake" (an empty Duration means until turned off), "Let Mac Sleep" and "Get Awake Status".
+- **Claude Desktop, Cursor and other MCP clients:** in Settings → Agents → Other agents (MCP), click Add for Claude Desktop or Cursor and restart it; for any other client, click Copy config and paste it into the client's `mcp.json`. The server offers `keep_awake`, `release_awake`, `awake_status` and `notify`. `mooring doctor` checks the setup.
+- **Telling you a job is done:** `mooring notify "Done" "what finished"`, or the MCP `notify` tool. Settings → Agents → "Let agents post notifications" turns it off for agents.
+
 ## License
 
 GPL-3.0-only; see [LICENSE](LICENSE). Code adapted from MIT-licensed projects keeps its original notices; see [THIRD_PARTY](THIRD_PARTY).

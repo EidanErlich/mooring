@@ -67,6 +67,7 @@ struct AgentsSettingsPage: View {
                     + "and pauses when the battery is low.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            MCPClientsSection(notificationsAllowed: $awake.agentNotifications)
             Section("Agents") {
                 Picker("Keep awake while agents work", selection: $awake.agentKeepAwake) {
                     Text("Automatic").tag(AgentMode.automatic)

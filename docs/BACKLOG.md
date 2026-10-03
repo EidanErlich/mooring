@@ -36,6 +36,10 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Session acquires on battery** still log a guardrail notice (the notification is skipped).
 - **The decision tests** are tables, not a full exhaustive product of every input.
 
+## MCP, links and Shortcuts (2c-2 leftovers)
+
+- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.3; read the bundle version.
+
 ## CLI and IPC (stage 2a leftovers)
 
 - **Re-acquire edge cases (from the 2b-prep fixes):**

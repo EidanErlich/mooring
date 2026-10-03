@@ -307,8 +307,9 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 | `mooring lease renew <id> [--ttl …]` | Push the expiry forward; without `--ttl` it reuses the last TTL. Exits 1 if the lease doesn't exist |
 | `mooring lease release <id> [--after 2m]` | End now, or shorten to a grace period (`--after` never lengthens). Idempotent: releasing a lease that is already gone exits 0 |
 | `mooring status [--json]` | Effective level, all leases, battery, thermal, lid, helper state. `--json` fields: `summary` (the dropdown's first line), `effective {system, display, lid}`, `systemAssertion`, `displayAssertion`, `lidSleepDisabled`, `helperSleepDisabled`, `wantsLid`, `leases[]` (`id`, `owner {kind, name}`, `reason`, `level`, `expiresAt`, `watchPid`, `ttl`, `pendingApproval`), `power {onAC, batteryPercent}`, `thermal`, `lidClosed`, `helper`, `suspensions[]`, `notifications` (`allowed`, `notDetermined` or `denied`), `agentLidApproval` (`askWhenOpenEnded`, `alwaysAsk`, `alwaysAllow` or `never`) |
-| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Mooring's Claude Code plugin is installed and enabled, Claude Code's major.minor version is the one the plugin was tested with (a different one only prints a note), and notifications (check 7, below). Exits 1 if any check fails |
-| `mooring mcp` | Run the MCP server over stdio (2.5; arrives in 2c-2) |
+| `mooring doctor [--json]` | One line per check: the app answers on the socket, `mooring` on PATH resolves to this app's binary, the helper is approved, the helper's reading of lid sleep matches the engine's applied state, `lidSleepDisabled` (read through the app and helper; the CLI never runs `pmset`), Mooring's Claude Code plugin is installed and enabled, Claude Code's major.minor version is the one the plugin was tested with (a different one only prints a note), notifications (check 7) and MCP clients (check 8, below). Eight checks in all. Exits 1 if any check fails |
+| `mooring notify "<title>" ["<body>"]` | Post a macOS notification through the app, for when a long job finishes and the user may be away. Exits 0 when posted and 2 when denied (see Notify, below) |
+| `mooring mcp` | Run the MCP server over stdio, for clients with no shell (2.5) |
 
 **Conventions:**
 - **Flags:** `--json` and `--no-launch` go after the subcommand (`mooring status --no-launch`), not before it. `--no-launch` skips starting the app (the hooks use it).
@@ -330,11 +331,11 @@ The binary ships at `Mooring.app/Contents/Helpers/mooring` and is signed with th
 - A whole job: `mooring lease acquire <name> --watch-pid auto --reason "…"` at the start and `mooring lease release <name>` when everything is finished. It also ends if the agent process exits, and has a 4 h cap you can extend with `lease renew`.
 - One long command, including a script that outlives the agent's turn: `mooring anchor -- <command>`. It ends when the command exits and returns its exit code.
 
-**Other entry points** (stage 2c-2) that map onto the same operations: a `mooring://on?level=lid&for=30m` URL scheme (for Raycast and Alfred), and App Intents for Shortcuts ("Keep Mac Awake", "Let Mac Sleep", "Get Awake Status"). The App Intents cover awake only; clipboard intents are excluded (Part 4).
+**Other ways in** map onto the same lease engine: MCP clients use `mooring mcp` (2.5), Raycast, Alfred and scripts use `mooring://` links (Links, below), and Shortcuts, Siri and Spotlight use App Intents (Shortcuts, below). Settings → Agents → Other agents (MCP) sets up MCP clients (below). Clipboard routes exist in none of them (Part 4).
 
 ### 2.3 Claude Code plugin
 
-The plugin lives in `Integrations/claude-code-plugin/` (stage 2c-2 adds an `.mcp.json` pointing at `mooring mcp`). It contains `.claude-plugin/plugin.json`, `hooks/hooks.json`, `scripts/mooring-hook`, `skills/mooring/SKILL.md` and `mooring.json` (`{"testedWithClaudeCode": "2.1"}`, the Claude Code major.minor it was tested with; `mooring doctor` reads it). Every hook command calls a small POSIX `sh` script, `${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook <Event>`, which finds `mooring` (`$MOORING_BIN`, `~/.local/bin/mooring`, `PATH`, the app's `Contents/Helpers/mooring`, then `/Applications/Mooring.app/...`) and runs `mooring hook <Event>`.
+The plugin lives in `Integrations/claude-code-plugin/`. It has no `.mcp.json`: Claude Code reaches Mooring through its hooks and the `mooring` command (including `mooring notify`), not through MCP. It contains `.claude-plugin/plugin.json`, `hooks/hooks.json`, `scripts/mooring-hook`, `skills/mooring/SKILL.md` and `mooring.json` (`{"testedWithClaudeCode": "2.1"}`, the Claude Code major.minor it was tested with; `mooring doctor` reads it). Every hook command calls a small POSIX `sh` script, `${CLAUDE_PLUGIN_ROOT}/scripts/mooring-hook <Event>`, which finds `mooring` (`$MOORING_BIN`, `~/.local/bin/mooring`, `PATH`, the app's `Contents/Helpers/mooring`, then `/Applications/Mooring.app/...`) and runs `mooring hook <Event>`.
 
 **Two ways to install it:**
 
@@ -360,7 +361,7 @@ The plugin lives in `Integrations/claude-code-plugin/` (stage 2c-2 adds an `.mcp
 
 Renewals only ever extend: a renew sets the expiry to the later of its current value and its new one, so a short tool event never cuts a long Bash hold. Only the waiting timeout and the `Stop` grace set the expiry outright.
 
-Pressing Esc to interrupt fires no `Stop`, so an interrupted turn keeps its lease for up to 15 min (up to the waiting timeout after Esc at a permission prompt) before the expiry ends it. If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the lid level while Settings → Awake → Agents → "Keep working with the lid closed" is on (the default), and the `system` level when it is off. Session leases always have an end, so they need no approval by default; under "Always ask" or "Never" see "Agent control and approvals" below. A per-project override is the env var `MOORING_AGENT_LEVEL=lid` (stage 2c-2). With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
+Pressing Esc to interrupt fires no `Stop`, so an interrupted turn keeps its lease for up to 15 min (up to the waiting timeout after Esc at a permission prompt) before the expiry ends it. If Claude Code crashes, the watched PID exits and the lease ends at once; if the PID can't be resolved, the 15-minute expiry is the backstop. Hook leases use the lid level while Settings → Awake → Agents → "Keep working with the lid closed" is on (the default), and the `system` level when it is off. Session leases always have an end, so they need no approval by default; under "Always ask" or "Never" see "Agent control and approvals" below. With "Keep awake while agents work" set to "Only when asked", every hook is acknowledged and does nothing.
 
 **Hook rules** so Mooring can never break a Claude session:
 
@@ -387,7 +388,7 @@ Sketch of `hooks/hooks.json` (every event has the same shape; the real file list
 
 (`PostToolUse`, `PostToolBatch`, `SubagentStart`, `SubagentStop` and `PreCompact` are the same as `PreToolUse`.)
 
-**Skill** (`skills/mooring/SKILL.md`): tells Claude that the Mac stays awake automatically while it works and that it should never disable Mooring or change its settings. For jobs which outlive the turn (a background build, a long download) it should wrap them in `mooring anchor --reason "…" -- <cmd>`; for a long multi-step job it takes a named lease with `--watch-pid auto` and always releases it. It also says to call `mooring` directly (a wrapper such as `timeout`, `xargs` or `npx` would become the watched process), what to tell the user when the sandbox blocks the socket, and that exit code 2 means Mooring declined or paused the hold. It also says to prefer a lid-level hold (`mooring lease acquire job-<slug> --level lid --watch-pid auto`), which needs no approval, because `mooring on --level lid` with no end time asks the user first and may be declined.
+**Skill** (`skills/mooring/SKILL.md`): tells Claude that the Mac stays awake automatically while it works and that it should never disable Mooring or change its settings. For jobs which outlive the turn (a background build, a long download) it should wrap them in `mooring anchor --reason "…" -- <cmd>`; for a long multi-step job it takes a named lease with `--watch-pid auto` and always releases it. It also says to call `mooring` directly (a wrapper such as `timeout`, `xargs` or `npx` would become the watched process), what to tell the user when the sandbox blocks the socket, and that exit code 2 means Mooring declined or paused the hold. It also says to prefer a lid-level hold (`mooring lease acquire job-<slug> --level lid --watch-pid auto`), which needs no approval, because `mooring on --level lid` with no end time asks the user first and may be declined. A last line says that when a long job finishes and the user may be away, `mooring notify "Done" "<what finished>"` tells them (rate-limited to one every 30 s).
 
 ### Agent control and approvals
 
@@ -399,9 +400,12 @@ Agents act automatically by default; Settings → Awake → Agents lets the user
 | When Claude is waiting for you, stay awake for | 10 · **30** · 60 min (how long a session blocked on a permission prompt keeps the Mac awake) | 30 min |
 | Keep working with the lid closed | On · Off (Claude Code sessions use lid level while they work) | On |
 | Lid mode for agents | **Ask only when it has no end** · Always ask · Always allow · Never | Ask only when it has no end |
+| Let agents post notifications | On · Off (`mooring notify` and the MCP `notify` tool from agents; your own `mooring notify` is never affected) | On |
 | Window arrangement by agents | **Automatic** · Ask first · Off | Automatic |
 
-**Who counts as an agent.** The app decides from the caller's pid (`LOCAL_PEERPID`), walking the process ancestry (at most 64 steps, stopping at pid 1). A request is an agent request if any ancestor is named exactly (case included, after dropping a login shell's leading `-`) `claude`, `codex`, `cursor-agent`, `gemini`, `aider` or `opencode`, the agent CLIs (shown as "Claude Code", "Codex" and so on), and every `hook` request is one. Anything else is a person: your Terminal, `launchd`, Raycast, scripts you start yourself, and the terminals inside the Claude and Codex desktop apps (`Claude`, `Codex`), which aren't the CLIs. The trade-off: a process a desktop app launches directly, such as an MCP server Claude.app starts, also counts as a person. People are never asked.
+**Who counts as an agent.** The app decides from the caller's pid (`LOCAL_PEERPID`), walking the process ancestry (at most 64 steps, stopping at pid 1). A request is an agent request if any ancestor is named exactly (case included, after dropping a login shell's leading `-`) `claude`, `codex`, `cursor-agent`, `gemini`, `aider` or `opencode`, the agent CLIs (shown as "Claude Code", "Codex" and so on), and every `hook` request is one. Anything else is a person: your Terminal, `launchd`, Raycast, scripts you start yourself, and the terminals inside the Claude and Codex desktop apps (`Claude`, `Codex`), which aren't the CLIs. Two kinds of caller are agents whatever their ancestry. **An MCP client** (a request carrying `client`, which only `mooring mcp` sends) is an agent named by `MCPClientName.display`, which closes the gap where an MCP server that Claude Desktop launches directly would count as a person. **A `mooring://` link** is an agent named after the app that sent it (see Links). Everything else the trade-off applies to: a process a desktop app launches directly, other than an MCP server, counts as a person. People are never asked. Shortcuts actions run as a person.
+
+**For an MCP client** the agent's own process is the `mooring mcp` process that made the request, so a watch counts as an end only when it is on that process (or below it); a watch on an unrelated pid isn't an end.
 
 **The decision.** An *open-ended* request has no expiry and no watched process of its own (for an agent, `mooring on --level lid` without `--for`). Session leases always have an end. A `lease` or `anchor` ends by its `--ttl`, or by its watch; for an agent, a watch counts as an end only when the watched pid is the agent's own process or runs below it (the watched pid's ancestry is walked, at most 64 steps). `--watch-pid auto`, `anchor -- <cmd>` (whose command runs under `mooring`, under the agent) and the hooks pass; an agent's `anchor --pid 1`, or a watch on its Terminal or its own parents, is open-ended, so it's asked under the default and refused under Never. `LidApproval.decide` (AwakeKit, pure) gives:
 
@@ -445,16 +449,83 @@ A hook can't wait (Claude gives it 2 s), so under "Always ask" the session start
 
 ### 2.5 MCP server
 
-`mooring mcp` is a stdio MCP server that relays to the socket, so any MCP client can use it. Tools:
+`mooring mcp` is a stdio MCP server for agents without a shell (Claude Desktop, Cursor chat, any MCP client). It is hand-rolled inside MooringCLICore, with no new dependency, and relays each tool call to the app's socket.
+
+**Transport and protocol**
+- Newline-delimited JSON-RPC 2.0 on stdin and stdout, with logs on stderr. One reply per request, before the next line is read.
+- It handles `initialize`, `notifications/initialized`, `ping`, `tools/list` and `tools/call`. Any other method gets error `-32601`, a malformed line `-32700`; notifications get no reply.
+- `initialize` replies with the client's `protocolVersion` when it is `2025-06-18`, `2025-03-26` or `2024-11-05`, otherwise with `2025-06-18`. Capabilities are `{"tools": {}}`; `serverInfo` is `{"name": "mooring", "version": …}`. The server keeps `clientInfo.name`.
+- Each tool call is one socket request, sent with `client` set to the name the client reported, and the app is launched if it isn't running, as the CLI does. Socket and wire errors become tool results with `isError: true` and the CLI's message text; protocol errors stay JSON-RPC errors. Bad arguments (an out-of-range `minutes`, an unknown `level`) are tool errors too, never a crash.
+- The server exits on stdin EOF. Its leases watch its own pid, so they end when the client disconnects.
+
+**Who the client is.** `client` makes the request an agent, whatever the process ancestry (see Agent control and approvals). The display name is `MCPClientName.display`: Claude Desktop's `claude-ai` becomes "Claude Desktop" and Cursor's `cursor-vscode` becomes "Cursor"; any other name is shown with control characters dropped and trimmed to 40 characters, and "MCP client" when nothing is left. The name "Terminal" (in any case) also becomes "MCP client", so a client can't pass for a person. That name appears on the menu row, in approval notifications, in "Always allow" and in `notify`.
+
+**Lease ids** are `mcp-<slug>-<server pid>-<n>`: the slug is the display name lowercased, non-alphanumerics turned into `-`, at most 24 characters ("client" when empty), and `n` counts from 1 within one server process. The pid keeps two servers of one client (two Claude Desktop windows) from sharing a lease. The app requires the pairing both ways: a request with `client` must use an `mcp-` id, and an `mcp-` id requires `client`. The owner is `.mcp(client:)`.
+
+**Tools.** The tool list is fixed at build time; a test asserts exactly these four names, and that no name or description mentions the clipboard.
 
 | Tool | Arguments | Notes |
 | --- | --- | --- |
-| `keep_awake` | `minutes` (1–240), `reason`, `level` (`system` or `lid`) | Lease id `mcp-<client>-<n>`; `lid` only if the user allowed agents lid mode |
-| `release_awake` | `lease_id` (optional) | Only releases leases this client created |
-| `awake_status` | none | Effective level, this client's leases, battery %, on AC, thermal state |
-| `notify` | `title`, `body` | Posts a macOS notification ("Claude finished the refactor"); rate-limited to 1 per 30 s |
+| `keep_awake` | `minutes` (integer 1–240, required), `reason`, `level` (`system`, `display` or `lid`, default `system`), `lease_id` (optional, to extend one of this client's leases) | Creates `mcp-<slug>-<pid>-<n>`, or renews the named lease, with expiry = now + minutes and a watch on the `mooring mcp` process. It always has an end, so lid needs no prompt under the default setting; under "Always ask" the call waits for the answer (up to 60 s). A `lease_id` never shortens a lease. Returns `lease_id`, `level` and `ends_at` |
+| `release_awake` | `lease_id` (optional) | Releases that lease, or every lease this server created when none is given. Another owner's lease gets "not one of this client's leases" |
+| `awake_status` | none | Summary line, effective level, this client's leases, battery %, on AC, thermal state |
+| `notify` | `title` (required, ≤ 80 characters), `body` (optional, ≤ 300) | Posts a macOS notification (see Notify, below) |
 
-The MCP server never has clipboard tools; its window tools arrive with level 3 (3.4). It exposes no way to end leases owned by the menu or by other agents.
+- **Under a guardrail,** `keep_awake` is still a success: the result carries `lease_id`, `level`, `ends_at` and `guardrail` (for example "Lid mode waits for power"), because the app keeps the lease and applies it when the guardrail clears. The notice names `release_awake` as the way to end it.
+- **"This client's leases"** means `owner == .mcp(client:)` with this client's display name **and** a watch on this server's pid. The server filters `status` itself and releases only the ids it created; the wire has no MCP-specific acquire or release kind. So two windows of one client can't release each other's leases.
+- The MCP server never has clipboard tools; its window tools arrive with level 3 (3.4). It exposes no way to end leases owned by the menu or by other agents.
+
+### Notify
+
+- **Wire:** the op `notify` with `NotifyArgs {title, body?, client?}`, result `NotifyResult {posted}`. The notification's title is "<Agent>: <title>", using the caller's agent name ("Claude Code", "Claude Desktop", …), or "Terminal" for a person; its body is the body; it has no category, so no buttons. An empty title is rejected with "Missing title".
+- **Rate limit:** one per 30 s per agent name, and for MCP callers also one per 30 s per connection (the server's pid), because a client picks its own name. A faster call gets `denied` with "Rate-limited: try again in N s". People are never limited.
+- **Setting:** Settings → Agents → "Let agents post notifications" (`AwakeSettings.agentNotifications`, default on). When off, agent callers get `denied` with "Notifications from agents are turned off in Settings"; it doesn't apply to people, so your own `mooring notify` always posts.
+- **No permission:** `denied` with 2c-1's "Turn on notifications for Mooring in System Settings to approve lid mode".
+- **CLI:** `mooring notify "<title>" ["<body>"]` exits 0 when posted and 2 when denied.
+
+### Links (`mooring://`)
+
+For Raycast, Alfred, bookmarks and scripts. Registered through `CFBundleURLTypes` with the scheme `mooring` and handled in `AppDelegate.application(_:open:)`; parsing is the pure `MooringLink.parse(URL) -> Result<LinkAction, LinkError>`. Every route acts on the menu session, the one switch behind `mooring on` and `off`:
+
+| Link | Does |
+| --- | --- |
+| `mooring://on[?for=…&level=…&reason=…]` | `for` is `90s`, `15m`, `2h` or `1h30m`; `level` is `system`, `display`, `lid` or `display,lid`; a missing value takes `mooring on`'s default |
+| `mooring://off` | Ends the menu session |
+| `mooring://toggle[?…]` | Off if the menu session is on; otherwise on, with the same parameters as `on` |
+
+- **The caller** is the app that sent the open request: the sender's pid comes from the `kAEGetURL` Apple event (`keySenderPIDAttr`), and the caller is that app's localized name ("Raycast"), or "A link" when there is no sender. It is always an agent for the lid rules, so `on?for=2h&level=lid` just works under the default; lid with no end posts "Raycast wants to keep your Mac awake with the lid closed"; and "Always allow" remembers "Raycast". The wait happens in the background: the link returns at once and the session starts without lid until you answer.
+- **Errors** have no reply channel, so they post a notification titled "Mooring couldn't use that link", with one of "unknown action 'onn'", "'for' must look like 30m or 1h30m", "unknown level 'lidd'", or the refusal reason (for example "Lid mode not approved (lid mode for agents is set to Never)", where the rest of the request still applies, as in 2c-1). At most one error notification per 10 s.
+- Links never open a window or bring Mooring to the front, and have no clipboard routes.
+
+### Shortcuts (App Intents)
+
+Three intents in `App/Intents/`, run in the background (`openAppWhenRun = false`), through the same request handler as `mooring on` and `off`. Shortcuts run as a person, trusted like the menu: they are never asked about lid mode.
+
+| Intent | Parameters | Result |
+| --- | --- | --- |
+| **Keep Mac Awake** | Duration (optional), Level (Normal, Keep display on, Keep awake with lid closed; default Normal) | Turns the menu session on. An empty Duration is open-ended (`untilOff`: until turned off, not the menu click's duration). Under a guardrail the dialog is the guardrail's notification title plus "Mooring is on and starts when that clears." |
+| **Let Mac Sleep** | none | Ends the menu session |
+| **Get Awake Status** | none | Returns an `AwakeStatus` entity: `isOn`, `summary`, `level`, `endsAt` (optional), `batteryPercent`, `onPower`. The dialog shows the summary |
+
+The `AppShortcutsProvider` phrases are "Keep my Mac awake with Mooring", "Let my Mac sleep with Mooring" and "Is my Mac staying awake with Mooring". Clipboard intents and intents for named leases are excluded.
+
+### Settings → Agents → Other agents (MCP)
+
+A section under Lid mode, built on `MCPClientConfig` (MooringIPC, shared with `doctor`), a pure struct over a file URL with an injected file system, so tests run on temporary directories.
+
+| State | Meaning | Button |
+| --- | --- | --- |
+| **Not installed** | The client's config folder doesn't exist | none |
+| **Not added** | The client is installed but has no `mooring` entry | **Add** |
+| **Added** | `mcpServers.mooring` runs this app's helper (`Contents/Helpers/mooring`) with `["mcp"]` | **Remove** |
+| **Needs update** | The entry points somewhere else | **Update** |
+
+- **Config files:** Claude Desktop `~/Library/Application Support/Claude/claude_desktop_config.json`; Cursor `~/.cursor/mcp.json`. A missing file counts as `{}` when the folder exists.
+- **Add** and **Update** (the same operation): read the file; if it isn't a JSON object, or `mcpServers` isn't an object, change nothing and show "<file> isn't valid JSON, so Mooring left it alone. Use Copy config instead."; copy the original to `<file>.mooring-backup` (overwriting an earlier backup, keeping its permissions); set `mcpServers.mooring = {"command": "<app>/Contents/Helpers/mooring", "args": ["mcp"]}` and keep every other key; write atomically with sorted keys (so key order may change, which the caption says); show "Restart <client> to load it." A symlinked file is written through.
+- **Remove** deletes `mcpServers.mooring` only, with the same backup, and drops an empty `mcpServers`.
+- **Copy config** puts `{"mcpServers": {"mooring": {"command": "…", "args": ["mcp"]}}}` on the clipboard (Mooring's own snippet, not clipboard history), with the caption "Paste into your MCP client's config. Most clients call this file mcp.json." The section's other caption is "Mooring rewrites the file with sorted keys and keeps a .mooring-backup next to it."
+- The rows refresh when the section appears and after each action. **"Let agents post notifications"** sits in this section.
+- **`doctor` check 8, "MCP clients",** reads the same files with the same code (the app isn't involved): ✓ lists the clients that are Added ("Claude Desktop, Cursor"); – "none added"; ✗ "Claude Desktop needs update" when an entry runs another path, with the fix "Settings → Agents → Update".
 
 ### 2.6 Policy for non-menu callers
 
@@ -463,7 +534,7 @@ The MCP server never has clipboard tools; its window tools arrive with level 3 (
 | Until turned off | Allowed, like the menu | Not allowed: `--ttl` or `--watch-pid` is required |
 | Max length | Engine max (12 h) | 4 h, including a watched lease with no TTL; renewable while renewals keep arriving |
 | `lid` level | Allowed (guardrails apply), like the menu | Allowed for people; for agents `LidApproval` decides (named leases with a TTL, or watching the agent's own processes, have an end, so they are allowed by default; see Agent control and approvals) |
-| Ids | `menu` (`on`, `off`), `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`; reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused |
+| Ids | `menu` (`on`, `off`), `anchor-<pid>` | 1 to 64 characters of `[A-Za-z0-9._-]`; reserved ids (`menu`, `lid-session`, `app-*`, `cli`, `anchor-*`) are refused; `mcp-*` ids belong to MCP clients (a request with `client` needs an `mcp-` id and an `mcp-` id needs `client`) |
 | Max concurrent leases | 32 live leases; a socket request past that gets exit code 2 (the menu is never refused) | Same |
 | Reason text | Trimmed to 80 characters, control characters stripped before display | Same |
 | Guardrails (1.7) | Always win; the caller is told in the response | Same |
@@ -482,6 +553,9 @@ Optional notifications when an agent lease ends ("Claude Code finished · 42 min
 - [ ] `mooring anchor -- sleep 60` keeps the Mac awake for 60 s and exits 0.
 - [ ] Hooks add under 50 ms to a prompt submit and never surface an error in Claude Code.
 - [ ] `mooring doctor` diagnoses a missing helper approval, a missing CLI and a missing plugin.
+- [ ] Claude Desktop, after Add and a restart, can keep the Mac awake and post a notification through `mooring mcp`; its leases end when it quits.
+- [ ] `mooring://on?for=1h&level=lid` from Raycast starts lid mode with no prompt, and an open-ended lid link asks "Raycast wants…".
+- [ ] The Shortcuts actions turn the menu session on and off and report its status.
 
 ## Part 3: Window management (from Loop)
 
@@ -863,6 +937,7 @@ struct AwakeSettings: Codable, Equatable {
   var agentLidApproval: AgentLidApproval = .askWhenOpenEnded // .askWhenOpenEnded, .alwaysAsk, .alwaysAllow, .never
   var agentSessionLid = true                                // Claude Code sessions use lid level
   var agentLidAlwaysAllowed: [String] = []                  // agent names allowed lid mode without asking
+  var agentNotifications = true                             // agents may post notifications (`notify`)
   var agentWindows: AgentWindowMode = .automatic            // .automatic, .askFirst, .off
   var agentWaitingTimeout: TimeInterval = 1800              // 10, 30 or 60 min; a permission prompt holds this long
 }
@@ -870,7 +945,7 @@ struct AwakeSettings: Codable, Equatable {
 
 - **Suspensions** are engine state; leases are never modified by guardrails. They show in the status line and as the orange attention pill. Thermal compares `ThermalState.rawValue` (`.serious` or worse suspends lid; back to `.nominal` resumes). Low-battery-all resumes when on AC. Low-battery-lid resumes on AC at threshold + 5%. `target(...)` takes one more input, `suspended` (the previous suspensions), because hysteresis needs memory; the engine passes its current `state.suspensions` (stage 1c).
 - **Guardrail settings:** lid threshold 20% and all-leases threshold 10% by default; each can be set to Off. There is no one-off override beyond these settings and the lid-on-battery opt-in.
-- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<client>-<n>`. There is no `timer` id; durations are `expiresAt` on the `menu` lease. The dropdown's *menu session* is either the `menu` lease or one or more `app-<pid>` leases, never both; the On toggle and left click end the whole session, and `mooring on` and `mooring off` act on that same session. `cli` is no longer an active id: it stays reserved, and `mooring off` ends one an earlier build left.
+- **Lease ids:** `menu`, `lid-session` (until I open the lid), `app-<pid>` (while an app runs), `anchor-<pid>` (`mooring anchor`), `claude-<session_id>`, `mcp-<slug>-<server pid>-<n>` (MCP clients only). There is no `timer` id; durations are `expiresAt` on the `menu` lease. The dropdown's *menu session* is either the `menu` lease or one or more `app-<pid>` leases, never both; the On toggle and left click end the whole session, and `mooring on` and `mooring off` act on that same session. `cli` is no longer an active id: it stays reserved, and `mooring off` ends one an earlier build left.
 - **Naming:** the UI says "Until turned off" (never "Forever"); code uses `expiresAt == nil`. The wake setting is named "End my session after the Mac sleeps" (default off); it ends the menu session (the `menu` lease whatever its duration, and any picked apps) and never touches agent leases.
 - `leases.json` is written with mode `0600`.
 
@@ -892,10 +967,16 @@ struct AwakeSettings: Codable, Equatable {
 
 **Stage 2 details**
 
-- **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|hook|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` and `not_found` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. A lid approval holds the connection open for up to 60 s, and `approve.wait` stays reserved but unused because the acquire itself waits. `LeaseInfo.pendingApproval` and `StatusResult.notifications` (`allowed`, `notDetermined` or `denied`) are additive and decode leniently.
+- **Socket protocol:** request `{"v":1,"id":"<uuid>","op":"acquire|renew|release|status|hook|notify|approve.wait|win.list|win.arrange|win.undo|win.layout","args":{…}}`; response `{"v":1,"id":"…","ok":true,"result":{…}}` or `{"v":1,"id":"…","ok":false,"error":{"code":"bad_request|guardrail|denied|not_found|internal","message":"…"}}`. Exit codes: `bad_request` and `not_found` → 1, `guardrail` or `denied` → 2, app unreachable → 3, `internal` → 4. A lid approval holds the connection open for up to 60 s, and `approve.wait` stays reserved but unused because the acquire itself waits. `LeaseInfo.pendingApproval` and `StatusResult.notifications` (`allowed`, `notDetermined` or `denied`) are additive and decode leniently.
 - **Hooks:** the plugin's hooks all run `mooring hook <Event>`, which forwards the event over the socket as the additive protocol-v1 op `hook` (`args: {event, sessionId, cwd, notificationType?, agentID?, agentType?, runningBackgroundTasks?, watchPid?, toolTimeout?}`, result `{action}`; unknown fields are ignored). The decision lives in `HookPolicy` in AwakeKit, a pure function `action(_ hook: HookEvent, settings:, leaseExists:) → HookAction`, where `HookEvent` bundles the event name, `notificationType`, `agentID`, `agentType`, the running background-task count and `toolTimeout` (the action is `acquire`, `renew`, `renewFor(seconds)`, `setExpiry(seconds)`, `releaseAfter(seconds)`, `releaseNow`, `ignore` or `skipped` for "Only when asked"); the request handler applies the action through the engine's acquire, `renew`, `shorten` and `release`, under the same caller policy as named leases. `hooks.json` registers every event in the 2.3 table; synchronous hooks time out at 2 s (`SessionEnd` at 1 s) and the rest are `async`. Hooks never launch the app: `mooring hook` sends with a 1.5 s reply limit and `launch: false`, and `mooring-hook` exits 0 when there is no `mooring`, which keeps hook cost under 50 ms. Auto-launch applies only to interactive CLI use.
-- **MCP:** runs inside the CLI (`mooring mcp`); there is no separate server package. The client id is the slugified `clientInfo.name` from the MCP `initialize` request.
-- The `mooring://` URL scheme and the awake App Intents ship in stage 2c-2.
+- **MCP and links (stage 2c-2):**
+  - **Wire additions** (all lenient, so the protocol stays `v: 1`): `AcquireArgs` gains `client` (set only by `mooring mcp`) and `untilOff` (`on` with no expiry, whatever the click duration); the op `notify` has `NotifyArgs {title, body?, client?}` and `NotifyResult {posted}`. There is no `AcquireKind.mcp`, `ReleaseKind.mcp` or `StatusArgs.client`: MCP leases are ordinary `lease` acquires with `client` set, the server filters `status` itself, and it releases only the ids it created.
+  - **`mooring mcp` is hand-rolled** inside the CLI (`MCPMessage`, `MCPTools`, `MCPServer` in MooringCLICore); there is no separate server package and no SDK dependency. It supports protocol versions `2025-06-18`, `2025-03-26` and `2024-11-05`, and exits on stdin EOF.
+  - **MCP identity:** `MCPClientName` (MooringIPC) maps `clientInfo.name` to the display name and slug; the display name is the owner. See 2.5.
+  - **Links:** `MooringLink` parses; `LinkHandler` finds the sender app and calls the request handler in-process as an agent named after it.
+  - **Shortcuts:** `IntentActions` calls the same handler as a person. `AwakeStatusEntity` is the `AwakeStatus` entity.
+  - **Version:** this stage ships as 0.0.3 (`MARKETING_VERSION` and the plugin's `plugin.json`). `mooring --version` and the MCP `serverInfo.version` still report `0.2.0-dev` (`MooringCLI.version`); see `docs/BACKLOG.md`.
+- **`mooring doctor` and MCP clients:** check 8, "MCP clients", is described under Settings → Agents → Other agents (MCP).
 - **`mooring doctor` and notifications:** check 7, "Notifications", reads `notifications` from the app's `status` reply: ✓ "allowed", – "not asked yet", and ✗ "denied" with the fix "System Settings → Notifications → Mooring" only when the setting could need to ask (anything except Always allow and Never); otherwise – "denied (not needed)".
 - **CLI packaging:** the command-line logic lives in the `MooringCLICore` library target of `Packages/MooringIPC` (argument parsing with `swift-argument-parser`, the socket client, `anchor`, `doctor`), so tests drive it without a socket. `CLI/main.swift` is a thin entry point that builds the real environment and exits with the result.
 - **`mooring doctor` and lid sleep:** doctor reads `SleepDisabled` from the app's `status` reply, which asks the helper. The CLI never runs `pmset`.
@@ -937,7 +1018,7 @@ Each stage is one branch and one pull request titled `Stage N: …`, and ends at
 | 2a IPC and CLI | Socket, all `mooring` commands in 2.2, `doctor`, CLI install, agent holds (`--watch-pid auto`, the "For agents" patterns), the dropdown lease-row fix (rows update in place by id) | `mooring anchor -- sleep 20` shows in `mooring status --json`; exit codes match 2.2 | None |
 | 2b Claude Code plugin | The `hook` op and `HookPolicy`; `mooring hook`; the plugin (hooks, skill, `mooring-hook`) with an in-app and a GitHub marketplace; Settings → Awake → Agents; `doctor`'s plugin and Claude Code version checks | Recorded hook payloads piped to `mooring hook` acquire, renew and release a lease; the plugin files and both marketplaces validate | Installs the plugin from Settings; sees "Claude Code · <folder>" in the menu, the lease end after Claude stops or is killed, and the permission-prompt timeout (the lid-closed run waits for 2c-1's agent lid approval) |
 | 2c-1 Lid approvals | `LidApproval`, agent detection, Allow once / Always allow / Deny notifications, session lid, Settings → Agents → Lid mode, `doctor`'s Notifications check | Handler tests with an injected approver; the deny path exits 2 | Closes the lid during a Claude task; clicks each notification button |
-| 2c-2 MCP and URL scheme | `mooring mcp` awake tools; the `mooring://` URL scheme and awake App Intents | MCP calls from a test client | Triggers a lease from Raycast and Shortcuts |
+| 2c-2 MCP, links and Shortcuts | `mooring mcp` (`keep_awake`, `release_awake`, `awake_status`, `notify`) and `mooring notify`; the `mooring://` URL scheme; the three Shortcuts actions; Settings → Agents → Other agents (MCP) with Add/Update/Remove for Claude Desktop and Cursor and Copy config; `doctor`'s MCP clients check; version 0.0.3 | `MCPServerTests` drive the server over an in-memory pipe; handler, link, intent, config and CLI tests | Runs the Shortcuts, opens links from Raycast, adds Mooring to Claude Desktop and asks it to keep the Mac awake and to notify, and runs `mooring doctor` |
 | 3a WindowKit | Vendored Loop, radial menu, keybinds, Windows settings, Accessibility flow | With Windows off, no Accessibility prompt and WindowKit not loaded; frame-resolver unit tests | Grants Accessibility; tries the radial menu and keybinds |
 | 3b Agent windows | `mooring win list / arrange / undo / layout`, MCP window tools, skill update | Arranging three TextEdit windows returns `ok` frames; `undo` restores them | Asks Claude for the Chrome / iTerm / Slack layout |
 | 4 ClipKit | Vendored Maccy: the Clipboard submenu and popup, ⇧⌘C, ignore rules, retention | Unit tests; a test fails the build if any IPC op, MCP tool, intent or URL route touches ClipKit | Copies from 1Password and confirms it isn't recorded |
