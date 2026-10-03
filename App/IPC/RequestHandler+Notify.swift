@@ -9,10 +9,10 @@ extension RequestHandler {
     private static let notifyTitleLimit = 80
     private static let notifyBodyLimit = 300
     /// Whom a person's notifications come from.
-    private static let personName = "Terminal"
+    static let personName = "Terminal"
 
     /// `mooring notify`: posts "<Name>: <title>" with the body. An agent may be turned off in Settings and is
-    /// rate-limited; a person is neither.
+    /// rate-limited by name; an MCP client also by its pid, since it picks its own name. A person is neither.
     func notify(_ args: NotifyArgs, from caller: Caller) async throws -> NotifyResult {
         let agent = agentProcess(of: caller)?.name
         if agent != nil && !settings().agentNotifications {
@@ -25,16 +25,25 @@ extension RequestHandler {
         let name = agent ?? Self.personName
         // Checked and recorded after the last suspension, so two requests at once can't both pass.
         if agent != nil {
-            let current = now()
-            if let last = lastNotified[name], current.timeIntervalSince(last) < Self.notifyInterval {
-                let wait = Int((Self.notifyInterval - current.timeIntervalSince(last)).rounded(.up))
-                throw WireError(code: .denied, message: "Rate-limited: try again in \(wait) s")
-            }
-            lastNotified[name] = current
+            var buckets = [name]
+            if case .client = caller.identity { buckets.append("pid-\(caller.pid)") }
+            try checkRate(buckets)
         }
         await poster.post(
             id: "notify-\(UUID().uuidString)", title: "\(name): \(title)", body: body, userInfo: [:], category: nil
         )
         return NotifyResult(posted: true)
+    }
+
+    /// Refuses unless every bucket's last notification is at least `notifyInterval` ago, then records them all.
+    private func checkRate(_ buckets: [String]) throws {
+        let current = now()
+        let wait = buckets.compactMap { lastNotified[$0] }
+            .map { Self.notifyInterval - current.timeIntervalSince($0) }
+            .max() ?? 0
+        if wait > 0 {
+            throw WireError(code: .denied, message: "Rate-limited: try again in \(Int(wait.rounded(.up))) s")
+        }
+        for bucket in buckets { lastNotified[bucket] = current }
     }
 }

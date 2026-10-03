@@ -46,6 +46,24 @@ struct RequestHandlerNotifyTests {
         #expect(try #require(fixture.poster.posts.first).title == "Claude Desktop: Done")
     }
 
+    @Test func clientNamedTerminalBecomesMCPClient() async throws {
+        let fixture = RequestFixture()
+
+        #expect(posted(await fixture.notify("Done", client: " terminal\n")) == true)
+
+        #expect(try #require(fixture.poster.posts.first).title.hasPrefix("MCP client: "))
+    }
+
+    @Test func rotatingClientNamesShareThePidLimit() async {
+        let fixture = RequestFixture()
+        #expect(posted(await fixture.notify("One", client: "a")) == true)
+
+        fixture.knobs.clock += 5
+        #expect(wireFailure(await fixture.notify("Two", client: "b")) == denied("Rate-limited: try again in 25 s"))
+
+        #expect(fixture.poster.posts.count == 1)
+    }
+
     @Test func agentNotifyIsRateLimited() async {
         let fixture = RequestFixture.agent()
         #expect(posted(await fixture.notify("One")) == true)

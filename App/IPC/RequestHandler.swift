@@ -7,8 +7,11 @@ import os
 enum CallerIdentity: Sendable, Equatable {
     /// Agent detection over the caller's ancestry decides.
     case detect
-    /// An agent with this display name, whatever the ancestry: an MCP client, or an in-app intent naming one.
+    /// An agent with this display name, whatever the ancestry: an in-app intent naming one. It has no agent process.
     case agent(String)
+    /// An MCP client, by display name, from the request's `client`: an agent whose own process is the caller (the
+    /// MCP server), so only a watch on that process or one below it counts as an end.
+    case client(String)
     /// A person, whatever the ancestry.
     case person
 }
@@ -60,7 +63,7 @@ final class RequestHandler {
     var asking: Set<String> = []
     /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
     var agentLid: [String: Date] = [:]
-    /// When each caller, by name, last posted with `notify`, for the rate limit.
+    /// When each caller last posted with `notify`, by name (and by `pid-<pid>` for an MCP client), for the rate limit.
     var lastNotified: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
 

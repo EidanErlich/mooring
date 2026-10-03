@@ -61,6 +61,17 @@ struct RequestHandlerMCPTests {
         #expect(fixture.lease("mcp-x-1") == nil)
     }
 
+    @Test func clientWatchingUnrelatedPidAsks() async {
+        // pid 1 isn't the MCP server or under it, so the watch is no end: open-ended lid is asked about.
+        let fixture = RequestFixture()
+
+        _ = await fixture.send(.acquire(AcquireArgs(
+            kind: .lease, id: "mcp-x-1", level: "lid", ttl: nil, watchPid: 1, reason: nil, agent: nil, client: "claude-ai"
+        )))
+
+        #expect(fixture.approver.calls.map(\.agent) == ["Claude Desktop"])
+    }
+
     @Test func forcedPersonNeverAsks() async throws {
         // The ancestry says Claude Code; the forced identity wins.
         let fixture = RequestFixture.agent()
