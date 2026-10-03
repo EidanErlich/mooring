@@ -43,6 +43,29 @@ struct RequestHandlerMCPTests {
         #expect(fixture.approver.calls.isEmpty)
     }
 
+    @Test func clientLeaseGuardrailNamesReleaseAwake() async {
+        let fixture = RequestFixture()
+        fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 15))
+
+        let response = await mcpAcquire(fixture)
+
+        #expect(wireFailure(response) == WireError(
+            code: .guardrail,
+            message: "Lid mode paused: battery low. The lease is held and resumes when that clears; call release_awake to end it."
+        ))
+        #expect(fixture.lease("mcp-claude-desktop-1") != nil)
+    }
+
+    @Test func plainLeaseGuardrailKeepsCLIWording() async {
+        let fixture = RequestFixture()
+        fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 5))
+
+        let response = await fixture.acquire(.lease, id: "job", level: "lid", ttl: 600)
+
+        #expect(wireFailure(response)?.message
+            == "Paused: battery low. Lease job is held and applies when that clears; run `mooring lease release job` to end it.")
+    }
+
     @Test func clientNeedsMcpPrefix() async {
         let fixture = RequestFixture()
 

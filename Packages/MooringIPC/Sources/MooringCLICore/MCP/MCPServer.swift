@@ -112,7 +112,9 @@ struct MCPSession {
 // MARK: - Tools
 
 extension MCPSession {
-    /// Creates `mcp-<slug>-<n>`, or extends one of this client's leases, watching this server's own process.
+    /// Creates `mcp-<slug>-<pid>-<n>`, or extends one of this client's leases, watching this server's own process. The pid
+    /// keeps two servers for one client (two Claude Code sessions, say) from sharing, and so merging, a lease. At most
+    /// 4 + 24 + 1 + 10 + 1 + n digits, well within the app's 64-character ids.
     private mutating func keepAwake(minutes: Int, level: String, reason: String?, leaseID: String?) async -> JSONValue {
         let id: String
         if let leaseID {
@@ -120,19 +122,27 @@ extension MCPSession {
             id = leaseID
         } else {
             leasesMade += 1
-            id = "mcp-\(MCPClientName.slug(displayName))-\(leasesMade)"
+            id = "mcp-\(MCPClientName.slug(displayName))-\(environment.ownPID)-\(leasesMade)"
         }
+        let ttl = Double(minutes * 60)
         let args = RequestArgs.acquire(AcquireArgs(
-            kind: .lease, id: id, level: level, ttl: Double(minutes * 60), watchPid: environment.ownPID,
+            kind: .lease, id: id, level: level, ttl: ttl, watchPid: environment.ownPID,
             reason: reason ?? "Requested by \(displayName)", agent: nil, client: clientName
         ))
         switch await send(args, through: environment.acquireClient(kind: .lease, level: level)) {
         case .done(let result, let request):
             remember(id)
             return MCPTools.result(humanText(result, for: request), structured: JSONValue(encoding: result))
-        case .failed(let message, let mayHold):
-            // A guardrail holds the lease back but keeps it, and a lost reply may have created it: either way it may be ours.
-            if mayHold { remember(id) }
+        case .held(let guardrail):
+            // The app keeps the lease and applies it when the guardrail clears, so this is a success the client must know about.
+            remember(id)
+            let endsAt = ISO8601DateFormatter().string(from: environment.now().addingTimeInterval(ttl))
+            return MCPTools.result("Lease \(id) (\(level), \(CLIText.remaining(ttl))): \(guardrail)", structured: .object([
+                "lease_id": .string(id), "level": .string(level), "ends_at": .string(endsAt), "guardrail": .string(guardrail)
+            ]))
+        case .failed(let message, let lost):
+            // A lost reply may have created the lease, so it may be ours to release.
+            if lost { remember(id) }
             return MCPTools.failure(message)
         }
     }
@@ -150,7 +160,7 @@ extension MCPSession {
                 ownLeases.removeAll { $0 == id }
                 lines.append(humanText(result, for: request))
                 if case .release(let outcome) = result, outcome.released { released.append(.string(id)) }
-            case .failed(let message, _):
+            case .held(let message), .failed(let message, _):
                 return MCPTools.failure((lines + [message]).joined(separator: "; "))
             }
         }
@@ -175,7 +185,7 @@ extension MCPSession {
             return MCPTools.result(summary.compactText, structured: summary)
         case .done:
             return MCPTools.failure(Self.unexpectedReply)
-        case .failed(let message, _):
+        case .held(let message), .failed(let message, _):
             return MCPTools.failure(message)
         }
     }
@@ -187,7 +197,7 @@ extension MCPSession {
                                    structured: JSONValue(encoding: result))
         case .done:
             return MCPTools.failure(Self.unexpectedReply)
-        case .failed(let message, _):
+        case .held(let message), .failed(let message, _):
             return MCPTools.failure(message)
         }
     }
@@ -214,8 +224,10 @@ extension MCPSession {
 
     fileprivate enum Outcome {
         case done(ResponseResult, Request)
-        /// `mayHold`: the app may still hold what was asked for, after a guardrail or a lost reply.
-        case failed(String, mayHold: Bool)
+        /// A guardrail holds back what was asked for, but the app keeps it.
+        case held(String)
+        /// `lost`: the reply never came, so the request may have gone through.
+        case failed(String, lost: Bool)
     }
 
     /// Sends one request, starting the app if it isn't running, and puts any failure into the CLI's words.
@@ -225,14 +237,14 @@ extension MCPSession {
             let response = try await client.send(request, launch: true)
             if response.ok, let result = response.result { return .done(result, request) }
             let error = response.error ?? WireError(code: .internal, message: Self.unexpectedReply)
-            return .failed(error.message, mayHold: error.code == .guardrail)
+            return error.code == .guardrail ? .held(error.message) : .failed(error.message, lost: false)
         } catch let error as CLIError {
             let message = error.unavailableMessage ?? "Couldn't talk to Mooring"
             environment.writeError("mooring mcp: \(message)\n")
-            return .failed(message, mayHold: error == .noAnswer)
+            return .failed(message, lost: error == .noAnswer)
         } catch {
             environment.writeError("mooring mcp: Couldn't talk to Mooring\n")
-            return .failed("Couldn't talk to Mooring", mayHold: false)
+            return .failed("Couldn't talk to Mooring", lost: false)
         }
     }
 

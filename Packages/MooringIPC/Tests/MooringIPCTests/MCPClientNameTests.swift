@@ -26,3 +26,9 @@ import Testing
     #expect(slug == "aaaaaaaaaaaaaaaaaaaaaaa")
     #expect(!slug.hasSuffix("-"))
 }
+
+@Test func displayNeverPassesForAPerson() {
+    #expect(MCPClientName.display("terminal") == "MCP client")
+    #expect(MCPClientName.display(" TERMINAL\n") == "MCP client")
+    #expect(MCPClientName.display("Terminal app") == "Terminal app")
+}

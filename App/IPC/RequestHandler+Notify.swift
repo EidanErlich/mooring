@@ -9,7 +9,7 @@ extension RequestHandler {
     private static let notifyTitleLimit = 80
     private static let notifyBodyLimit = 300
     /// Whom a person's notifications come from.
-    static let personName = "Terminal"
+    static let personName = MCPClientName.personName
 
     /// `mooring notify`: posts "<Name>: <title>" with the body. An agent may be turned off in Settings and is
     /// rate-limited by name; an MCP client also by its pid, since it picks its own name. A person is neither.

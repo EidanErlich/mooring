@@ -63,9 +63,11 @@ final class LineFeed: @unchecked Sendable {
 
 /// An MCP server wired to fakes: feed it lines, then read its replies.
 struct MCPHarness {
-    static let ownPID: Int32 = 500
+    static let defaultPID: Int32 = 500
     static let appVersion = "9.9.9-test"
 
+    /// The pid of this `mooring mcp` process, which its leases watch and their ids carry.
+    var ownPID = defaultPID
     var client = ScriptedClient()
     var lidClient = ScriptedClient()
     let capture = Capture()
@@ -74,7 +76,7 @@ struct MCPHarness {
         let feed = LineFeed(lines)
         let capture = capture
         let environment = CLIEnvironment(
-            client: client, processes: FakeProcessTable([proc(Self.ownPID, 90, "mooring")]), ownPID: Self.ownPID, parentPID: 90,
+            client: client, processes: FakeProcessTable([proc(ownPID, 90, "mooring")]), ownPID: ownPID, parentPID: 90,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
             readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, claude: { nil },
@@ -104,8 +106,15 @@ struct MCPHarness {
         ((toolResult(id)?["content"] as? [[String: Any]])?.first?["text"]) as? String
     }
 
-    func isError(_ id: Int) -> Bool {
-        toolResult(id)?["isError"] as? Bool ?? false
+    /// The tool result's `isError`, or nil when reply `id` is missing or isn't a tool result, so
+    /// `isError(n) == false` holds only for a real success.
+    func isError(_ id: Int) -> Bool? {
+        toolResult(id)?["isError"] as? Bool
+    }
+
+    /// The tool result's `structuredContent`.
+    func structured(_ id: Int) -> [String: Any]? {
+        toolResult(id)?["structuredContent"] as? [String: Any]
     }
 
     var allRequests: [Request] { client.requests + lidClient.requests }

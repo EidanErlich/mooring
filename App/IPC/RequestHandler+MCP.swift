@@ -10,19 +10,12 @@ extension RequestHandler {
     /// whatever the ancestry of the MCP server process.
     func identified(_ caller: Caller, client: String?) -> Caller {
         guard let client else { return caller }
-        return Caller(uid: caller.uid, pid: caller.pid, identity: .client(Self.clientName(client)))
+        return Caller(uid: caller.uid, pid: caller.pid, identity: .client(MCPClientName.display(client)))
     }
 
     /// The owner of an MCP client's lease, or nil when the request names no client.
     func mcpOwner(_ client: String?) -> LeaseOwner? {
-        client.map { .mcp(client: Self.clientName($0)) }
-    }
-
-    /// The name an MCP client goes by. The client reports it, so it may not pass for a person: "Terminal" (in any
-    /// case) becomes "MCP client".
-    static func clientName(_ client: String) -> String {
-        let name = MCPClientName.display(client)
-        return name.caseInsensitiveCompare(personName) == .orderedSame ? MCPClientName.display(nil) : name
+        client.map { .mcp(client: MCPClientName.display($0)) }
     }
 
     /// An MCP client's leases, and only those, have `mcp-` ids.

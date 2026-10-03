@@ -161,7 +161,7 @@ final class RequestHandler {
             return granted.lease
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id, mcp: args.client != nil))
         }
         return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: clamped)
     }
@@ -180,7 +180,7 @@ final class RequestHandler {
             Task { @MainActor in _ = try? await self.ask(agent, about: lease) }
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id, mcp: args.client != nil))
         }
     }
 
@@ -253,7 +253,7 @@ final class RequestHandler {
             }
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id))
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id, mcp: false))
         }
         return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: (ttl ?? 0) > AwakeEngine.maxLeaseLength)
     }
@@ -297,9 +297,11 @@ final class RequestHandler {
     }
 
     /// The guardrail `message` plus what the caller must know: the lease exists even though the
-    /// reply is a refusal, so it applies later and, for `on` and `lease`, still needs ending.
-    private static func holdNotice(_ message: String, kind: AcquireKind, id: String) -> String {
-        switch kind {
+    /// reply is a refusal, so it applies later and, for `on` and `lease`, still needs ending. An MCP client
+    /// (`mcp`) ends it with its `release_awake` tool, not the CLI.
+    private static func holdNotice(_ message: String, kind: AcquireKind, id: String, mcp: Bool) -> String {
+        if mcp { return "\(message). The lease is held and resumes when that clears; call release_awake to end it." }
+        return switch kind {
         case .lease: "\(message). Lease \(id) is held and applies when that clears; run `mooring lease release \(id)` to end it."
         case .on: "\(message). Mooring is on and applies when that clears; run `mooring off` to end it."
         case .anchor: "\(message). The anchor applies when that clears."
