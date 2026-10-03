@@ -250,10 +250,10 @@ private func socketEnvironment(path: String, replyTimeout: TimeInterval, input: 
     CLIEnvironment(
         client: RecordingClient(), processes: claudeTable, ownPID: 500, parentPID: 100,
         write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
-        newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
+        newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil, home: URL(fileURLWithPath: "/nowhere/home"),
         readInput: { Data(input.prefix($0)) },
         hookClient: SocketClient(path: path, replyTimeout: replyTimeout, launchWait: 0, launcher: {}),
-        lidClient: RecordingClient(), claude: { nil }
+        lidClient: RecordingClient(), claude: { nil }, readLine: { nil }, appVersion: "9.9.9-test"
     )
 }
 

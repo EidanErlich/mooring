@@ -3,10 +3,24 @@ import Foundation
 import MooringIPC
 import os
 
-/// The peer on the other end of a socket connection, as the kernel reports it.
+/// Who a caller is taken to be: found from its process ancestry, or given by the path the request came in on.
+enum CallerIdentity: Sendable, Equatable {
+    /// Agent detection over the caller's ancestry decides.
+    case detect
+    /// An agent with this display name, whatever the ancestry: an in-app intent naming one. It has no agent process.
+    case agent(String)
+    /// An MCP client, by display name, from the request's `client`: an agent whose own process is the caller (the
+    /// MCP server), so only a watch on that process or one below it counts as an end.
+    case client(String)
+    /// A person, whatever the ancestry.
+    case person
+}
+
+/// The peer on the other end of a socket connection, as the kernel reports it, and who it is taken to be.
 struct Caller: Sendable {
     let uid: uid_t
     let pid: Int32
+    var identity: CallerIdentity = .detect
 }
 
 extension LeaseInfo {
@@ -32,14 +46,16 @@ extension LeaseInfo {
 final class RequestHandler {
     let engine: AwakeEngine
     let settings: @MainActor () -> AwakeSettings
-    private let helperStatus: @MainActor () -> String
-    private let readHelperSleepDisabled: @MainActor () async -> Bool?
+    let helperStatus: @MainActor () -> String
+    let readHelperSleepDisabled: @MainActor () async -> Bool?
     let now: @MainActor () -> Date
     /// The process ancestry agent detection walks.
     let processes: any ProcessTable
     let approver: any LidApproving
     let updateSettings: @MainActor ((inout AwakeSettings) -> Void) -> Void
-    private let notificationStatus: @MainActor () async -> String?
+    let notificationStatus: @MainActor () async -> String?
+    /// Posts `notify`'s notifications.
+    let poster: any NotificationPosting
     /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied and when the
     /// denial ends: it isn't asked again in that lifetime until then.
     var deniedLid: [String: (created: Date, until: Date)] = [:]
@@ -47,16 +63,16 @@ final class RequestHandler {
     var asking: Set<String> = []
     /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
     var agentLid: [String: Date] = [:]
+    /// When each caller last posted with `notify`, by name (and by `pid-<pid>` for an MCP client), for the rate limit.
+    var lastNotified: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
-    /// The id `mooring on` used before it became the menu's On switch.
-    private static let legacyCLILeaseID = "cli"
 
     init(
         engine: AwakeEngine, settings: @escaping @MainActor () -> AwakeSettings,
         helperStatus: @escaping @MainActor () -> String, readHelperSleepDisabled: @escaping @MainActor () async -> Bool?,
         now: @escaping @MainActor () -> Date = { Date() }, processes: any ProcessTable = SystemProcessTable(),
         approver: any LidApproving, updateSettings: @escaping @MainActor ((inout AwakeSettings) -> Void) -> Void,
-        notificationStatus: @escaping @MainActor () async -> String?
+        notificationStatus: @escaping @MainActor () async -> String?, poster: any NotificationPosting
     ) {
         self.engine = engine
         self.settings = settings
@@ -67,18 +83,22 @@ final class RequestHandler {
         self.approver = approver
         self.updateSettings = updateSettings
         self.notificationStatus = notificationStatus
+        self.poster = poster
     }
 
     func handle(_ request: Request, from caller: Caller) async -> Response {
         do {
             switch request.args {
             case .acquire(let args) where args.kind == .on:
-                return .success(id: request.id, .acquire(try await turnOn(args, from: caller)))
-            case .acquire(let args): return .success(id: request.id, .acquire(try await acquire(args, from: caller)))
+                return .success(id: request.id, .acquire(try await turnOn(args, from: identified(caller, client: args.client))))
+            case .acquire(let args):
+                return .success(id: request.id, .acquire(try await acquire(args, from: identified(caller, client: args.client))))
             case .renew(let args): return .success(id: request.id, .renew(try renew(args)))
             case .release(let args): return .success(id: request.id, .release(try release(args)))
             case .status: return .success(id: request.id, .status(await status()))
             case .hook(let args): return .success(id: request.id, .hook(try hook(args, from: caller)))
+            case .notify(let args):
+                return .success(id: request.id, .notify(try await notify(args, from: identified(caller, client: args.client))))
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")
@@ -103,7 +123,7 @@ final class RequestHandler {
         /// This plan for a named lease that already exists, so that acquiring it again never weakens it: it keeps the
         /// existing watch, level, reason and owner unless the request gives its own (a level only ever adds to the old one).
         func merged(with existing: Lease, args: AcquireArgs) -> Plan {
-            let ownerGiven = args.agent.map(CallerPolicy.cleanAgentName).map { !$0.isEmpty } ?? false
+            let ownerGiven = args.client != nil || (args.agent.map(CallerPolicy.cleanAgentName).map { !$0.isEmpty } ?? false)
             return Plan(
                 id: id, owner: ownerGiven ? owner : existing.owner,
                 reason: reasonGiven(args) ? reason : existing.reason,
@@ -141,7 +161,7 @@ final class RequestHandler {
             return granted.lease
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id, mcp: args.client != nil))
         }
         return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: clamped)
     }
@@ -160,7 +180,7 @@ final class RequestHandler {
             Task { @MainActor in _ = try? await self.ask(agent, about: lease) }
         }
         if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id))
+            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: args.kind, id: plan.id, mcp: args.client != nil))
         }
     }
 
@@ -204,7 +224,7 @@ final class RequestHandler {
         let level = try args.level.map(parseLevel)
         let session = engine.menuLease ?? engine.sessionApps.first
         let lease: Lease
-        if ttl == nil && level == nil, let session {
+        if ttl == nil && level == nil && args.untilOff != true, let session {
             lease = session
         } else {
             let current = now()
@@ -217,7 +237,8 @@ final class RequestHandler {
             )
             let defaults = settings()
             let requested = level ?? engine.sessionLevel ?? defaults.clickLevel
-            let duration = ttl ?? defaults.clickDuration
+            // `untilOff` asks for no end, which the click duration would otherwise fill in.
+            let duration = ttl ?? (args.untilOff == true ? nil : defaults.clickDuration)
             let existing = session.flatMap { liveLease($0.id) }
             // `on` replaces the session, and may drop its end, so only an open-ended lid session already covers it.
             let covers = existing.map { $0.level.lid && $0.expiresAt == nil && $0.watch == nil } ?? false
@@ -232,8 +253,11 @@ final class RequestHandler {
                 return lease
             }
         }
-        if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id))
+        if let held = heldSuspension(holdingBack: lease.level) {
+            let notice = caller.identity == .person
+                ? personHoldNotice(held)
+                : Self.holdNotice(Self.guardrailMessage(held), kind: .on, id: lease.id, mcp: false)
+            throw WireError(code: .guardrail, message: notice)
         }
         return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: (ttl ?? 0) > AwakeEngine.maxLeaseLength)
     }
@@ -241,19 +265,22 @@ final class RequestHandler {
     private func plan(for args: AcquireArgs, from caller: Caller) throws -> Plan {
         let ttl = try positive(args.ttl)
         let level = try args.level.map(parseLevel)
-        let owner = args.agent.map(CallerPolicy.cleanAgentName).flatMap { $0.isEmpty ? nil : LeaseOwner.agent(name: $0) }
+        let owner = mcpOwner(args.client)
+            ?? args.agent.map(CallerPolicy.cleanAgentName).flatMap { $0.isEmpty ? nil : LeaseOwner.agent(name: $0) }
             ?? .cli(pid: caller.pid)
         switch args.kind {
         case .on:
             throw WireError(code: .internal, message: "On is not a named lease")
         case .anchor:
             guard let pid = args.watchPid else { throw WireError(code: .badRequest, message: "Missing --pid") }
+            try checkMCPPrefix("anchor-\(pid)", client: args.client)
             return Plan(
                 id: "anchor-\(pid)", owner: owner, reason: cleaned(args.reason) ?? "pid \(pid)",
                 level: level ?? .system, ttl: ttl, watchPID: pid, caller: .trusted
             )
         case .lease:
             guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
+            try checkMCPPrefix(id, client: args.client)
             return Plan(
                 id: id, owner: owner, reason: cleaned(args.reason) ?? id,
                 level: level ?? .system, ttl: ttl, watchPID: args.watchPid, caller: .named
@@ -274,127 +301,43 @@ final class RequestHandler {
     }
 
     /// The guardrail `message` plus what the caller must know: the lease exists even though the
-    /// reply is a refusal, so it applies later and, for `on` and `lease`, still needs ending.
-    private static func holdNotice(_ message: String, kind: AcquireKind, id: String) -> String {
-        switch kind {
+    /// reply is a refusal, so it applies later and, for `on` and `lease`, still needs ending. An MCP client
+    /// (`mcp`) ends it with its `release_awake` tool, not the CLI.
+    private static func holdNotice(_ message: String, kind: AcquireKind, id: String, mcp: Bool) -> String {
+        if mcp { return "\(message). The lease is held and resumes when that clears; call release_awake to end it." }
+        return switch kind {
         case .lease: "\(message). Lease \(id) is held and applies when that clears; run `mooring lease release \(id)` to end it."
         case .on: "\(message). Mooring is on and applies when that clears; run `mooring off` to end it."
         case .anchor: "\(message). The anchor applies when that clears."
         }
     }
 
-    /// Why a guardrail holds back a lease at `level`, if one does. Low battery pauses everything;
-    /// the others pause only lid mode.
-    private func guardrailMessage(holdingBack level: AwakeLevel) -> String? {
+    /// The guardrail that holds back a lease at `level`, if one does. Low battery pauses everything; the others
+    /// pause only lid mode.
+    private func heldSuspension(holdingBack level: AwakeLevel) -> Suspension? {
         let active = engine.state.suspensions
-        if active.contains(.lowBatteryAll) { return "Paused: battery low" }
+        if active.contains(.lowBatteryAll) { return .lowBatteryAll }
         guard level.lid else { return nil }
-        if active.contains(.lowBatteryLid) { return "Lid mode paused: battery low" }
-        if active.contains(.thermal) { return "Lid mode paused: Mac too warm" }
-        if active.contains(.lidNeedsAC) { return "Lid mode paused: needs power" }
-        return nil
+        return [Suspension.lowBatteryLid, .thermal, .lidNeedsAC].first { active.contains($0) }
     }
 
-}
-
-extension RequestHandler {
-    // MARK: - renew and release
-
-    private func renew(_ args: RenewArgs) throws -> LeaseInfo {
-        let ttl = try positive(args.ttl)
-        try requireUnreserved(args.id)
-        guard engine.leases.contains(where: { $0.id == args.id }) else {
-            throw WireError(code: .notFound, message: "No lease \(args.id); acquire it again")
-        }
-        guard let lease = engine.renew(id: args.id, ttl: ttl.map { min($0, CallerPolicy.maxNamedLease) }) else {
-            throw WireError(code: .internal, message: "Couldn't renew \(args.id)")
-        }
-        return LeaseInfo(lease)
+    private func guardrailMessage(holdingBack level: AwakeLevel) -> String? {
+        heldSuspension(holdingBack: level).map(Self.guardrailMessage)
     }
 
-    private func release(_ args: ReleaseArgs) throws -> ReleaseResult {
-        let after = try positive(args.after)
-        switch args.kind {
-        case .off:
-            return ReleaseResult(released: turnOff())
-        case .lease:
-            guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
-            try requireUnreserved(id)
-            guard engine.leases.contains(where: { $0.id == id }) else { return ReleaseResult(released: false) }
-            if let after {
-                engine.shorten(id: id, to: now().addingTimeInterval(after))
-            } else {
-                engine.release(id: id)
-            }
-            return ReleaseResult(released: true)
+    private static func guardrailMessage(_ suspension: Suspension) -> String {
+        switch suspension {
+        case .lowBatteryAll: "Paused: battery low"
+        case .lowBatteryLid: "Lid mode paused: battery low"
+        case .thermal: "Lid mode paused: Mac too warm"
+        case .lidNeedsAC: "Lid mode paused: needs power"
         }
     }
 
-    /// `mooring off`: ends the menu session, as the menu's On switch does, and a `cli` lease an
-    /// earlier build may have left. Agent leases and anchors stay.
-    private func turnOff() -> Bool {
-        var ended = engine.hasMenuSession
-        engine.endMenuSession()
-        if engine.leases.contains(where: { $0.id == Self.legacyCLILeaseID }) {
-            engine.release(id: Self.legacyCLILeaseID)
-            ended = true
-        }
-        return ended
-    }
-
-    // MARK: - status
-
-    private func status() async -> StatusResult {
-        // The helper and notification reads suspend, so take them first and read the engine in one synchronous stretch.
-        let helperSleepDisabled = await readHelperSleepDisabled()
-        let notifications = await notificationStatus()
-        let current = now()
-        let state = engine.state
-        let live = engine.leases.filter { $0.isLive(at: current) }
-        return StatusResult(
-            summary: StatusLine.text(leases: engine.leases, state: state, now: current),
-            effective: LevelInfo(system: state.systemAssertion, display: state.displayAssertion, lid: state.lidSleepDisabled),
-            systemAssertion: state.systemAssertion, displayAssertion: state.displayAssertion,
-            lidSleepDisabled: state.lidSleepDisabled, helperSleepDisabled: helperSleepDisabled,
-            wantsLid: engine.wantsLid,
-            leases: live.map { LeaseInfo($0, pendingApproval: asking.contains($0.id) || approver.pending.contains($0.id)) },
-            power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
-            thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
-            suspensions: state.suspensions.map { String(describing: $0) }.sorted(),
-            notifications: notifications, agentLidApproval: settings().agentLidApproval.rawValue
-        )
-    }
-
-    private static func thermalName(_ state: ProcessInfo.ThermalState) -> String {
-        switch state {
-        case .nominal: "nominal"
-        case .fair: "fair"
-        case .serious: "serious"
-        case .critical: "critical"
-        @unknown default: "nominal"
-        }
-    }
-
-    // MARK: - Validation
-
-    /// `seconds` unchanged, or a bad request when it isn't a positive, finite length of time.
-    private func positive(_ seconds: Double?) throws -> Double? {
-        guard let seconds else { return nil }
-        guard seconds.isFinite, seconds > 0 else { throw WireError(code: .badRequest, message: "Durations must be positive") }
-        return seconds
-    }
-
-    private func parseLevel(_ text: String) throws -> AwakeLevel {
-        guard let flags = WireText.parseLevel(text) else { throw WireError(code: .badRequest, message: "Unknown level \(text)") }
-        return AwakeLevel(display: flags.display, lid: flags.lid)
-    }
-
-    /// The reason cleaned for display, or nil when none was given or nothing is left of it.
-    private func cleaned(_ reason: String?) -> String? {
-        reason.map(CallerPolicy.cleanReason).flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    private func requireUnreserved(_ id: String) throws {
-        if CallerPolicy.isReserved(id) { throw WireError(code: .badRequest, message: "\(id) is reserved") }
+    /// What a person (the Shortcuts actions) is told when `suspension` holds their session back: the title of the
+    /// notification that guardrail posts, without the CLI advice to end it.
+    private func personHoldNotice(_ suspension: Suspension) -> String {
+        let title = GuardrailNotifier.message(for: suspension, settings: settings()).title
+        return "\(title). Mooring is on and starts when that clears."
     }
 }

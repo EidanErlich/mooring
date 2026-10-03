@@ -51,6 +51,7 @@ enum CLIText {
         case (.renew(let lease), _): "Renewed \(lease.id) · \(timeText(lease, now: now))"
         case (.release(let released), .release(let request)): release(released, request: request)
         case (.status(let status), _): StatusText.human(status, now: now)
+        case (.notify(let result), _): result.posted ? "Notified" : "Not notified"
         default: "Done"
         }
     }

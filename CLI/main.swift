@@ -44,10 +44,14 @@ let environment = CLIEnvironment(
     now: { Date() },
     ownBinaryPath: ownExecutablePath(),
     pathEnv: ProcessInfo.processInfo.environment["PATH"],
+    home: FileManager.default.homeDirectoryForCurrentUser,
     readInput: readStandardInput(limit:),
     hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {}),
     lidClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 65),
-    claude: { probeClaude(pathEnv: ProcessInfo.processInfo.environment["PATH"]) }
+    claude: { probeClaude(pathEnv: ProcessInfo.processInfo.environment["PATH"]) },
+    // `mooring mcp` calls this from a background queue, never the main thread.
+    readLine: { Swift.readLine(strippingNewline: true) },
+    appVersion: MooringCLI.version
 )
 
 let arguments = Array(CommandLine.arguments.dropFirst())

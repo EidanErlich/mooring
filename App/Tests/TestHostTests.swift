@@ -16,4 +16,11 @@ struct InfoPlistTests {
         let style = Bundle(for: AppDelegate.self).object(forInfoDictionaryKey: "NSUserNotificationAlertStyle")
         #expect(style as? String == "alert")
     }
+
+    /// Raycast, Alfred and scripts reach the app through `mooring://` links.
+    @Test func mooringSchemeIsRegistered() throws {
+        let types = Bundle(for: AppDelegate.self).object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]]
+        let type = try #require(types?.first { $0["CFBundleURLName"] as? String == "dev.mooring.link" })
+        #expect(type["CFBundleURLSchemes"] as? [String] == ["mooring"])
+    }
 }

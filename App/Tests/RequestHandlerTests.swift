@@ -8,6 +8,29 @@ import Testing
 struct RequestHandlerTests {
     // MARK: - acquire on
 
+    @Test func onUntilOffIgnoresTheClickDuration() async throws {
+        let fixture = RequestFixture()
+        fixture.knobs.settings.clickDuration = 3600
+
+        let response = await fixture.send(.acquire(AcquireArgs(
+            kind: .on, id: nil, level: "system", ttl: nil, watchPid: nil, reason: nil, agent: nil, untilOff: true
+        )))
+
+        #expect(response.ok)
+        #expect(try #require(fixture.lease("menu")).expiresAt == nil)
+    }
+
+    @Test func onUntilOffReplacesARunningTimedSession() async throws {
+        let fixture = RequestFixture()
+        fixture.engine.turnOnMenu(duration: 600, level: .system)
+
+        _ = await fixture.send(.acquire(AcquireArgs(
+            kind: .on, id: nil, level: nil, ttl: nil, watchPid: nil, reason: nil, agent: nil, untilOff: true
+        )))
+
+        #expect(try #require(fixture.lease("menu")).expiresAt == nil)
+    }
+
     @Test func onStartsTheMenuSessionAtClickDefaults() async throws {
         let fixture = RequestFixture()
         fixture.knobs.settings.clickLevel = .screenOn

@@ -15,14 +15,15 @@ protocol LidApproving: AnyObject {
     var pending: Set<String> { get }
 }
 
-/// Posts the approval notification. Tests use a fake; nothing real is posted there.
+/// Posts the approval notifications and `notify`'s. Tests use a fake; nothing real is posted there.
 @MainActor
 protocol NotificationPosting: AnyObject {
     /// Requests authorization if it hasn't been asked yet; true only if allowed.
     func authorize() async -> Bool
     /// "allowed", "notDetermined" or "denied"; nil if the settings can't be read.
     func notificationStatus() async -> String?
-    func post(id: String, title: String, body: String, userInfo: [String: String]) async
+    /// Posts a notification; `category` is set only when given (the lid approvals' actions).
+    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async
     /// Removes a delivered notification whose ask is over.
     func withdraw(id: String)
     /// The ids of delivered lid-approval notifications.
@@ -56,13 +57,13 @@ final class SystemNotificationPoster: NotificationPosting {
         }
     }
 
-    func post(id: String, title: String, body: String, userInfo: [String: String]) async {
+    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.userInfo = userInfo
-        content.categoryIdentifier = LidApprovalCenter.categoryID
+        if let category { content.categoryIdentifier = category }
         try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
     }
 
@@ -139,7 +140,7 @@ final class LidApprovalCenter: LidApproving {
             waiting[id] = Waiting(leaseID: leaseID, continuation: continuation, timer: timer)
             pending.insert(leaseID)
             Task {
-                await poster.post(id: id, title: title, body: text, userInfo: ["leaseID": leaseID])
+                await poster.post(id: id, title: title, body: text, userInfo: ["leaseID": leaseID], category: Self.categoryID)
                 // Resolved while posting: don't leave buttons that do nothing.
                 if waiting[id] == nil { poster.withdraw(id: id) }
             }

@@ -21,10 +21,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let approvals = LidApprovalCenter()
     private var notificationResponder: NotificationResponder?
     private var lidSettingUpdates: Task<Void, Never>?
+    /// Posts `notify`'s notifications and link errors.
+    private let poster = SystemNotificationPoster()
+    /// Hands the handler to links and Shortcuts, which can arrive before it's built. It is the Shortcuts actions' own.
+    private var gate: HandlerGate { IntentActions.shared.gate }
+    private lazy var links = LinkHandler(
+        gate: gate, poster: poster, appName: { NSRunningApplication(processIdentifier: $0)?.localizedName }
+    )
 
     /// True when Xcode launched the app only to host unit tests.
     nonisolated static var isHostingTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    /// Links are taken from here on, so one that launches the app isn't lost; it waits for the handler.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self, andSelector: #selector(handleGetURL(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL)
+        )
+    }
+
+    /// A `mooring://` link. It never brings Mooring forward; the request runs in the background.
+    @objc private func handleGetURL(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
+        guard let text = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: text) else { return }
+        let senderPID = event.attributeDescriptor(forKeyword: AEKeyword(keySenderPIDAttr))?.int32Value
+        Task { await links.open(url, senderPID: senderPID) }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -125,8 +148,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 change(&settings)
                 Defaults[.awake] = settings
             },
-            notificationStatus: { [approvals] in await approvals.notificationStatus() }
+            notificationStatus: { [approvals] in await approvals.notificationStatus() },
+            poster: poster
         )
+        gate.set(handler)
         // Never, or session lid switched off, takes lid mode back from live agent leases right away.
         lidSettingUpdates = Task {
             for await _ in Defaults.updates(.awake, initial: false) { handler.applyLidSettings() }

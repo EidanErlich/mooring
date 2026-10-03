@@ -167,6 +167,20 @@ struct RequestHandlerOpsTests {
         #expect(wireFailure(hotReply) == WireError(code: .guardrail, message: "Lid mode paused: Mac too warm\(Self.onSuffix)"))
     }
 
+    @Test func aPersonIsToldTheGuardrailInTheNotificationsWords() async {
+        let fixture = RequestFixture()
+        fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 50))
+        let args = AcquireArgs(kind: .on, id: nil, level: "lid", ttl: nil, watchPid: nil, reason: nil, agent: nil)
+
+        let response = await fixture.handler.handle(
+            Request(v: 1, id: "p", op: .acquire, args: .acquire(args)), from: Caller(uid: 501, pid: 77, identity: .person)
+        )
+
+        #expect(wireFailure(response) == WireError(
+            code: .guardrail, message: "Lid mode waits for power. Mooring is on and starts when that clears."
+        ))
+    }
+
     @Test func lidGuardrailsDoNotHoldBackAPlainLease() async {
         let fixture = RequestFixture()
         fixture.engine.update(power: PowerSnapshot(onAC: false, batteryPercent: 50))

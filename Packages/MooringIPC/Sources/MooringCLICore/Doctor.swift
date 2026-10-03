@@ -21,13 +21,16 @@ public enum Doctor {
         }
     }
 
-    /// The seven checks in order. `status` is nil when the app didn't give a status, and `unavailable` says why, or
+    // swiftlint:disable function_parameter_count
+    /// The eight checks in order. `status` is nil when the app didn't give a status, and `unavailable` says why, or
     /// `appError` holds the message of an error reply from an app that did answer; `resolve` follows symlinks;
-    /// `claude` is nil when Claude Code wasn't found.
+    /// `claude` is nil when Claude Code wasn't found; `home` and `helperPath` say where to look for MCP client configs
+    /// and which `mooring` they should run.
     public static func checks(
         status: StatusResult?, unavailable: CLIError = .unreachable, appError: String? = nil, pathEnv: String?,
-        ownBinary: String, resolve: (String) -> String?, claude: ClaudeSnapshot?
+        ownBinary: String, resolve: (String) -> String?, claude: ClaudeSnapshot?, home: URL, helperPath: String
     ) -> [Check] {
+        // swiftlint:enable function_parameter_count
         [
             appCheck(status, unavailable: unavailable, appError: appError),
             pathCheck(pathEnv: pathEnv, ownBinary: ownBinary, resolve: resolve),
@@ -35,7 +38,8 @@ public enum Doctor {
             lidCheck(status),
             pluginCheck(claude),
             claudeVersionCheck(claude),
-            notificationsCheck(status)
+            notificationsCheck(status),
+            mcpClientsCheck(home: home, helperPath: helperPath)
         ]
     }
 
@@ -156,6 +160,24 @@ public enum Doctor {
         }
     }
 
+    /// Passes with the clients whose config runs this `mooring`, fails for any that runs another one, and skips when none
+    /// has the entry (a client that isn't installed has nothing to check).
+    private static func mcpClientsCheck(home: URL, helperPath: String) -> Check {
+        let name = "MCP clients"
+        let clients = MCPClientConfig.Client.allCases.map { MCPClientConfig(client: $0, home: home) }
+        let states = clients.map { ($0.name, $0.state(helperPath: helperPath)) }
+        let stale = states.compactMap { client, state -> String? in
+            guard case .needsUpdate = state else { return nil }
+            return "\(client) needs update"
+        }
+        guard stale.isEmpty else {
+            return Check(name: name, state: "fail", detail: stale.joined(separator: ", "), fix: "Settings → Agents → Update")
+        }
+        let added = states.filter { $0.1 == .added }.map(\.0)
+        guard !added.isEmpty else { return Check(name: name, state: "skip", detail: "none added", fix: nil) }
+        return Check(name: name, state: "pass", detail: added.joined(separator: ", "), fix: nil)
+    }
+
     private static func isExecutableFile(_ path: String) -> Bool {
         var isFolder: ObjCBool = false
         return FileManager.default.fileExists(atPath: path, isDirectory: &isFolder) && !isFolder.boolValue
@@ -172,7 +194,8 @@ struct DoctorCommand: ParsableCommand, CLICommand {
         let app = await currentStatus(env)
         let checks = Doctor.checks(
             status: app.status, unavailable: app.unavailable, appError: app.error, pathEnv: env.pathEnv, ownBinary: env.ownBinaryPath,
-            resolve: Doctor.resolvePath, claude: env.claude()
+            resolve: Doctor.resolvePath, claude: env.claude(), home: env.home,
+            helperPath: Doctor.resolvePath(env.ownBinaryPath) ?? env.ownBinaryPath
         )
         if output.json {
             let encoder = JSONEncoder()

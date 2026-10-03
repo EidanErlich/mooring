@@ -47,9 +47,16 @@ extension AwakeLevel {
 }
 
 extension RequestHandler {
-    /// The agent the caller runs under, with that agent process's pid, or nil for a person.
-    func agentProcess(of caller: Caller) -> (name: String, pid: Int32)? {
-        AgentDetection.agentProcess(for: caller.pid, in: processes)
+    /// The agent the caller runs under, with that agent process's pid, or nil for a person. An MCP client's process
+    /// is the caller itself. An in-app forced agent has no agent process (nil pid), so any watch counts as its
+    /// lease's end, as for a hook; the app never sets one.
+    func agentProcess(of caller: Caller) -> (name: String, pid: Int32?)? {
+        switch caller.identity {
+        case .detect: AgentDetection.agentProcess(for: caller.pid, in: processes).map { ($0.name, $0.pid) }
+        case .agent(let name): (name, nil)
+        case .client(let name): (name, caller.pid)
+        case .person: nil
+        }
     }
 
     /// Whether a lease an agent asks for ends: by its expiry, or by a watch on the agent's own process or one below

@@ -39,6 +39,8 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
     public var agentWindows = AgentWindowMode.automatic
     /// How long a session waiting on a permission prompt keeps the Mac awake.
     public var agentWaitingTimeout: TimeInterval = 1800
+    /// Agents may post a notification through `notify` (the MCP tool, `mooring notify`).
+    public var agentNotifications = true
 
     public init() {}
 
@@ -49,7 +51,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         case clickLevel, clickDuration, endMenuLeaseAfterSleep, allowLidOnBattery
         case lidBatteryThreshold, allBatteryThreshold, thermalCutoff
         case agentKeepAwake, agentLid, agentWindows, agentWaitingTimeout
-        case agentLidApproval, agentSessionLid, agentLidAlwaysAllowed
+        case agentLidApproval, agentSessionLid, agentLidAlwaysAllowed, agentNotifications
     }
 
     public init(from decoder: any Decoder) throws {
@@ -72,6 +74,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         agentLidApproval = try value(.agentLidApproval, defaults.agentLidApproval)
         agentSessionLid = try value(.agentSessionLid, defaults.agentSessionLid)
         agentLidAlwaysAllowed = try value(.agentLidAlwaysAllowed, defaults.agentLidAlwaysAllowed)
+        agentNotifications = try value(.agentNotifications, defaults.agentNotifications)
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -90,6 +93,7 @@ public struct AwakeSettings: Codable, Equatable, Sendable {
         try container.encode(agentLidApproval, forKey: .agentLidApproval)
         try container.encode(agentSessionLid, forKey: .agentSessionLid)
         try container.encode(agentLidAlwaysAllowed, forKey: .agentLidAlwaysAllowed)
+        try container.encode(agentNotifications, forKey: .agentNotifications)
     }
 }
 

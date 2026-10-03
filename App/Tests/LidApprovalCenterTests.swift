@@ -11,6 +11,7 @@ final class FakeNotificationPoster: NotificationPosting {
         let title: String
         let body: String
         let userInfo: [String: String]
+        let category: String?
     }
 
     var authorized = true
@@ -28,8 +29,8 @@ final class FakeNotificationPoster: NotificationPosting {
 
     func notificationStatus() async -> String? { status }
 
-    func post(id: String, title: String, body: String, userInfo: [String: String]) async {
-        posts.append(Post(id: id, title: title, body: body, userInfo: userInfo))
+    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async {
+        posts.append(Post(id: id, title: title, body: body, userInfo: userInfo, category: category))
     }
 
     func withdraw(id: String) {
@@ -77,6 +78,7 @@ struct LidApprovalCenterTests {
         let post = poster.posts[0]
         #expect(post.id.hasPrefix("lid-anchor-1-"))
         #expect(post.userInfo == ["leaseID": "anchor-1"])
+        #expect(post.category == LidApprovalCenter.categoryID)
         #expect(post.title == "Claude Code wants to keep your Mac awake with the lid closed")
         #expect(post.body == "Claude Code · tests · with no end time")
     }
