@@ -27,6 +27,7 @@ targets:
       - Helper/Shared
       - App/Helper
       - App/IPC
+      - App/Links
       - path: Helper/dev.mooring.helper.plist
         buildPhase:
           copyFiles:
