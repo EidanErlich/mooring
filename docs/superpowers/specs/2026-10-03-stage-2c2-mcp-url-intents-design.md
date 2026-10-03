@@ -38,7 +38,7 @@ This is the second half of SPEC.md stage 2c. 2c-1 (lid approvals) is merged, and
   - Capabilities: `{"tools": {}}`.
   - `serverInfo`: `{"name": "mooring", "version": <app version>}`.
   - The server keeps `clientInfo.name` as the client name.
-- **Each tool call** is one socket request to the app, sent with the client name. If the app isn't running, the server launches it, as the CLI does.
+- **Each tool call** is one socket request to the app, sent with the client name, or with an empty name before `initialize` gives one (the app shows that as "MCP client"), so a call before `initialize` is still an MCP client's. If the app isn't running, the server launches it, as the CLI does.
   - Socket and wire errors become tool results with `isError: true` and the CLI's message text, so the model can read them.
   - Protocol errors stay JSON-RPC errors.
 - **The server exits on stdin EOF.** The client's leases watch the server's own pid (see below), so they end when the client disconnects.
@@ -50,7 +50,7 @@ This is the second half of SPEC.md stage 2c. 2c-1 (lid approvals) is merged, and
   - Claude Desktop's to "Claude Desktop";
   - Cursor's to "Cursor".
 
-  The exact strings are recorded during implementation from a real `initialize`. Any other client shows its own name, trimmed to 40 characters, or "MCP client" when it's empty.
+  The exact strings are recorded during implementation from a real `initialize`. Any other client shows its own name with control characters dropped, cut to 40 characters and trimmed, or "MCP client" when nothing is left or what is left reads "Terminal" (in any case), so a client can't pass for a person.
 - **That name appears** on the menu row, in approval notifications, in "Always allow" and in `notify`.
 - **Lease ids** are `mcp-<slug>-<n>`, where the slug is the lowercased client name with non-alphanumerics turned into `-`, at most 24 characters, and `n` counts up from 1 within one server process.
 
@@ -60,7 +60,7 @@ The tool list is fixed at build time. A test asserts exactly these four names, a
 
 | Tool | Arguments | Does |
 | --- | --- | --- |
-| `keep_awake` | `minutes` (integer 1–240, required), `reason` (string, optional), `level` (`system`, `display` or `lid`, default `system`), `lease_id` (optional, to extend one of this client's leases) | Creates `mcp-<slug>-<n>`, or renews the named lease, with expiry = now + minutes and a watch on the `mooring mcp` process. It always has an end, so lid needs no prompt under the default setting; under "Always ask" the call waits for the answer (up to 60 s). Returns the lease id, level, end time and any guardrail. |
+| `keep_awake` | `minutes` (integer 1–240, required), `reason` (string, optional), `level` (`system`, `display` or `lid`, default `system`), `lease_id` (optional, to extend one of this client's leases) | Creates `mcp-<slug>-<n>`, or renews the named lease, with expiry = now + minutes and a watch on the `mooring mcp` process. It always has an end, so lid needs no prompt under the default setting; under "Always ask" the call waits for the answer (up to 60 s). Every success returns the same `structuredContent`, `{lease_id, level, ends_at, guardrail?}`, with `guardrail` only when the guardrail holds the lease. |
 | `release_awake` | `lease_id` (optional) | Releases that lease, or every lease this client created when none is given. It can't name another owner's lease, which gets "not one of this client's leases". |
 | `awake_status` | none | Summary line, effective level, this client's leases (id, level, end), battery %, on AC, thermal state. |
 | `notify` | `title` (required, ≤ 80 chars), `body` (optional, ≤ 300 chars) | Posts a macOS notification (see Notify). |
@@ -74,9 +74,9 @@ The tool list is fixed at build time. A test asserts exactly these four names, a
   - its title is "<Agent>: <title>", using the caller's agent name ("Claude Code", "Claude Desktop", …), or "Terminal" for a person;
   - its body is the body;
   - it uses no category, so it has no buttons.
-- **Rate limit:** one per 30 s per caller name. A faster call gets `denied` with "Rate-limited: try again in N s".
+- **Rate limit:** one per 30 s per caller name. A faster call gets `denied` with "Rate-limited: try again in N s". A last notification that seems to be in the future (the clock moved back) counts as expired, so a clock change never blocks a caller for longer than 30 s.
 - **Setting:** Settings → Agents → **"Let agents post notifications"**, `AwakeSettings.agentNotifications: Bool = true`. When it's off, `notify` gets `denied` with "Notifications from agents are turned off in Settings". It applies to agent callers only; your own `mooring notify` always posts.
-- **If notifications aren't allowed,** `notify` gets `denied` with the 2c-1 "Turn on notifications for Mooring…" message.
+- **If notifications aren't allowed,** `notify` gets `denied` with "Turn on notifications for Mooring in System Settings". Lid approvals keep 2c-1's longer message, which ends "to approve lid mode".
 - **The CLI:** `mooring notify "<title>" ["<body>"]` exits 0 when posted and 2 when denied.
 - **The skill** gets one line: "When a long job finishes and the user may be away, `mooring notify "Done" "<what finished>"` tells them."
 
@@ -97,7 +97,7 @@ The tool list is fixed at build time. A test asserts exactly these four names, a
 
   Errors are rate-limited to one per 10 s.
 - **Links never open a window or bring Mooring to the front.**
-- **Registered** through `CFBundleURLTypes` with the scheme `mooring`, and handled in `AppDelegate.application(_:open:)`. Parsing is a pure function, `MooringLink.parse(URL) -> Result<LinkAction, LinkError>`.
+- **Registered** through `CFBundleURLTypes` with the scheme `mooring`. Links arrive through a `kAEGetURL` Apple-event handler that `AppDelegate` installs in `applicationWillFinishLaunching`, not through `application(_:open:)`, because the handler needs the event's sender pid. A link that launches the app waits for the request handler. Parsing is a pure function, `MooringLink.parse(URL) -> Result<LinkAction, LinkError>`.
 
 ## Shortcuts (App Intents)
 
@@ -113,6 +113,7 @@ These are trusted like the menu: a person runs them. They live in the app target
   - "Keep my Mac awake with \(.applicationName)";
   - "Let my Mac sleep with \(.applicationName)";
   - "Is my Mac staying awake with \(.applicationName)".
+- **An action that runs before the app has set itself up** (a Shortcut that launches Mooring) waits for the request handler: `IntentActions` owns the `HandlerGate` that the app hands its handler to, so an action never finds Mooring "not running".
 - **Excluded:** clipboard intents (Part 4), and intents for named leases.
 
 ## Settings → Agents → "Other agents (MCP)"
@@ -139,6 +140,8 @@ A new section under Lid mode:
   3. Set `mcpServers.mooring = {"command": "<this app>/Contents/Helpers/mooring", "args": ["mcp"]}` and keep every other key.
   4. Write the file atomically, pretty-printed with sorted keys. Key order may change, which the caption says.
   5. Show "Restart Claude Desktop to load it."
+
+  A symlinked file is written through and stays a link. A dangling link (a dotfiles repo not checked out yet) is followed to where it points, read relative to the link's folder, and that file's folder is created if needed.
 - **Remove** deletes `mcpServers.mooring` only, with the same backup, and drops an empty `mcpServers`.
 - **Copy config** copies the snippet `{"mcpServers": {"mooring": {"command": "…", "args": ["mcp"]}}}`. A caption explains: "Paste into your MCP client's config. Most clients call this file mcp.json."
 - **"Let agents post notifications"** (toggle, on) sits in this section.

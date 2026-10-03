@@ -455,10 +455,10 @@ A hook can't wait (Claude gives it 2 s), so under "Always ask" the session start
 - Newline-delimited JSON-RPC 2.0 on stdin and stdout, with logs on stderr. One reply per request, before the next line is read.
 - It handles `initialize`, `notifications/initialized`, `ping`, `tools/list` and `tools/call`. Any other method gets error `-32601`, a malformed line `-32700`; notifications get no reply.
 - `initialize` replies with the client's `protocolVersion` when it is `2025-06-18`, `2025-03-26` or `2024-11-05`, otherwise with `2025-06-18`. Capabilities are `{"tools": {}}`; `serverInfo` is `{"name": "mooring", "version": …}`. The server keeps `clientInfo.name`.
-- Each tool call is one socket request, sent with `client` set to the name the client reported, and the app is launched if it isn't running, as the CLI does. Socket and wire errors become tool results with `isError: true` and the CLI's message text; protocol errors stay JSON-RPC errors. Bad arguments (an out-of-range `minutes`, an unknown `level`) are tool errors too, never a crash.
+- Each tool call is one socket request, sent with `client` set to the name the client reported, or `""` before `initialize` names one (shown as "MCP client"), so every call is an MCP client's; and the app is launched if it isn't running, as the CLI does. Socket and wire errors become tool results with `isError: true` and the CLI's message text; protocol errors stay JSON-RPC errors. Bad arguments (an out-of-range `minutes`, an unknown `level`) are tool errors too, never a crash.
 - The server exits on stdin EOF. Its leases watch its own pid, so they end when the client disconnects.
 
-**Who the client is.** `client` makes the request an agent, whatever the process ancestry (see Agent control and approvals). The display name is `MCPClientName.display`: Claude Desktop's `claude-ai` becomes "Claude Desktop" and Cursor's `cursor-vscode` becomes "Cursor"; any other name is shown with control characters dropped and trimmed to 40 characters, and "MCP client" when nothing is left. The name "Terminal" (in any case) also becomes "MCP client", so a client can't pass for a person. That name appears on the menu row, in approval notifications, in "Always allow" and in `notify`.
+**Who the client is.** `client` makes the request an agent, whatever the process ancestry (see Agent control and approvals). The display name is `MCPClientName.display`: Claude Desktop's `claude-ai` becomes "Claude Desktop" and Cursor's `cursor-vscode` becomes "Cursor"; any other name is shown with control characters dropped, cut to 40 characters and trimmed, and "MCP client" when nothing is left. The name "Terminal" (in any case) also becomes "MCP client", so a client can't pass for a person. That name appears on the menu row, in approval notifications, in "Always allow" and in `notify`.
 
 **Lease ids** are `mcp-<slug>-<server pid>-<n>`: the slug is the display name lowercased, non-alphanumerics turned into `-`, at most 24 characters ("client" when empty), and `n` counts from 1 within one server process. The pid keeps two servers of one client (two Claude Desktop windows) from sharing a lease. The app requires the pairing both ways: a request with `client` must use an `mcp-` id, and an `mcp-` id requires `client`. The owner is `.mcp(client:)`.
 
@@ -478,14 +478,14 @@ A hook can't wait (Claude gives it 2 s), so under "Always ask" the session start
 ### Notify
 
 - **Wire:** the op `notify` with `NotifyArgs {title, body?, client?}`, result `NotifyResult {posted}`. The notification's title is "<Agent>: <title>", using the caller's agent name ("Claude Code", "Claude Desktop", …), or "Terminal" for a person; its body is the body; it has no category, so no buttons. An empty title is rejected with "Missing title".
-- **Rate limit:** one per 30 s per agent name, and for MCP callers also one per 30 s per connection (the server's pid), because a client picks its own name. A faster call gets `denied` with "Rate-limited: try again in N s". People are never limited.
+- **Rate limit:** one per 30 s per agent name, and for MCP callers also one per 30 s per connection (the server's pid), because a client picks its own name. A faster call gets `denied` with "Rate-limited: try again in N s"; a last notification in the future (the clock moved back) counts as expired. People are never limited.
 - **Setting:** Settings → Agents → "Let agents post notifications" (`AwakeSettings.agentNotifications`, default on). When off, agent callers get `denied` with "Notifications from agents are turned off in Settings"; it doesn't apply to people, so your own `mooring notify` always posts.
-- **No permission:** `denied` with 2c-1's "Turn on notifications for Mooring in System Settings to approve lid mode".
+- **No permission:** `denied` with "Turn on notifications for Mooring in System Settings" (lid approvals keep their "…to approve lid mode" wording).
 - **CLI:** `mooring notify "<title>" ["<body>"]` exits 0 when posted and 2 when denied.
 
 ### Links (`mooring://`)
 
-For Raycast, Alfred, bookmarks and scripts. Registered through `CFBundleURLTypes` with the scheme `mooring` and handled in `AppDelegate.application(_:open:)`; parsing is the pure `MooringLink.parse(URL) -> Result<LinkAction, LinkError>`. Every route acts on the menu session, the one switch behind `mooring on` and `off`:
+For Raycast, Alfred, bookmarks and scripts. Registered through `CFBundleURLTypes` with the scheme `mooring`. Links arrive through a `kAEGetURL` Apple-event handler that `AppDelegate` installs in `applicationWillFinishLaunching` (not `application(_:open:)`, since it needs the sender's pid), and a link that launches the app waits at the `HandlerGate` for the request handler; parsing is the pure `MooringLink.parse(URL) -> Result<LinkAction, LinkError>`. Every route acts on the menu session, the one switch behind `mooring on` and `off`:
 
 | Link | Does |
 | --- | --- |
@@ -507,7 +507,7 @@ Three intents in `App/Intents/`, run in the background (`openAppWhenRun = false`
 | **Let Mac Sleep** | none | Ends the menu session |
 | **Get Awake Status** | none | Returns an `AwakeStatus` entity: `isOn`, `summary`, `level`, `endsAt` (optional), `batteryPercent`, `onPower`. The dialog shows the summary |
 
-The `AppShortcutsProvider` phrases are "Keep my Mac awake with Mooring", "Let my Mac sleep with Mooring" and "Is my Mac staying awake with Mooring". Clipboard intents and intents for named leases are excluded.
+An action that runs before the app has set itself up (a Shortcut that launches Mooring) waits for the handler: `IntentActions` owns the `HandlerGate` the app hands its handler to. The `AppShortcutsProvider` phrases are "Keep my Mac awake with Mooring", "Let my Mac sleep with Mooring" and "Is my Mac staying awake with Mooring". Clipboard intents and intents for named leases are excluded.
 
 ### Settings → Agents → Other agents (MCP)
 
@@ -521,7 +521,7 @@ A section under Lid mode, built on `MCPClientConfig` (MooringIPC, shared with `d
 | **Needs update** | The entry points somewhere else | **Update** |
 
 - **Config files:** Claude Desktop `~/Library/Application Support/Claude/claude_desktop_config.json`; Cursor `~/.cursor/mcp.json`. A missing file counts as `{}` when the folder exists.
-- **Add** and **Update** (the same operation): read the file; if it isn't a JSON object, or `mcpServers` isn't an object, change nothing and show "<file> isn't valid JSON, so Mooring left it alone. Use Copy config instead."; copy the original to `<file>.mooring-backup` (overwriting an earlier backup, keeping its permissions); set `mcpServers.mooring = {"command": "<app>/Contents/Helpers/mooring", "args": ["mcp"]}` and keep every other key; write atomically with sorted keys (so key order may change, which the caption says); show "Restart <client> to load it." A symlinked file is written through.
+- **Add** and **Update** (the same operation): read the file; if it isn't a JSON object, or `mcpServers` isn't an object, change nothing and show "<file> isn't valid JSON, so Mooring left it alone. Use Copy config instead."; copy the original to `<file>.mooring-backup` (overwriting an earlier backup, keeping its permissions); set `mcpServers.mooring = {"command": "<app>/Contents/Helpers/mooring", "args": ["mcp"]}` and keep every other key; write atomically with sorted keys (so key order may change, which the caption says); show "Restart <client> to load it." A symlinked file is written through and stays a link; a dangling one is followed to where it points (relative to the link's folder), creating that file's folder if needed.
 - **Remove** deletes `mcpServers.mooring` only, with the same backup, and drops an empty `mcpServers`.
 - **Copy config** puts `{"mcpServers": {"mooring": {"command": "…", "args": ["mcp"]}}}` on the clipboard (Mooring's own snippet, not clipboard history), with the caption "Paste into your MCP client's config. Most clients call this file mcp.json." The section's other caption is "Mooring rewrites the file with sorted keys and keeps a .mooring-backup next to it."
 - The rows refresh when the section appears and after each action. **"Let agents post notifications"** sits in this section.

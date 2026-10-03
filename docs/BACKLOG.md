@@ -39,6 +39,20 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 
 - `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.3; read the bundle version.
+- The helper path written to MCP client configs comes from `Bundle.main`; running from a DMG or a translocated location writes a path that later vanishes.
+- An agent sending a raw `untilOff` acquire can make a person's timed menu session open-ended (without lid).
+- `mooring mcp` handles one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
+- The known MCP client names (`claude-ai`, `cursor-vscode`) are unverified until a real `initialize` is recorded.
+- **Small leftovers:**
+  - `HandlerGateTests` may not exercise the wait path;
+  - no `LinkHandler` test for a guardrail not being reported, or for a plain `off`;
+  - the `app-` prefix is duplicated;
+  - link parameter names are case-sensitive, and `+` isn't decoded as a space;
+  - `Doctor.checks` takes 9 parameters;
+  - `MCPClientsSection` rebuilds its model on every page render;
+  - `Row.name` builds a throwaway config;
+  - overlong MCP lines are buffered whole before the 1 MB check;
+  - a second `initialize` changes the name the server filters `status` by.
 
 ## CLI and IPC (stage 2a leftovers)
 
