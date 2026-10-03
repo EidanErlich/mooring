@@ -45,6 +45,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
 - **Pure function:** `LidApproval.decide(setting:, isAgent:, hasEnd:, agentName:, alwaysAllowed:) -> .allow | .ask | .refuse`, in AwakeKit. Non-agents always get `.allow`.
 - **Refuse, deny or timeout:** the lease is still created or updated, but at the requested level **without lid**, even when it re-acquires a lease that had lid (re-acquiring merges levels, so lid is taken off after the merge). The reply is `denied` (exit 2) with the reason:
   - "Lid mode not approved (denied)";
+  - "Lid mode not approved (you denied it; ask again after 13:05)", for a request about the same lease within 15 minutes of a Deny. A Deny holds 15 minutes, or until the lease ends;
   - "… (no answer in 60 s)";
   - "… (lid mode for agents is set to Never)";
   - "Turn on notifications for Mooring in System Settings to approve lid mode";
@@ -70,7 +71,8 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
   - title: "<Agent> wants to keep your Mac awake with the lid closed";
   - body: "<reason> · <with no end time | for 30m | while <process> runs>"; for `on` the reason is the agent's `--reason`, else "mooring on";
   - actions: **Allow once**, **Always allow this agent** and **Deny**. Category actions are static, so the title can't name the agent; the agent's name leads the body instead ("<Agent> · <reason> · <end>");
-  - the request id goes in `userInfo`.
+  - the request id goes in `userInfo`;
+  - macOS lists the actions under the notification's **Options** menu. `NSUserNotificationAlertStyle` is `alert`, so requests stay on screen until answered instead of vanishing as banners.
 - **Clicking the notification body** opens Settings → Agents and counts as no answer.
 - **At launch,** the app withdraws delivered approvals left from an earlier run, whose buttons would answer nothing.
 - **Permission:** requested the first time an approval is needed. If it's denied or off, the request is refused immediately with the notifications message.

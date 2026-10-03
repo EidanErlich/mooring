@@ -224,7 +224,7 @@ struct RequestHandlerLidTests {
 
         _ = await fixture.acquire(.on, level: "lid")
         let again = await fixture.acquire(.on, level: "lid")
-        #expect(wireFailure(again) == denied("Lid mode not approved (denied)"))
+        #expect(wireFailure(again) == denied(LidMessage.deniedUntil(fixture.clock.addingTimeInterval(15 * 60))))
         #expect(fixture.approver.calls.count == 1)
 
         _ = await fixture.release(.off)

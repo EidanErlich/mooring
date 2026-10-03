@@ -33,6 +33,13 @@ enum LidMessage {
     static let waiting = "Lid mode not approved (waiting for your answer to an earlier request)"
     static let unavailable = "Turn on notifications for Mooring in System Settings to approve lid mode"
     static let changed = "Lid mode not approved (the request changed while you were deciding)"
+    /// How long a Deny holds before the agent may ask about the same lease again.
+    static let denialLasts: TimeInterval = 15 * 60
+
+    /// The reply to an ask refused because the person denied it until `until`.
+    static func deniedUntil(_ until: Date) -> String {
+        "Lid mode not approved (you denied it; ask again after \(until.formatted(date: .omitted, time: .shortened)))"
+    }
 }
 
 extension AwakeLevel {
@@ -128,10 +135,14 @@ extension RequestHandler {
         case .refuse: return .refuse(LidMessage.never)
         case .ask:
             if request.existingCovers { return .grant }
-            // A denial lasts for that lease's lifetime: one that ended (or was replaced) is asked afresh.
-            deniedLid = deniedLid.filter { id, created in liveLease(id)?.createdAt == created }
-            if let existing = request.existing, deniedLid[existing.id] == existing.createdAt {
-                return .refuse(LidMessage.denied)
+            // A denial lasts `denialLasts`, or until its lease ends (or is replaced): then it's asked afresh.
+            let time = now()
+            deniedLid = deniedLid.filter { id, denial in
+                liveLease(id)?.createdAt == denial.created && time < denial.until
+            }
+            if let existing = request.existing, let denial = deniedLid[existing.id],
+               denial.created == existing.createdAt {
+                return .refuse(LidMessage.deniedUntil(denial.until))
             }
             if asking.contains(request.leaseID) || approver.pending.contains(request.leaseID) {
                 return .refuse(LidMessage.waiting)
@@ -160,7 +171,9 @@ extension RequestHandler {
             agentLid[current.id] = current.createdAt
             return liveLease(lease.id) ?? current
         case .deny:
-            if let current, current.createdAt == lease.createdAt { deniedLid[current.id] = current.createdAt }
+            if let current, current.createdAt == lease.createdAt {
+                deniedLid[current.id] = (current.createdAt, now().addingTimeInterval(LidMessage.denialLasts))
+            }
             throw WireError(code: .denied, message: LidMessage.denied)
         case .timeout:
             throw WireError(code: .denied, message: LidMessage.timeout)

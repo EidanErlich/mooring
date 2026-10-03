@@ -40,9 +40,9 @@ final class RequestHandler {
     let approver: any LidApproving
     let updateSettings: @MainActor ((inout AwakeSettings) -> Void) -> Void
     private let notificationStatus: @MainActor () async -> String?
-    /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied: it isn't asked
-    /// again in that lifetime (stage 2c-1 spec).
-    var deniedLid: [String: Date] = [:]
+    /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied and when the
+    /// denial ends: it isn't asked again in that lifetime until then.
+    var deniedLid: [String: (created: Date, until: Date)] = [:]
     /// Leases with an ask under way, from before its first suspension until it's answered: at most one ask per lease.
     var asking: Set<String> = []
     /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
