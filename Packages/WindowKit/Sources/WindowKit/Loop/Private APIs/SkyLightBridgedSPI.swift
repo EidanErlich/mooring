@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Private APIs/SkyLightBridgedSPI.swift
 //
 //  SkyLightBridgedSPI.swift
 //  Loop
@@ -12,13 +13,14 @@ import Foundation
 
 @available(macOS 14.0, *)
 enum SkyLightBridgedSPI {
-    private static let objcMessageSend: UnsafeMutableRawPointer? = {
-        guard let handle = dlopen(nil, RTLD_LAZY) else {
+    /// Mooring: resolved through `Capabilities`; `nil` (so every operation fails) while SkyLight moves are off.
+    private static var objcMessageSend: UnsafeMutableRawPointer? {
+        guard Capabilities.active.skyLightMoves else {
             return nil
         }
 
-        return dlsym(handle, "objc_msgSend")
-    }()
+        return Capabilities.liveSymbol("objc_msgSend")
+    }
 
     static func moveWindow(_ windowID: CGWindowID, toSpace spaceID: UInt64) -> Bool {
         guard let operation = makeMoveWindowsToManagedSpaceOperation(windowIDs: [windowID], spaceID: spaceID) else {

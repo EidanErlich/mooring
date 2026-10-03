@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Window Action Indicators/WindowActionIndicatorService.swift
 //
 //  WindowActionIndicatorService.swift
 //  Loop
@@ -38,5 +39,11 @@ final class WindowActionIndicatorService {
     func closeAll() {
         radialMenuController.close()
         previewController.close()
+    }
+
+    /// Mooring: used by shutdown, so stopping leaves no indicator on screen.
+    func closeAllImmediately() {
+        radialMenuController.closeImmediately()
+        previewController.closeImmediately()
     }
 }

@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Utilities/Event Monitoring/EventTapThread.swift
 //
 //  EventTapThread.swift
 //  Loop
@@ -10,7 +11,7 @@ import Foundation
 
 /// Owns the run loop used by global event taps.
 final class EventTapThread: Thread {
-    static let shared = EventTapThread(name: "\(Bundle.main.bundleID).EventTapThread")
+    static let shared = WindowKit.track(EventTapThread(name: "\(Bundle.main.bundleID).EventTapThread"))
 
     private let startLock = NSLock()
     private let runLoopReady = DispatchGroup()

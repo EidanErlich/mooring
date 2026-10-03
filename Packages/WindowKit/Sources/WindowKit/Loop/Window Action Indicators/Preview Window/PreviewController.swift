@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Window Action Indicators/Preview Window/PreviewController.swift
 //
 //  PreviewController.swift
 //  Loop
@@ -76,5 +77,15 @@ final class PreviewController: WindowActionIndicator {
             closeTask = nil
             log.ui("Controller closed")
         }
+    }
+
+    /// Mooring: closes without the fade, for `WindowKit.stop()`, so no panel outlives Windows.
+    func closeImmediately() {
+        closeTask?.cancel()
+        closeTask = nil
+        viewModel.setIsShown(false)
+        controller?.window?.orderOut(nil)
+        controller?.close()
+        controller = nil
     }
 }

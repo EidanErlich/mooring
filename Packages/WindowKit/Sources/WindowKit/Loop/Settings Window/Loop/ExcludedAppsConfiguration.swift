@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Settings Window/Loop/ExcludedAppsConfiguration.swift
 //
 //  ExcludedAppsConfiguration.swift
 //  Loop
@@ -53,7 +54,8 @@ struct ExcludedAppsConfigurationView: View {
 
     func showAppChooser() {
         Task { @MainActor in
-            guard let window = SettingsWindowManager.shared.window else { return }
+            // Mooring: the pages are hosted in Mooring's own Settings window, not Loop's.
+            guard let window = SettingsWindowManager.shared.window ?? NSApp.keyWindow else { return }
 
             let panel = NSOpenPanel()
             panel.worksWhenModal = true

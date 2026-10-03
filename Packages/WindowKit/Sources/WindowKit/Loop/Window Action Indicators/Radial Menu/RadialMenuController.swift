@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Window Action Indicators/Radial Menu/RadialMenuController.swift
 //
 //  RadialMenuController.swift
 //  Loop
@@ -90,5 +91,15 @@ final class RadialMenuController: WindowActionIndicator {
             closeTask = nil
             log.ui("Controller closed")
         }
+    }
+
+    /// Mooring: closes without the fade, for `WindowKit.stop()`, so no panel outlives Windows.
+    func closeImmediately() {
+        closeTask?.cancel()
+        closeTask = nil
+        viewModel.setIsShown(false, animationDuration: 0)
+        controller?.window?.orderOut(nil)
+        controller?.close()
+        controller = nil
     }
 }

@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Private APIs/SkyLightSymbolLoader.swift
 //
 //  SkyLightSymbolLoader.swift
 //  Loop
@@ -11,31 +12,10 @@ import Scribe
 
 @Loggable(style: .static)
 enum SkyLightSymbolLoader {
-    private static let frameworkPath = "/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight"
-
-    private static let handle: UnsafeMutableRawPointer? = {
-        guard let handle = dlopen(frameworkPath, RTLD_LAZY) else {
-            log.error("failed to open \(frameworkPath)")
-            return nil
-        }
-        return handle
-    }()
-
+    /// Mooring: symbols resolve through `Capabilities`, so one lookup decides both the capability and the call.
     private static func loadSymbol<T>(_ name: StaticString) -> T? {
-        guard let handle else {
-            log.error("no handle; cannot load symbol \(name)")
-            return nil
-        }
-
-        // Clear any prior error
-        dlerror()
-
-        guard let sym = dlsym(handle, name.description) else {
-            if let err = dlerror() {
-                log.error("failed to load symbol \(name): \(String(cString: err))")
-            } else {
-                log.error("failed to load symbol \(name)")
-            }
+        guard let sym = Capabilities.liveSymbol(name.description) else {
+            log.error("failed to load symbol \(name)")
             return nil
         }
 

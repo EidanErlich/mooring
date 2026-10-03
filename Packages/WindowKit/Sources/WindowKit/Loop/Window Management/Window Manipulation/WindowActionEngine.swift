@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Window Management/Window Manipulation/WindowActionEngine.swift
 //
 //  WindowActionEngine.swift
 //  Loop
@@ -19,7 +20,7 @@ import SwiftUI
 /// They are resolved by `LoopManager` which updates `resizeContext.screen` before calling `apply()`.
 @Loggable
 final class WindowActionEngine {
-    static let shared = WindowActionEngine()
+    static let shared = WindowKit.track(WindowActionEngine())
 
     @MainActor
     private var actionTasks: [CGWindowID: Task<Result, any Error>] = [:]

@@ -19,19 +19,15 @@ final class AdvancedConfigurationModel: ObservableObject {
     @Published private(set) var showResetKeybindsSuccessIndicator = false
 
     @Published private(set) var isLowPowerModeEnabled: Bool = ProcessInfo.processInfo.isLowPowerModeEnabled
-    @Published private(set) var isAccessibilityAccessGranted = AccessibilityManager.shared.isGranted
 
     private var lowPowerModeCheckerTask: Task<(), Never>?
-    private var accessibilityCheckerTask: Task<(), Never>?
 
     func startTracking() {
         trackLowPowerMode()
-        trackAccessibilityStatus()
     }
 
     func stopTracking() {
         lowPowerModeCheckerTask?.cancel()
-        accessibilityCheckerTask?.cancel()
     }
 
     private func trackLowPowerMode() {
@@ -45,20 +41,6 @@ final class AdvancedConfigurationModel: ObservableObject {
 
                 await MainActor.run {
                     isLowPowerModeEnabled = processInfo.isLowPowerModeEnabled
-                }
-            }
-        }
-    }
-
-    private func trackAccessibilityStatus() {
-        accessibilityCheckerTask = Task(priority: .background) {
-            for await status in AccessibilityManager.shared.stream(initial: true) {
-                guard !Task.isCancelled else {
-                    return
-                }
-
-                await MainActor.run {
-                    isAccessibilityAccessGranted = status
                 }
             }
         }
@@ -118,7 +100,6 @@ struct AdvancedConfigurationView: View {
             generalSection
             radialMenuSection
             keybindsSection
-            permissionsSection
                 .onAppear(perform: model.startTracking)
                 .onDisappear(perform: model.stopTracking)
         }
@@ -239,30 +220,5 @@ struct AdvancedConfigurationView: View {
             }
             .luminareRoundingBehavior(top: true, bottom: true)
         }
-    }
-
-    private var permissionsSection: some View {
-        LuminareSection(String(localized: "Permissions", comment: "Section header shown in settings")) {
-            accessibilityComponent()
-        }
-        .animation(luminareAnimation, value: model.isAccessibilityAccessGranted)
-    }
-
-    private func accessibilityComponent() -> some View {
-        LuminareButton {
-            HStack {
-                if model.isAccessibilityAccessGranted {
-                    Image(systemName: "checkmark.seal.fill")
-                        .foregroundStyle(.green)
-                }
-
-                Text("Accessibility access")
-            }
-        } content: {
-            Text("Request…", comment: "Button to request accessibility access")
-        } action: {
-            AccessibilityManager.requestAccess()
-        }
-        .disabled(model.isAccessibilityAccessGranted)
     }
 }

@@ -184,7 +184,7 @@ Transitive, as resolved: swift-syntax 602.0.0 (for Scribe's macros), swiftui-int
 
 ## Modifications
 
-Each changed file starts with `// Adapted from Loop@0ac6d83: <original path>`. All of these are compile fixes for the left-out files or the package build; behaviour is otherwise Loop's.
+Each changed file starts with `// Adapted from Loop@0ac6d83: <original path>`. The first list is compile fixes for the left-out files or the package build. The second list (isolation and gating) changes behaviour, as each entry says; Mooring-written code sits outside `Loop/` (`WindowKit.swift`, `WindowKit+Actions.swift`, `Capabilities.swift`, `ScreenSwitchFrames.swift`, `WindowChord.swift`, `WindowSettingsPage.swift`).
 
 - `Loop/Core/LoopManager.swift`: removed the `updater` property (`Updater.shared`), the `IconManager.checkIfUnlockedNewIcon()` call, and the `Task` at the end of `closeLoop` that showed the update window. `Defaults[.timesLooped] += 1` stays.
 - `Loop/Extensions/Defaults+Extensions.swift`: removed the `patchesApplied` key (type `DataPatcher.Patches`). The other keys, including `lastMigratorURL`, are unchanged.
@@ -194,3 +194,21 @@ Each changed file starts with `// Adapted from Loop@0ac6d83: <original path>`. A
 - `Loop/Settings Window/Settings/Gestures/GestureConfigurationView.swift`, `Loop/Settings Window/Settings/Gestures/GestureItemView.swift`, `Loop/Window Management/Window Action/GestureBinding.swift`: `Image(.loop)` → `Image("loop", bundle: .module)`. SwiftPM generates no asset symbols, so `ImageResource.loop` does not exist in the package.
 - `LoopTests/*.swift` (all six): `@testable import Loop` → `@testable import WindowKit`.
 - `Loop/Extensions/View+Extensions.swift`: not taken (see Left out).
+
+### Isolation and gating
+
+- `Loop/Extensions/Defaults+Extensions.swift`: every key (76) now passes `suite: .windowKit, iCloud: false`, where `UserDefaults.windowKit` is `UserDefaults(suiteName: "dev.mooring.windows")!`, so Loop's settings never land in Mooring's `UserDefaults.standard`. Removed `DefaultsiCloudSyncRegistrar` (which added most keys to `Defaults.iCloud`); the `enableiCloudSync` key stays but nothing reads it.
+- `Loop/Private APIs/PrivateApis.swift`: the two `@_silgen_name` bindings (`GetProcessForPID`, `_AXUIElementGetWindow`) are now functions with the same signatures that call a pointer resolved through `Capabilities.liveSymbol` (`dlsym`). A missing symbol returns `procNotFound` / `.apiDisabled` instead of stopping the app at launch.
+- `Loop/Private APIs/SkyLightSymbolLoader.swift`: `loadSymbol` resolves through `Capabilities.liveSymbol` (SkyLight first, then the process); the private `dlopen` handle and framework path are gone.
+- `Loop/Private APIs/SkyLightBridgedSPI.swift`: `objcMessageSend` is a computed property, resolved through `Capabilities.liveSymbol` and `nil` while `Capabilities.active.skyLightMoves` is false, so every space operation fails closed.
+- `Loop/Private APIs/SkyLightToolBelt.swift`: `makeFrontProcess` and `makeKeyWindow` return `false` while `Capabilities.active.windowFocus` is false (callers already fall back to `activate`).
+- `Loop/Extensions/AXUIElement+Extensions.swift`: `getWindowID()` throws `AXError.apiDisabled` while `Capabilities.active.windowIDLookup` is false, so no `Window` can be made and every action is a no-op.
+- `Loop/Utilities/ScreenUtility.swift`: next/previous screen ordering moved into generic `next(from:in:frame:canRestartCycle:)` / `previous(...)`, which take the screens and a frame accessor; `nextScreen` / `previousScreen` call them with `NSScreen.screens` and `\.frame`. The private `Array.next/previous` helpers now need `Equatable` instead of `Hashable`. Behaviour unchanged; it is the frame-maths test seam.
+- `Loop/Core/LoopManager.swift`: `shared` goes through `WindowKit.track(_:)`; `indicatorService` is internal (was `private`) so tests can show the radial menu; `shutdown()` calls `indicatorService.closeAllImmediately()` instead of the animated `closeAll()`.
+- `Loop/Core/WindowDragManager.swift`: `shared` goes through `WindowKit.track(_:)`; `shutdown()` closes its preview with `closeImmediately()`.
+- `Loop/Window Action Indicators/Radial Menu/RadialMenuController.swift`, `Loop/Window Action Indicators/Preview Window/PreviewController.swift`: added `closeImmediately()` (cancel any pending close, mark the view model hidden, order out and drop the panel, no fade).
+- `Loop/Window Action Indicators/WindowActionIndicatorService.swift`: added `closeAllImmediately()`.
+- `Loop/Utilities/AccessibilityManager.swift`: `shared` goes through `WindowKit.track(_:)`; added `activeStreamCount` (tests count observers with it); removed `requestAccess()` and the two `tccutil reset` helpers (Accessibility and Input Monitoring for the app's bundle id). Mooring owns the Accessibility request.
+- `Loop/Settings Window/Loop/AdvancedConfiguration.swift`: removed the Permissions section (its "Request…" button called `requestAccess()`), and the model's Accessibility tracking; the low-power tracking now hangs off the Keybinds section.
+- `Loop/Settings Window/Loop/ExcludedAppsConfiguration.swift`: the app chooser falls back to `NSApp.keyWindow` when Loop's own settings window doesn't exist (the pages are hosted in Mooring's Settings).
+- `shared` routed through `WindowKit.track(_:)` (counted by `WindowKit.instantiatedSingletons`), no other change: `Loop/Settings Window/SettingsWindowManager.swift`, `Loop/Accent Color/AccentColorController.swift`, `Loop/Utilities/PickerListEventMonitorManager.swift`, `Loop/Utilities/Event Monitoring/EventTapThread.swift`, `Loop/Stashing/StashManager.swift`, `Loop/Window Management/Window Manipulation/WindowActionEngine.swift`, `Loop/Window Management/Window Manipulation/WindowRecords.swift`.

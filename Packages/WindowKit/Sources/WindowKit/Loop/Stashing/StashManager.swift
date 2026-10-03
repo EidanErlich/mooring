@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Stashing/StashManager.swift
 //
 //  StashManager.swift
 //  Loop
@@ -38,7 +39,7 @@ import SwiftUI
 @Loggable
 @MainActor
 final class StashManager {
-    static let shared = StashManager()
+    static let shared = WindowKit.track(StashManager())
     private init() {}
 
     /// Should the stashed windows be animated when revealed or hidden?

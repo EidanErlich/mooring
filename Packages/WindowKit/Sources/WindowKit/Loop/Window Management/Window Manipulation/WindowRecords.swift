@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Window Management/Window Manipulation/WindowRecords.swift
 //
 //  WindowRecords.swift
 //  Loop
@@ -10,7 +11,7 @@ import SwiftUI
 
 @Loggable
 actor WindowRecords {
-    nonisolated static let shared = WindowRecords()
+    nonisolated static let shared = WindowKit.track(WindowRecords())
 
     private var recordsByWindowID: [CGWindowID: WindowRecords.Record] = [:]
 

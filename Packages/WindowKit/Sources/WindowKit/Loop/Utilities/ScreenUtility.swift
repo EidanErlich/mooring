@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Utilities/ScreenUtility.swift
 //
 //  ScreenUtility.swift
 //  Loop
@@ -70,12 +71,7 @@ enum ScreenUtility {
     ///   - canRestartCycle: whether this should continuously loop through all screens, rather than stopping at the end.
     /// - Returns: the next screen, or the first screen in the cycle if `canRestartCycle` is enabled. Otherwise, it will return `nil`.
     static func nextScreen(from screen: NSScreen, canRestartCycle: Bool = true) -> NSScreen? {
-        let screens = getOrderedScreens()
-
-        if let nextScreen = screens.next(from: screen) {
-            return nextScreen
-        }
-        return canRestartCycle ? screens.first : nil
+        next(from: screen, in: NSScreen.screens, frame: \.frame, canRestartCycle: canRestartCycle)
     }
 
     /// Determines the previous screen from a screen of reference.
@@ -84,7 +80,31 @@ enum ScreenUtility {
     ///   - canRestartCycle: whether this should continuously loop through all screens, rather than stopping at the end.
     /// - Returns: the previous screen, or the last screen in the cycle if `canRestartCycle` is enabled. Otherwise, it will return `nil`.
     static func previousScreen(from screen: NSScreen, canRestartCycle: Bool = true) -> NSScreen? {
-        let screens = getOrderedScreens()
+        previous(from: screen, in: NSScreen.screens, frame: \.frame, canRestartCycle: canRestartCycle)
+    }
+
+    // Mooring: the ordering takes the screens and their frames as parameters, so tests can inject them.
+    static func next<Screen: Equatable>(
+        from screen: Screen,
+        in screens: [Screen],
+        frame: (Screen) -> CGRect,
+        canRestartCycle: Bool = true
+    ) -> Screen? {
+        let screens = getOrderedScreens(screens, frame: frame)
+
+        if let nextScreen = screens.next(from: screen) {
+            return nextScreen
+        }
+        return canRestartCycle ? screens.first : nil
+    }
+
+    static func previous<Screen: Equatable>(
+        from screen: Screen,
+        in screens: [Screen],
+        frame: (Screen) -> CGRect,
+        canRestartCycle: Bool = true
+    ) -> Screen? {
+        let screens = getOrderedScreens(screens, frame: frame)
 
         if let previousScreen = screens.previous(from: screen) {
             return previousScreen
@@ -92,18 +112,18 @@ enum ScreenUtility {
         return canRestartCycle ? screens.last : nil
     }
 
-    /// Sorts all NSScreens in an order such that the next/previous screen are in positional order.
-    private static func getOrderedScreens() -> [NSScreen] {
-        NSScreen.screens.sorted { screen1, screen2 in
-            if screen2.frame.maxY <= screen1.frame.minY {
+    /// Sorts all screens in an order such that the next/previous screen are in positional order.
+    private static func getOrderedScreens<Screen>(_ screens: [Screen], frame: (Screen) -> CGRect) -> [Screen] {
+        screens.sorted { screen1, screen2 in
+            if frame(screen2).maxY <= frame(screen1).minY {
                 return true
             }
 
-            if screen1.frame.maxY <= screen2.frame.minY {
+            if frame(screen1).maxY <= frame(screen2).minY {
                 return false
             }
 
-            return screen1.frame.minX < screen2.frame.minX
+            return frame(screen1).minX < frame(screen2).minX
         }
     }
 
@@ -132,7 +152,7 @@ enum ScreenUtility {
     }
 }
 
-private extension Array where Element: Hashable {
+private extension Array where Element: Equatable {
     func next(from item: Element) -> Element? {
         guard let index = firstIndex(of: item) else {
             return nil

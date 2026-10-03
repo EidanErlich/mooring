@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Utilities/AccessibilityManager.swift
 //
 //  AccessibilityManager.swift
 //  Loop
@@ -11,7 +12,7 @@ import SwiftUI
 /// Stores and manages the accessibility permission state for Loop.
 @MainActor
 final class AccessibilityManager {
-    static let shared: AccessibilityManager = .init()
+    static let shared: AccessibilityManager = WindowKit.track(.init())
 
     private var permissionCheckerTask: Task<(), Never>!
 
@@ -48,6 +49,11 @@ final class AccessibilityManager {
         for continuation in currentContinuations {
             continuation.finish()
         }
+    }
+
+    /// Mooring: how many streams are open, so tests can see that `start()` installs one set of observers.
+    var activeStreamCount: Int {
+        continuations.count
     }
 
     // MARK: Streaming
@@ -91,74 +97,10 @@ final class AccessibilityManager {
 
     // MARK: Permissions Checking
 
-    /// Requests accessibility permissions to the user.
-    /// - Returns: whether the user granted the permission.
-    @discardableResult
-    static func requestAccess() -> Bool {
-        if getStatus() {
-            return true
-        }
-
-        // In case Loop is actually in the list, but the signature is different
-        resetAccessibility()
-        resetInputMonitoring()
-
-        let alert = NSAlert()
-        alert.messageText = .init(
-            localized: "Accessibility Request: Title",
-            defaultValue: "\(Bundle.main.appName) Needs Accessibility Permissions"
-        )
-        alert.informativeText = String(
-            localized: "Accessibility Request: Content",
-            defaultValue: "Please grant access to be able to resize windows."
-        )
-
-        // Reference: https://x.com/leoshimo/status/1975642593569738755
-        let button = alert.addButton(withTitle: .init(localized: "OK"))
-        if #available(macOS 26.0, *) {
-            button.tintProminence = .primary
-        }
-
-        alert.runModal()
-
-        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeRetainedValue() as NSString: true]
-        let status = AXIsProcessTrustedWithOptions(options)
-
-        return status
-    }
-
     /// Determines if the app has accessibility permissions.
     /// - Returns: whether the app has accessibility permissions.
     private static func getStatus() -> Bool {
         AXIsProcessTrusted()
-    }
-
-    /// Executes `/usr/bin/tccutil reset Accessibility <Bundle ID>`.
-    /// This fully removes any accessibility permissions the user may have previously granted to anything with Loop's bundle ID.
-    private static func resetAccessibility() {
-        let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/tccutil")
-        process.arguments = ["reset", "Accessibility", Bundle.main.bundleID]
-
-        // Redirect output and errors to /dev/null
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        try? process.run()
-    }
-
-    /// Executes `/usr/bin/tccutil reset ListenEvent <Bundle ID>`.
-    /// This fully removes any input monitoring permissions the user may have previously granted to anything with Loop's bundle ID.
-    private static func resetInputMonitoring() {
-        let process = Process()
-        process.executableURL = URL(filePath: "/usr/bin/tccutil")
-        process.arguments = ["reset", "ListenEvent", Bundle.main.bundleID]
-
-        // Redirect output and errors to /dev/null
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-
-        try? process.run()
     }
 }
 

@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Core/WindowDragManager.swift
 //
 //  WindowDragManager.swift
 //  Loop
@@ -12,7 +13,7 @@ import SwiftUI
 @Loggable
 @MainActor
 final class WindowDragManager {
-    static let shared = WindowDragManager()
+    static let shared = WindowKit.track(WindowDragManager())
     private init() {}
 
     private var resizeContext: ResizeContext?
@@ -61,7 +62,7 @@ final class WindowDragManager {
         accessibilityCheckerTask = nil
         removeListeners()
         resetDragState()
-        previewController.close()
+        previewController.closeImmediately()
     }
 
     private func setupListeners() {

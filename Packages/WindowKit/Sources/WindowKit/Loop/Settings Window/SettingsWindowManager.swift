@@ -15,7 +15,7 @@ import SwiftUI
 @Loggable
 @MainActor
 final class SettingsWindowManager: ObservableObject {
-    static let shared = SettingsWindowManager()
+    static let shared = WindowKit.track(SettingsWindowManager())
     private var controller: NSWindowController?
     private var previewActionTimerTask: Task<(), Error>?
 

@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Extensions/AXUIElement+Extensions.swift
 //
 //  AXUIElement+Extensions.swift
 //  Loop
@@ -138,6 +139,11 @@ extension AXUIElement {
     }
 
     func getWindowID() throws -> CGWindowID {
+        // Mooring: without window id lookup no window can be managed, so every action fails closed here.
+        guard Capabilities.active.windowIDLookup else {
+            throw AXError.apiDisabled
+        }
+
         var id: CGWindowID = 0
         let error = AXUIElementGetWindow(self, &id)
 

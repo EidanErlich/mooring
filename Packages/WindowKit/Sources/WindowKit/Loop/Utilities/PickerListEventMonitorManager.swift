@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Utilities/PickerListEventMonitorManager.swift
 //
 //  PickerListEventMonitorManager.swift
 //  Loop
@@ -8,7 +9,7 @@
 import AppKit
 
 final class PickerListEventMonitorManager {
-    @MainActor static let shared: PickerListEventMonitorManager = .init()
+    @MainActor static let shared: PickerListEventMonitorManager = WindowKit.track(.init())
     private var monitors: [AnyHashable: LocalEventMonitor] = [:]
 
     func addMonitor(

@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Accent Color/AccentColorController.swift
 //
 //  AccentColorController.swift
 //  Loop
@@ -14,7 +15,7 @@ import SwiftUI
 @Loggable
 @MainActor
 final class AccentColorController: ObservableObject {
-    static let shared = AccentColorController()
+    static let shared = WindowKit.track(AccentColorController())
 
     @Published var color1: Color = Defaults[.lastUsedAccentColor1]
     @Published var color2: Color = Defaults[.lastUsedAccentColor2]

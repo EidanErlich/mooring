@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Private APIs/SkyLightToolBelt.swift
 //
 //  SkyLightToolBelt.swift
 //  Loop
@@ -64,6 +65,10 @@ enum SkyLightToolBelt {
     ///   - pid: The PID of the target window's owner process.
     /// - Returns: Whether this operation was successful.
     static func makeFrontProcess(windowID: CGWindowID, pid: pid_t) -> Bool {
+        guard Capabilities.active.windowFocus else {
+            return false
+        }
+
         guard let SLPSSetFrontProcessWithOptions = SkyLightSymbolLoader.SLPSSetFrontProcessWithOptions else {
             log.error("Failed to load SkyLight symbols in \(#function)")
             return false
@@ -133,6 +138,10 @@ enum SkyLightToolBelt {
     ///   - pid: The PID of the target window's owner process.
     /// - Returns: Whether this operation was successful.
     static func makeKeyWindow(windowID: CGWindowID, pid: pid_t) -> Bool {
+        guard Capabilities.active.windowFocus else {
+            return false
+        }
+
         guard let SLPSPostEventRecordTo = SkyLightSymbolLoader.SLPSPostEventRecordTo else {
             log.error("Failed to load SkyLight symbols in \(#function)")
             return false

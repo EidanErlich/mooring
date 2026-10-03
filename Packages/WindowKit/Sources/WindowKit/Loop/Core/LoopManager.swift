@@ -14,7 +14,7 @@ import SwiftUI
 @Loggable
 @MainActor
 final class LoopManager {
-    static let shared = LoopManager()
+    static let shared = WindowKit.track(LoopManager())
     private init() {}
 
     /// Context for the current resize operation, tracking frame and edge adjustment state.
@@ -22,7 +22,7 @@ final class LoopManager {
     private(set) var resizeContext: ResizeContext = .init()
 
     private let windowActionCache = WindowActionCache()
-    private let indicatorService = WindowActionIndicatorService()
+    let indicatorService = WindowActionIndicatorService()
 
     private var accessibilityCheckerTask: Task<(), Never>?
     private var gestureToggleTask: Task<(), Never>?
@@ -200,7 +200,7 @@ final class LoopManager {
         gestureToggleTask?.cancel()
         gestureToggleTask = nil
 
-        indicatorService.closeAll()
+        indicatorService.closeAllImmediately()
 
         keybindTrigger.stop()
         middleClickTrigger.stop()
@@ -353,7 +353,7 @@ extension LoopManager {
         guard isLoopActive == true else { return }
         log.info("Closing Loop (force closed: \(forceClose))")
 
-        indicatorService.closeAll()
+        indicatorService.closeAllImmediately()
         isLoopActive = false
         hasParentCycleActionMirror.withLock { $0 = false }
 
