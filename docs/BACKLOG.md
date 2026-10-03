@@ -53,6 +53,8 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - `Row.name` builds a throwaway config;
   - overlong MCP lines are buffered whole before the 1 MB check;
   - a second `initialize` changes the name the server filters `status` by.
+- A config symlink chain that dangles is followed one hop only, so the atomic write replaces the second link with a file; and a relative link target is resolved lexically, which can differ when the link's folder is itself a symlink.
+
 
 ## CLI and IPC (stage 2a leftovers)
 
