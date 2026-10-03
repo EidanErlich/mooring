@@ -69,7 +69,7 @@ public enum CallerPolicy {
     }
 
     /// Drops control characters (newlines and tabs included), trims, then cuts to `limit` characters.
-    private static func clean(_ text: String, limit: Int) -> String {
+    public static func clean(_ text: String, limit: Int) -> String {
         let printable = String(String.UnicodeScalarView(text.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
         return String(printable.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
     }

@@ -75,6 +75,8 @@ struct RequestFixture {
     let engine: AwakeEngine
     let handler: RequestHandler
     let approver = FakeLidApprover()
+    /// Records what `notify` posts.
+    let poster = FakeNotificationPoster()
     let caller: Caller
 
     /// `table` is the caller's ancestry; `callerPID` is where agent detection starts.
@@ -92,7 +94,7 @@ struct RequestFixture {
             engine: engine, settings: { knobs.settings }, helperStatus: { "enabled" },
             readHelperSleepDisabled: { knobs.helperSleepDisabled }, now: { knobs.clock },
             processes: table, approver: approver, updateSettings: { change in change(&knobs.settings) },
-            notificationStatus: { knobs.notifications }
+            notificationStatus: { knobs.notifications }, poster: poster
         )
     }
 

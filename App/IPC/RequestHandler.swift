@@ -3,10 +3,21 @@ import Foundation
 import MooringIPC
 import os
 
-/// The peer on the other end of a socket connection, as the kernel reports it.
+/// Who a caller is taken to be: found from its process ancestry, or given by the path the request came in on.
+enum CallerIdentity: Sendable, Equatable {
+    /// Agent detection over the caller's ancestry decides.
+    case detect
+    /// An agent with this display name, whatever the ancestry: an MCP client, or an in-app intent naming one.
+    case agent(String)
+    /// A person, whatever the ancestry.
+    case person
+}
+
+/// The peer on the other end of a socket connection, as the kernel reports it, and who it is taken to be.
 struct Caller: Sendable {
     let uid: uid_t
     let pid: Int32
+    var identity: CallerIdentity = .detect
 }
 
 extension LeaseInfo {
@@ -32,14 +43,16 @@ extension LeaseInfo {
 final class RequestHandler {
     let engine: AwakeEngine
     let settings: @MainActor () -> AwakeSettings
-    private let helperStatus: @MainActor () -> String
-    private let readHelperSleepDisabled: @MainActor () async -> Bool?
+    let helperStatus: @MainActor () -> String
+    let readHelperSleepDisabled: @MainActor () async -> Bool?
     let now: @MainActor () -> Date
     /// The process ancestry agent detection walks.
     let processes: any ProcessTable
     let approver: any LidApproving
     let updateSettings: @MainActor ((inout AwakeSettings) -> Void) -> Void
-    private let notificationStatus: @MainActor () async -> String?
+    let notificationStatus: @MainActor () async -> String?
+    /// Posts `notify`'s notifications.
+    let poster: any NotificationPosting
     /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied and when the
     /// denial ends: it isn't asked again in that lifetime until then.
     var deniedLid: [String: (created: Date, until: Date)] = [:]
@@ -47,16 +60,16 @@ final class RequestHandler {
     var asking: Set<String> = []
     /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
     var agentLid: [String: Date] = [:]
+    /// When each caller, by name, last posted with `notify`, for the rate limit.
+    var lastNotified: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
-    /// The id `mooring on` used before it became the menu's On switch.
-    private static let legacyCLILeaseID = "cli"
 
     init(
         engine: AwakeEngine, settings: @escaping @MainActor () -> AwakeSettings,
         helperStatus: @escaping @MainActor () -> String, readHelperSleepDisabled: @escaping @MainActor () async -> Bool?,
         now: @escaping @MainActor () -> Date = { Date() }, processes: any ProcessTable = SystemProcessTable(),
         approver: any LidApproving, updateSettings: @escaping @MainActor ((inout AwakeSettings) -> Void) -> Void,
-        notificationStatus: @escaping @MainActor () async -> String?
+        notificationStatus: @escaping @MainActor () async -> String?, poster: any NotificationPosting
     ) {
         self.engine = engine
         self.settings = settings
@@ -67,19 +80,22 @@ final class RequestHandler {
         self.approver = approver
         self.updateSettings = updateSettings
         self.notificationStatus = notificationStatus
+        self.poster = poster
     }
 
     func handle(_ request: Request, from caller: Caller) async -> Response {
         do {
             switch request.args {
             case .acquire(let args) where args.kind == .on:
-                return .success(id: request.id, .acquire(try await turnOn(args, from: caller)))
-            case .acquire(let args): return .success(id: request.id, .acquire(try await acquire(args, from: caller)))
+                return .success(id: request.id, .acquire(try await turnOn(args, from: identified(caller, client: args.client))))
+            case .acquire(let args):
+                return .success(id: request.id, .acquire(try await acquire(args, from: identified(caller, client: args.client))))
             case .renew(let args): return .success(id: request.id, .renew(try renew(args)))
             case .release(let args): return .success(id: request.id, .release(try release(args)))
             case .status: return .success(id: request.id, .status(await status()))
             case .hook(let args): return .success(id: request.id, .hook(try hook(args, from: caller)))
-            case .notify: throw WireError(code: .badRequest, message: "notify is not supported yet")
+            case .notify(let args):
+                return .success(id: request.id, .notify(try await notify(args, from: identified(caller, client: args.client))))
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")
@@ -104,7 +120,7 @@ final class RequestHandler {
         /// This plan for a named lease that already exists, so that acquiring it again never weakens it: it keeps the
         /// existing watch, level, reason and owner unless the request gives its own (a level only ever adds to the old one).
         func merged(with existing: Lease, args: AcquireArgs) -> Plan {
-            let ownerGiven = args.agent.map(CallerPolicy.cleanAgentName).map { !$0.isEmpty } ?? false
+            let ownerGiven = args.client != nil || (args.agent.map(CallerPolicy.cleanAgentName).map { !$0.isEmpty } ?? false)
             return Plan(
                 id: id, owner: ownerGiven ? owner : existing.owner,
                 reason: reasonGiven(args) ? reason : existing.reason,
@@ -242,19 +258,22 @@ final class RequestHandler {
     private func plan(for args: AcquireArgs, from caller: Caller) throws -> Plan {
         let ttl = try positive(args.ttl)
         let level = try args.level.map(parseLevel)
-        let owner = args.agent.map(CallerPolicy.cleanAgentName).flatMap { $0.isEmpty ? nil : LeaseOwner.agent(name: $0) }
+        let owner = mcpOwner(args.client)
+            ?? args.agent.map(CallerPolicy.cleanAgentName).flatMap { $0.isEmpty ? nil : LeaseOwner.agent(name: $0) }
             ?? .cli(pid: caller.pid)
         switch args.kind {
         case .on:
             throw WireError(code: .internal, message: "On is not a named lease")
         case .anchor:
             guard let pid = args.watchPid else { throw WireError(code: .badRequest, message: "Missing --pid") }
+            try checkMCPPrefix("anchor-\(pid)", client: args.client)
             return Plan(
                 id: "anchor-\(pid)", owner: owner, reason: cleaned(args.reason) ?? "pid \(pid)",
                 level: level ?? .system, ttl: ttl, watchPID: pid, caller: .trusted
             )
         case .lease:
             guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
+            try checkMCPPrefix(id, client: args.client)
             return Plan(
                 id: id, owner: owner, reason: cleaned(args.reason) ?? id,
                 level: level ?? .system, ttl: ttl, watchPID: args.watchPid, caller: .named
@@ -294,106 +313,5 @@ final class RequestHandler {
         if active.contains(.thermal) { return "Lid mode paused: Mac too warm" }
         if active.contains(.lidNeedsAC) { return "Lid mode paused: needs power" }
         return nil
-    }
-
-}
-
-extension RequestHandler {
-    // MARK: - renew and release
-
-    private func renew(_ args: RenewArgs) throws -> LeaseInfo {
-        let ttl = try positive(args.ttl)
-        try requireUnreserved(args.id)
-        guard engine.leases.contains(where: { $0.id == args.id }) else {
-            throw WireError(code: .notFound, message: "No lease \(args.id); acquire it again")
-        }
-        guard let lease = engine.renew(id: args.id, ttl: ttl.map { min($0, CallerPolicy.maxNamedLease) }) else {
-            throw WireError(code: .internal, message: "Couldn't renew \(args.id)")
-        }
-        return LeaseInfo(lease)
-    }
-
-    private func release(_ args: ReleaseArgs) throws -> ReleaseResult {
-        let after = try positive(args.after)
-        switch args.kind {
-        case .off:
-            return ReleaseResult(released: turnOff())
-        case .lease:
-            guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
-            try requireUnreserved(id)
-            guard engine.leases.contains(where: { $0.id == id }) else { return ReleaseResult(released: false) }
-            if let after {
-                engine.shorten(id: id, to: now().addingTimeInterval(after))
-            } else {
-                engine.release(id: id)
-            }
-            return ReleaseResult(released: true)
-        }
-    }
-
-    /// `mooring off`: ends the menu session, as the menu's On switch does, and a `cli` lease an
-    /// earlier build may have left. Agent leases and anchors stay.
-    private func turnOff() -> Bool {
-        var ended = engine.hasMenuSession
-        engine.endMenuSession()
-        if engine.leases.contains(where: { $0.id == Self.legacyCLILeaseID }) {
-            engine.release(id: Self.legacyCLILeaseID)
-            ended = true
-        }
-        return ended
-    }
-
-    // MARK: - status
-
-    private func status() async -> StatusResult {
-        // The helper and notification reads suspend, so take them first and read the engine in one synchronous stretch.
-        let helperSleepDisabled = await readHelperSleepDisabled()
-        let notifications = await notificationStatus()
-        let current = now()
-        let state = engine.state
-        let live = engine.leases.filter { $0.isLive(at: current) }
-        return StatusResult(
-            summary: StatusLine.text(leases: engine.leases, state: state, now: current),
-            effective: LevelInfo(system: state.systemAssertion, display: state.displayAssertion, lid: state.lidSleepDisabled),
-            systemAssertion: state.systemAssertion, displayAssertion: state.displayAssertion,
-            lidSleepDisabled: state.lidSleepDisabled, helperSleepDisabled: helperSleepDisabled,
-            wantsLid: engine.wantsLid,
-            leases: live.map { LeaseInfo($0, pendingApproval: asking.contains($0.id) || approver.pending.contains($0.id)) },
-            power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
-            thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
-            suspensions: state.suspensions.map { String(describing: $0) }.sorted(),
-            notifications: notifications, agentLidApproval: settings().agentLidApproval.rawValue
-        )
-    }
-
-    private static func thermalName(_ state: ProcessInfo.ThermalState) -> String {
-        switch state {
-        case .nominal: "nominal"
-        case .fair: "fair"
-        case .serious: "serious"
-        case .critical: "critical"
-        @unknown default: "nominal"
-        }
-    }
-
-    // MARK: - Validation
-
-    /// `seconds` unchanged, or a bad request when it isn't a positive, finite length of time.
-    private func positive(_ seconds: Double?) throws -> Double? {
-        guard let seconds else { return nil }
-        guard seconds.isFinite, seconds > 0 else { throw WireError(code: .badRequest, message: "Durations must be positive") }
-        return seconds
-    }
-
-    private func parseLevel(_ text: String) throws -> AwakeLevel {
-        guard let flags = WireText.parseLevel(text) else { throw WireError(code: .badRequest, message: "Unknown level \(text)") }
-        return AwakeLevel(display: flags.display, lid: flags.lid)
-    }
-
-    /// The reason cleaned for display, or nil when none was given or nothing is left of it.
-    private func cleaned(_ reason: String?) -> String? { reason.map(CallerPolicy.cleanReason).flatMap { $0.isEmpty ? nil : $0 } }
-
-    private func requireUnreserved(_ id: String) throws {
-        if CallerPolicy.isReserved(id) { throw WireError(code: .badRequest, message: "\(id) is reserved") }
     }
 }

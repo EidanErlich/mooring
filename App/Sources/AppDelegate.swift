@@ -125,7 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 change(&settings)
                 Defaults[.awake] = settings
             },
-            notificationStatus: { [approvals] in await approvals.notificationStatus() }
+            notificationStatus: { [approvals] in await approvals.notificationStatus() },
+            poster: SystemNotificationPoster()
         )
         // Never, or session lid switched off, takes lid mode back from live agent leases right away.
         lidSettingUpdates = Task {
