@@ -31,7 +31,8 @@ public enum MCPClientName {
                 pendingDash = true
             }
         }
-        let cut = String(result.prefix(slugLimit))
+        var cut = String(result.prefix(slugLimit))
+        while cut.hasSuffix("-") { cut.removeLast() }
         return cut.isEmpty ? "client" : cut
     }
 }

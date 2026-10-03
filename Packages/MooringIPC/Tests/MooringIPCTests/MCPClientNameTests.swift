@@ -20,3 +20,9 @@ import Testing
     #expect(MCPClientName.slug(String(repeating: "b", count: 40)).count == 24)
     #expect(MCPClientName.slug("!!!") == "client")
 }
+
+@Test func slugNeverEndsWithADashAfterTruncation() {
+    let slug = MCPClientName.slug("aaaaaaaaaaaaaaaaaaaaaaa b")
+    #expect(slug == "aaaaaaaaaaaaaaaaaaaaaaa")
+    #expect(!slug.hasSuffix("-"))
+}

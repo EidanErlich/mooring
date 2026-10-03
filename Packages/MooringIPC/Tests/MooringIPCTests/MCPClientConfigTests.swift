@@ -132,3 +132,34 @@ private func json(_ url: URL) throws -> [String: Any] {
     #expect(mooring["args"] as? [String] == ["mcp"])
     #expect(mooring["command"] as? String == helper)
 }
+
+@Test func backupIsRefreshedOnEveryEdit() throws {
+    let value = try config(makeHome())
+    try Data(#"{"theme":"dark"}"#.utf8).write(to: value.fileURL)
+    try value.add(helperPath: "/old/mooring")
+    let beforeSecondEdit = try Data(contentsOf: value.fileURL)
+    try value.add(helperPath: helper)
+    #expect(try Data(contentsOf: URL(fileURLWithPath: value.fileURL.path + ".mooring-backup")) == beforeSecondEdit)
+    let beforeRemove = try Data(contentsOf: value.fileURL)
+    try value.remove()
+    #expect(try Data(contentsOf: URL(fileURLWithPath: value.fileURL.path + ".mooring-backup")) == beforeRemove)
+}
+
+@Test func backupKeepsTheOriginalsPermissions() throws {
+    let value = try config(makeHome())
+    try Data(#"{"env":{"KEY":"secret"}}"#.utf8).write(to: value.fileURL)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: value.fileURL.path)
+    try value.add(helperPath: helper)
+    let backup = value.fileURL.path + ".mooring-backup"
+    let attributes = try FileManager.default.attributesOfItem(atPath: backup)
+    #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+}
+
+@Test func nonObjectServersAreNotReplaced() throws {
+    let value = try config(makeHome())
+    let original = Data(#"{"mcpServers": []}"#.utf8)
+    try original.write(to: value.fileURL)
+    #expect(throws: MCPClientConfig.ConfigError.invalidJSON(value.fileURL.path)) { try value.add(helperPath: helper) }
+    #expect(try Data(contentsOf: value.fileURL) == original)
+    #expect(!FileManager.default.fileExists(atPath: value.fileURL.path + ".mooring-backup"))
+}

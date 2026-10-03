@@ -1,7 +1,7 @@
 import Foundation
 
 /// Reads and edits one MCP client's config file so that its `mcpServers` has a `mooring` entry.
-/// Other keys and servers are left as they are; the first edit keeps a `.mooring-backup` copy.
+/// Other keys and servers are left as they are; every edit first copies the current file to `.mooring-backup`.
 public struct MCPClientConfig {
     public enum Client: CaseIterable, Sendable {
         case claudeDesktop, cursor
@@ -63,6 +63,7 @@ public struct MCPClientConfig {
     public func add(helperPath: String) throws {
         guard fileManager.fileExists(atPath: folderURL.path) else { throw CocoaError(.fileNoSuchFile) }
         var root = try readRoot() ?? [:]
+        if let existing = root["mcpServers"], !(existing is [String: Any]) { throw ConfigError.invalidJSON(fileURL.path) }
         var servers = root["mcpServers"] as? [String: Any] ?? [:]
         servers[Self.serverName] = ["command": helperPath, "args": Self.arguments] as [String: Any]
         root["mcpServers"] = servers
@@ -102,12 +103,18 @@ public struct MCPClientConfig {
         return root
     }
 
-    /// Writes through a symlink to its target, keeps a backup of the first original and replaces the file atomically.
+    /// Writes through a symlink to its target, copies the current contents to a backup (replacing any earlier one,
+    /// with the original's permissions) and replaces the file atomically.
     private func write(_ root: [String: Any]) throws {
         let target = fileURL.resolvingSymlinksInPath()
-        let backup = URL(fileURLWithPath: target.path + ".mooring-backup")
-        if let original = fileManager.contents(atPath: target.path), !fileManager.fileExists(atPath: backup.path) {
-            try original.write(to: backup, options: .atomic)
+        if let original = fileManager.contents(atPath: target.path) {
+            let backup = target.path + ".mooring-backup"
+            let permissions = (try? fileManager.attributesOfItem(atPath: target.path))?[.posixPermissions]
+            try? fileManager.removeItem(atPath: backup)
+            let attributes = permissions.map { [FileAttributeKey.posixPermissions: $0] }
+            guard fileManager.createFile(atPath: backup, contents: original, attributes: attributes) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
         }
         try Self.serialize(root).write(to: target, options: .atomic)
     }
