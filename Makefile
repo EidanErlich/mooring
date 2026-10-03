@@ -7,13 +7,14 @@ PROJECT     := Mooring.xcodeproj
 DERIVED     ?= build/DerivedData
 APP         := Mooring.app
 INSTALL_DIR := /Applications
-PACKAGES    := Packages/AwakeKit Packages/MooringIPC
+PACKAGES    := Packages/AwakeKit Packages/MooringIPC Packages/WindowKit
 
 # Extra xcodebuild settings, e.g. XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO" in CI.
 XCODEBUILD_FLAGS ?=
 
+# -skipMacroValidation: WindowKit's Scribe dependency uses Swift macros, which need it non-interactively.
 XCODEBUILD = xcodebuild -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(DERIVED) \
-	-destination 'platform=macOS,arch=$(shell uname -m)'
+	-destination 'platform=macOS,arch=$(shell uname -m)' -skipMacroValidation
 
 .PHONY: bootstrap generate build run test lint install reset-sleep uninstall clean
 

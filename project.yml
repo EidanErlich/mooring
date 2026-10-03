@@ -12,6 +12,8 @@ packages:
     path: Packages/AwakeKit
   MooringIPC:
     path: Packages/MooringIPC
+  WindowKit:
+    path: Packages/WindowKit   # vendored Loop; listed only, linked into the app in a later task
 configFiles:
   Debug: Config/Shared.xcconfig
   Release: Config/Shared.xcconfig

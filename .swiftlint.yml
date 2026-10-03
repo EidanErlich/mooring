@@ -7,5 +7,7 @@ excluded:
   - build
   - Packages/*/.build
   - Packages/AwakeKit/Sources/AwaykeMonitors   # vendored Awayke code
+  - Packages/WindowKit/Sources/WindowKit/Loop   # vendored Loop code
+  - Packages/WindowKit/Tests/WindowKitTests/Loop   # vendored Loop tests
 line_length:
   warning: 140
