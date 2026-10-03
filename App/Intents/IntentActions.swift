@@ -50,13 +50,14 @@ final class IntentActions {
 
     private let caller = Caller(uid: getuid(), pid: getpid(), identity: .person)
 
-    /// Turns the menu session on for `duration` seconds, or until turned off. Returns the text for the dialog: the
-    /// status summary, or the guardrail that holds the session back (it is on, but paused).
-    func keepAwake(duration: TimeInterval?, level: IntentLevel) async throws -> String {
+    /// Turns the menu session on for `duration` seconds, or until turned off. With no `level` it keeps the running
+    /// session's level, else the click level, as `mooring on` does without `--level`. Returns the text for the dialog:
+    /// the status summary, or the guardrail that holds the session back (it is on, but paused).
+    func keepAwake(duration: TimeInterval?, level: IntentLevel?) async throws -> String {
         let handler = try await readyHandler()
         // An empty Duration is "until turned off", not the menu click's duration.
         let args = AcquireArgs(
-            kind: .on, id: nil, level: level.wire, ttl: duration, watchPid: nil, reason: nil, agent: nil,
+            kind: .on, id: nil, level: level?.wire, ttl: duration, watchPid: nil, reason: nil, agent: nil,
             untilOff: duration == nil ? true : nil
         )
         let response = await send(.acquire, .acquire(args), to: handler)

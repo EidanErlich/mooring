@@ -503,7 +503,7 @@ Three intents in `App/Intents/`, run in the background (`openAppWhenRun = false`
 
 | Intent | Parameters | Result |
 | --- | --- | --- |
-| **Keep Mac Awake** | Duration (optional), Level (Normal, Keep display on, Keep awake with lid closed; default Normal) | Turns the menu session on. An empty Duration is open-ended (`untilOff`: until turned off, not the menu click's duration). Under a guardrail the dialog is the guardrail's notification title plus "Mooring is on and starts when that clears." |
+| **Keep Mac Awake** | Duration (optional), Level (optional: Normal, Keep display on, Keep awake with lid closed; empty keeps the running session's level, else the click level, like `mooring on` without `--level`) | Turns the menu session on. An empty Duration is open-ended (`untilOff`: until turned off, not the menu click's duration). Under a guardrail the dialog is the guardrail's notification title plus "Mooring is on and starts when that clears." |
 | **Let Mac Sleep** | none | Ends the menu session |
 | **Get Awake Status** | none | Returns an `AwakeStatus` entity: `isOn`, `summary`, `level`, `endsAt` (optional), `batteryPercent`, `onPower`. The dialog shows the summary |
 

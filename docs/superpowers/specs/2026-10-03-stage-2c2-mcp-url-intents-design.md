@@ -105,7 +105,7 @@ These are trusted like the menu: a person runs them. They live in the app target
 
 | Intent | Parameters | Result |
 | --- | --- | --- |
-| **Keep Mac Awake** | Duration (optional; empty = until turned off), Level (Normal / Keep display on / Keep awake with lid closed; default Normal) | Turns the menu session on. Guardrails apply as usual, and a guardrail is reported in the dialog ("Lid mode waits for power"). |
+| **Keep Mac Awake** | Duration (optional; empty = until turned off), Level (optional: Normal / Keep display on / Keep awake with lid closed; empty keeps the running session's level, else the click level, as `mooring on` without `--level` does) | Turns the menu session on. Guardrails apply as usual, and a guardrail is reported in the dialog ("Lid mode waits for power"). |
 | **Let Mac Sleep** | none | Ends the menu session. |
 | **Get Awake Status** | none | Returns an `AwakeStatus` entity: `isOn`, `summary`, `level`, `endsAt` (optional), `batteryPercent`, `onPower`. The dialog shows the summary. |
 

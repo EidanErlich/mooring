@@ -46,6 +46,28 @@ struct IntentActionsTests {
         #expect(try #require(fixture.lease(AwakeEngine.menuLeaseID)).expiresAt == nil)
     }
 
+    /// An empty Level keeps the running session's level, as `mooring on` without `--level` does.
+    @Test func emptyLevelKeepsALidSession() async throws {
+        let actions = actions()
+        _ = try await actions.keepAwake(duration: 1800, level: .lid)
+
+        _ = try await actions.keepAwake(duration: nil, level: nil)
+
+        let lease = try #require(fixture.lease(AwakeEngine.menuLeaseID))
+        #expect(lease.level == lidOnly)
+        #expect(lease.expiresAt == nil)
+    }
+
+    @Test func emptyLevelUsesClickLevelWhenOff() async throws {
+        fixture.knobs.settings.clickLevel = .screenOn
+
+        _ = try await actions().keepAwake(duration: 600, level: nil)
+
+        let lease = try #require(fixture.lease(AwakeEngine.menuLeaseID))
+        #expect(lease.level == .screenOn)
+        #expect(lease.expiresAt == fixture.clock.addingTimeInterval(600))
+    }
+
     /// A Shortcut that launches Mooring runs before the handler exists, and waits for it.
     @Test func requestBeforeHandlerReadyIsServed() async throws {
         let gate = HandlerGate()
