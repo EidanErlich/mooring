@@ -84,6 +84,21 @@ struct RequestHandlerMCPTests {
         #expect(fixture.lease("mcp-x-1") == nil)
     }
 
+    @Test func emptyClientIsAnMCPClient() async throws {
+        // `mooring mcp` sends "" before `initialize` names the client.
+        let fixture = RequestFixture()
+
+        let response = await mcpAcquire(fixture, id: "mcp-mcp-client-500-1", client: "")
+
+        #expect(response.ok)
+        #expect(try #require(fixture.lease("mcp-mcp-client-500-1")).owner == .mcp(client: "MCP client"))
+
+        #expect(await fixture.notify("One", client: "").ok)
+        fixture.knobs.clock += 5
+        #expect(wireFailure(await fixture.notify("Two", client: "")) == denied("Rate-limited: try again in 25 s"))
+        #expect(fixture.poster.posts.map(\.title) == ["MCP client: One"])
+    }
+
     @Test func clientWatchingUnrelatedPidAsks() async {
         // pid 1 isn't the MCP server or under it, so the watch is no end: open-ended lid is asked about.
         let fixture = RequestFixture()

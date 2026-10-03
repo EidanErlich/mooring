@@ -96,7 +96,7 @@ import Testing
     #expect(harness.isError(2) == false)
     let args = acquireArgs(of: harness.client.requests.first)
     #expect(args?.id == "mcp-mcp-client-500-1")
-    #expect(args?.client == nil)
+    #expect(args?.client == "")
     #expect(args?.reason == "Requested by MCP client")
     #expect(harness.client.requests.last?.op == .status)
 }
@@ -340,4 +340,11 @@ import Testing
     #expect(harness.isError(2) == false)
     #expect(harness.isError(3) == true)
     #expect(harness.client.requests.count == 1)
+}
+
+@Test func notifyBeforeInitializeIsAnMCPClient() async throws {
+    let harness = MCPHarness()
+    _ = await harness.run([call(1, "notify", #"{"title":"Done"}"#)])
+    let request = try #require(harness.client.requests.first)
+    #expect(request.args == .notify(NotifyArgs(title: "Done", body: nil, client: "")))
 }

@@ -49,6 +49,9 @@ struct MCPSession {
     /// The client's name as the app shows it.
     var displayName: String { MCPClientName.display(clientName) }
 
+    /// `client` for the app: the reported name, or "" before `initialize` names one, so every request is a client's.
+    var wireClient: String { clientName ?? "" }
+
     /// The reply line to `line`, or nil when it needs none.
     mutating func handle(_ line: String) async -> String? {
         if line.utf8.count <= MCPMessage.maxLineBytes, line.allSatisfy(\.isWhitespace) { return nil }
@@ -127,7 +130,7 @@ extension MCPSession {
         let ttl = Double(minutes * 60)
         let args = RequestArgs.acquire(AcquireArgs(
             kind: .lease, id: id, level: level, ttl: ttl, watchPid: environment.ownPID,
-            reason: reason ?? "Requested by \(displayName)", agent: nil, client: clientName
+            reason: reason ?? "Requested by \(displayName)", agent: nil, client: wireClient
         ))
         switch await send(args, through: environment.acquireClient(kind: .lease, level: level)) {
         case .done(let result, let request):
@@ -191,7 +194,7 @@ extension MCPSession {
     }
 
     private func notify(title: String, body: String?) async -> JSONValue {
-        switch await send(.notify(NotifyArgs(title: title, body: body, client: clientName)), through: environment.client) {
+        switch await send(.notify(NotifyArgs(title: title, body: body, client: wireClient)), through: environment.client) {
         case .done(.notify(let result), _):
             return MCPTools.result(result.posted ? "Notification posted" : "Notification not posted",
                                    structured: JSONValue(encoding: result))
