@@ -152,6 +152,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             poster: poster
         )
         gate.set(handler)
+        IntentActions.shared.gate = gate
         // Never, or session lid switched off, takes lid mode back from live agent leases right away.
         lidSettingUpdates = Task {
             for await _ in Defaults.updates(.awake, initial: false) { handler.applyLidSettings() }

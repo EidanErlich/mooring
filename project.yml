@@ -28,6 +28,7 @@ targets:
       - App/Helper
       - App/IPC
       - App/Links
+      - App/Intents
       - path: Helper/dev.mooring.helper.plist
         buildPhase:
           copyFiles:
