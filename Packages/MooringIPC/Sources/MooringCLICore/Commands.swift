@@ -4,6 +4,9 @@ import MooringIPC
 
 /// Runs the `mooring` command line against an environment, so tests can drive it without a socket.
 public enum MooringCLI {
+    /// This build's version, as `mooring --version` prints it and `mooring mcp` reports it.
+    public static let version = "0.2.0-dev"
+
     /// Parses `arguments` (without the program name), runs the command and returns the exit status.
     public static func run(_ arguments: [String], environment: CLIEnvironment) async -> Int32 {
         // `hook` runs inside Claude Code's own hooks, where any output or failure would reach Claude.
@@ -76,9 +79,20 @@ struct MooringCommand: ParsableCommand {
           To stay awake exactly as long as a command runs:
             mooring anchor -- <command>
         """,
-        version: "mooring 0.2.0-dev",
-        subcommands: [OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self]
+        version: "mooring \(MooringCLI.version)",
+        subcommands: [
+            OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self, MCPCommand.self
+        ]
     )
+}
+
+/// `mooring mcp`: serves MCP on stdin and stdout until stdin ends.
+struct MCPCommand: ParsableCommand, CLICommand {
+    static let configuration = CommandConfiguration(commandName: "mcp", abstract: "Run the MCP server over stdio")
+
+    func execute(_ env: CLIEnvironment) async -> Int32 {
+        await MCPServer(environment: env).run()
+    }
 }
 
 /// Checks flag values while parsing, turning a bad one into a usage error that exits 1.
@@ -205,7 +219,7 @@ struct CommandRunner {
         return "\n"
     }
 
-    private static func op(of args: RequestArgs) -> Op {
+    static func op(of args: RequestArgs) -> Op {
         switch args {
         case .acquire: .acquire
         case .renew: .renew

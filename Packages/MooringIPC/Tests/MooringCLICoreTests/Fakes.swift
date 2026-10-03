@@ -108,7 +108,8 @@ struct Harness {
             client: client, processes: table, ownPID: 500, parentPID: parentPID,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv,
-            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, lidClient: lidClient, claude: { claude }
+            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, lidClient: lidClient, claude: { claude },
+            readLine: { nil }, appVersion: "9.9.9-test"
         )
         return await MooringCLI.run(arguments, environment: environment)
     }

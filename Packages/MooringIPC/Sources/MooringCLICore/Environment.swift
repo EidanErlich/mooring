@@ -72,6 +72,10 @@ public struct CLIEnvironment: Sendable {
     public var lidClient: any RequestSending
     /// Asks Claude Code about itself, for doctor. Blocks for a few seconds at most; nil when `claude` isn't found.
     public var claude: @Sendable () -> ClaudeSnapshot?
+    /// Reads one line from stdin without its newline, blocking until it arrives; nil at end of input. For `mooring mcp`.
+    public var readLine: @Sendable () -> String?
+    /// This build's version, which `mooring mcp` reports to its client.
+    public var appVersion: String
 
     /// The client for an acquire of `kind` at `level` (a canonical level name, or nil for the app's default): the long-wait
     /// one when it may need an approval, since the app can hold the reply for up to a minute. That is a level that includes
@@ -87,7 +91,8 @@ public struct CLIEnvironment: Sendable {
         newID: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date,
         ownBinaryPath: String, pathEnv: String?,
         readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending,
-        lidClient: any RequestSending, claude: @escaping @Sendable () -> ClaudeSnapshot?
+        lidClient: any RequestSending, claude: @escaping @Sendable () -> ClaudeSnapshot?,
+        readLine: @escaping @Sendable () -> String?, appVersion: String
     ) {
         self.client = client
         self.processes = processes
@@ -103,5 +108,7 @@ public struct CLIEnvironment: Sendable {
         self.hookClient = hookClient
         self.lidClient = lidClient
         self.claude = claude
+        self.readLine = readLine
+        self.appVersion = appVersion
     }
 }
