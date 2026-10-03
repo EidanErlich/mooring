@@ -109,6 +109,7 @@ struct RequestFixture {
         case .release: .release
         case .status: .status
         case .hook: .hook
+        case .notify: .notify
         }
         return await handler.handle(Request(v: 1, id: "r1", op: operation, args: args), from: caller)
     }

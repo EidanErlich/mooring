@@ -2,7 +2,7 @@ import Foundation
 
 /// The operations a request can name.
 public enum Op: String, Codable, Sendable, Equatable { // swiftlint:disable:this type_name
-    case acquire, renew, release, status, hook
+    case acquire, renew, release, status, hook, notify
 }
 
 /// What an `acquire` asks for: the plain keep-awake toggle, an anchor lease or a named lease.
@@ -23,8 +23,11 @@ public struct AcquireArgs: Codable, Sendable, Equatable {
     public var watchPid: Int32?
     public var reason: String?
     public var agent: String?
+    /// The MCP client's self-reported name. Only the MCP server sets it.
+    public var client: String?
 
-    public init(kind: AcquireKind, id: String?, level: String?, ttl: Double?, watchPid: Int32?, reason: String?, agent: String?) {
+    public init(kind: AcquireKind, id: String?, level: String?, ttl: Double?, watchPid: Int32?, reason: String?, agent: String?,
+                client: String? = nil) {
         self.kind = kind
         self.id = id
         self.level = level
@@ -32,6 +35,7 @@ public struct AcquireArgs: Codable, Sendable, Equatable {
         self.watchPid = watchPid
         self.reason = reason
         self.agent = agent
+        self.client = client
     }
 }
 
@@ -86,6 +90,19 @@ public struct HookArgs: Codable, Sendable, Equatable {
     }
 }
 
+/// What `notify` posts as a notification. `client` is set only by the MCP server.
+public struct NotifyArgs: Codable, Sendable, Equatable {
+    public var title: String
+    public var body: String?
+    public var client: String?
+
+    public init(title: String, body: String? = nil, client: String? = nil) {
+        self.title = title
+        self.body = body
+        self.client = client
+    }
+}
+
 /// A request's arguments. On the wire this is a plain object whose fields follow the request's `op`,
 /// so decoding goes through `Request`, which reads `op` first.
 public enum RequestArgs: Encodable, Sendable, Equatable {
@@ -94,6 +111,7 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
     case release(ReleaseArgs)
     case status
     case hook(HookArgs)
+    case notify(NotifyArgs)
 
     public func encode(to encoder: any Encoder) throws {
         switch self {
@@ -101,6 +119,7 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
         case .renew(let args): try args.encode(to: encoder)
         case .release(let args): try args.encode(to: encoder)
         case .hook(let args): try args.encode(to: encoder)
+        case .notify(let args): try args.encode(to: encoder)
         case .status:
             _ = encoder.container(keyedBy: EmptyKeys.self)
         }
@@ -137,6 +156,7 @@ public struct Request: Codable, Sendable, Equatable {
         case .release: args = .release(try container.decode(ReleaseArgs.self, forKey: .args))
         case .status: args = .status
         case .hook: args = .hook(try container.decode(HookArgs.self, forKey: .args))
+        case .notify: args = .notify(try container.decode(NotifyArgs.self, forKey: .args))
         }
     }
 

@@ -212,6 +212,7 @@ struct CommandRunner {
         case .release: .release
         case .status: .status
         case .hook: .hook
+        case .notify: .notify
         }
     }
 }

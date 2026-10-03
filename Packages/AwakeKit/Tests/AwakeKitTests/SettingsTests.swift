@@ -48,4 +48,14 @@ struct SettingsTests {
         #expect(!decoded.agentSessionLid)
         #expect(decoded.agentLidAlwaysAllowed == ["Claude Code", "Codex"])
     }
+
+    @Test func agentNotificationsDefaultsOn() {
+        #expect(AwakeSettings().agentNotifications)
+    }
+
+    @Test func olderSettingsDecodeNotificationsOn() throws {
+        let old = #"{"clickDuration":3600}"#
+        let decoded = try JSONDecoder().decode(AwakeSettings.self, from: Data(old.utf8))
+        #expect(decoded.agentNotifications)
+    }
 }

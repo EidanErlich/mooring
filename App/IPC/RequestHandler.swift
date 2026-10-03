@@ -79,6 +79,7 @@ final class RequestHandler {
             case .release(let args): return .success(id: request.id, .release(try release(args)))
             case .status: return .success(id: request.id, .status(await status()))
             case .hook(let args): return .success(id: request.id, .hook(try hook(args, from: caller)))
+            case .notify: throw WireError(code: .badRequest, message: "notify is not supported yet")
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")
@@ -390,9 +391,7 @@ extension RequestHandler {
     }
 
     /// The reason cleaned for display, or nil when none was given or nothing is left of it.
-    private func cleaned(_ reason: String?) -> String? {
-        reason.map(CallerPolicy.cleanReason).flatMap { $0.isEmpty ? nil : $0 }
-    }
+    private func cleaned(_ reason: String?) -> String? { reason.map(CallerPolicy.cleanReason).flatMap { $0.isEmpty ? nil : $0 } }
 
     private func requireUnreserved(_ id: String) throws {
         if CallerPolicy.isReserved(id) { throw WireError(code: .badRequest, message: "\(id) is reserved") }
