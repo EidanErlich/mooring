@@ -44,6 +44,7 @@ let environment = CLIEnvironment(
     now: { Date() },
     ownBinaryPath: ownExecutablePath(),
     pathEnv: ProcessInfo.processInfo.environment["PATH"],
+    home: FileManager.default.homeDirectoryForCurrentUser,
     readInput: readStandardInput(limit:),
     hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {}),
     lidClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 65),

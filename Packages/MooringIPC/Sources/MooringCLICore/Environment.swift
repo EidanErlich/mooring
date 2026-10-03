@@ -64,6 +64,8 @@ public struct CLIEnvironment: Sendable {
     public var ownBinaryPath: String
     /// The caller's `PATH`, or nil when it has none.
     public var pathEnv: String?
+    /// The user's home folder, where doctor looks for MCP client configs.
+    public var home: URL
     /// Reads at most the given number of bytes from stdin.
     public var readInput: @Sendable (Int) -> Data
     /// What `mooring hook` sends through: a quick client that gives up fast.
@@ -89,7 +91,7 @@ public struct CLIEnvironment: Sendable {
         client: any RequestSending, processes: any ProcessTable, ownPID: Int32, parentPID: Int32,
         write: @escaping @Sendable (String) -> Void, writeError: @escaping @Sendable (String) -> Void,
         newID: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date,
-        ownBinaryPath: String, pathEnv: String?,
+        ownBinaryPath: String, pathEnv: String?, home: URL,
         readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending,
         lidClient: any RequestSending, claude: @escaping @Sendable () -> ClaudeSnapshot?,
         readLine: @escaping @Sendable () -> String?, appVersion: String
@@ -104,6 +106,7 @@ public struct CLIEnvironment: Sendable {
         self.now = now
         self.ownBinaryPath = ownBinaryPath
         self.pathEnv = pathEnv
+        self.home = home
         self.readInput = readInput
         self.hookClient = hookClient
         self.lidClient = lidClient

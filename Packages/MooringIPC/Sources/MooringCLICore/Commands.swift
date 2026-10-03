@@ -81,7 +81,8 @@ struct MooringCommand: ParsableCommand {
         """,
         version: "mooring \(MooringCLI.version)",
         subcommands: [
-            OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self, MCPCommand.self
+            OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self, MCPCommand.self,
+            NotifyCommand.self
         ]
     )
 }

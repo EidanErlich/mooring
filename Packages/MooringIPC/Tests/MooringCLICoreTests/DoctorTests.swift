@@ -34,7 +34,10 @@ private final class BinFolder {
 private func runChecks(
     _ status: StatusResult?, pathEnv: String?, ownBinary: String, claude: ClaudeSnapshot? = nil
 ) -> [Doctor.Check] {
-    Doctor.checks(status: status, pathEnv: pathEnv, ownBinary: ownBinary, resolve: Doctor.resolvePath, claude: claude)
+    Doctor.checks(
+        status: status, pathEnv: pathEnv, ownBinary: ownBinary, resolve: Doctor.resolvePath, claude: claude,
+        home: URL(fileURLWithPath: "/nowhere/home"), helperPath: ownBinary
+    )
 }
 
 private func plugin(_ id: String, version: String = "0.1.0", enabled: Bool = true) -> ClaudeCode.InstalledPlugin {
@@ -43,7 +46,7 @@ private func plugin(_ id: String, version: String = "0.1.0", enabled: Bool = tru
 
 /// The plugin and version checks (the fifth and sixth) for a snapshot.
 private func claudeChecks(_ claude: ClaudeSnapshot?) -> [Doctor.Check] {
-    Array(Doctor.checks(status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 }, claude: claude)[4...5])
+    Array(runChecks(nil, pathEnv: nil, ownBinary: "/nowhere/mooring", claude: claude)[4...5])
 }
 
 private let pluginFix = "Settings → Awake → Agents → Install"
@@ -58,7 +61,8 @@ private let pluginFix = "Settings → Awake → Agents → Install"
         Doctor.Check(name: "Lid sleep", state: "pass", detail: "matches", fix: nil),
         Doctor.Check(name: "Claude plugin", state: "skip", detail: "Claude Code not found", fix: nil),
         Doctor.Check(name: "Claude Code version", state: "skip", detail: "unknown", fix: nil),
-        Doctor.Check(name: "Notifications", state: "pass", detail: "allowed", fix: nil)
+        Doctor.Check(name: "Notifications", state: "pass", detail: "allowed", fix: nil),
+        Doctor.Check(name: "MCP clients", state: "skip", detail: "none added", fix: nil)
     ])
 }
 
@@ -241,7 +245,7 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
     """)
 }
 
-@Test func humanOutputListsSevenChecks() async throws {
+@Test func humanOutputListsEightChecks() async throws {
     let bin = try BinFolder()
     let snapshot = ClaudeSnapshot(version: "2.2.0", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
     let harness = Harness(
@@ -250,10 +254,11 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
     )
     #expect(await harness.run(["doctor"]) == 0)
     let lines = harness.capture.stdout.split(separator: "\n").map(String.init)
-    #expect(lines.count == 7)
+    #expect(lines.count == 8)
     #expect(lines[4] == "✓ Claude plugin        mooring@mooring-app 0.1.0")
     #expect(lines[5] == "– Claude Code version  tested with 2.1; you have 2.2.0")
     #expect(lines[6] == "✓ Notifications        allowed")
+    #expect(lines[7] == "– MCP clients          none added")
 }
 
 @Test func versionMismatchDoesNotFailDoctor() async throws {
@@ -320,6 +325,63 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
     #expect(text.contains(#""detail":"\#(bin.binary)""#))
     #expect(text.filter { $0 == "\n" }.count == 1)
     let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: [[String: String]]])
-    #expect(object["checks"]?.count == 7)
+    #expect(object["checks"]?.count == 8)
     #expect(object["checks"]?[2]["fix"] == "Settings → Lid & Battery → Approve")
+}
+
+// MARK: - Check 8: MCP clients
+
+/// A temp home whose client folders exist, each holding a config that names `command` as the mooring server.
+private final class MCPHome {
+    let url: URL
+
+    init() throws {
+        url = URL(fileURLWithPath: try makeTempFolder())
+    }
+
+    deinit { try? FileManager.default.removeItem(at: url) }
+
+    /// Creates the client's folder and, when `command` is given, a config file whose mooring entry runs it.
+    func install(_ client: MCPClientConfig.Client, command: String? = nil) throws {
+        let config = MCPClientConfig(client: client, home: url)
+        try FileManager.default.createDirectory(at: config.folderURL, withIntermediateDirectories: true)
+        guard let command else { return }
+        let root = ["mcpServers": ["mooring": ["command": command, "args": ["mcp"]]]]
+        try JSONSerialization.data(withJSONObject: root).write(to: config.fileURL)
+    }
+}
+
+private func mcpCheck(home: MCPHome, helperPath: String = "/Apps/mooring") -> Doctor.Check {
+    Doctor.checks(
+        status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 }, claude: nil,
+        home: home.url, helperPath: helperPath
+    )[7]
+}
+
+@Test func mcpCheckPassesWithAddedClients() throws {
+    let home = try MCPHome()
+    try home.install(.claudeDesktop, command: "/Apps/mooring")
+    try home.install(.cursor, command: "/Apps/mooring")
+    #expect(mcpCheck(home: home) == Doctor.Check(name: "MCP clients", state: "pass", detail: "Claude Desktop, Cursor", fix: nil))
+    try FileManager.default.removeItem(at: MCPClientConfig(client: .claudeDesktop, home: home.url).folderURL)
+    #expect(mcpCheck(home: home).detail == "Cursor")
+}
+
+@Test func mcpCheckSkipsWhenNoneAdded() throws {
+    let home = try MCPHome()
+    #expect(mcpCheck(home: home) == Doctor.Check(name: "MCP clients", state: "skip", detail: "none added", fix: nil))
+    try home.install(.cursor)
+    #expect(mcpCheck(home: home).state == "skip")
+}
+
+@Test func mcpCheckFailsWhenNeedsUpdate() throws {
+    let home = try MCPHome()
+    try home.install(.claudeDesktop, command: "/Old/mooring")
+    try home.install(.cursor, command: "/Old/mooring")
+    #expect(mcpCheck(home: home) == Doctor.Check(
+        name: "MCP clients", state: "fail", detail: "Claude Desktop needs update, Cursor needs update",
+        fix: "Settings → Agents → Update"
+    ))
+    try home.install(.claudeDesktop, command: "/Apps/mooring")
+    #expect(mcpCheck(home: home).detail == "Cursor needs update")
 }

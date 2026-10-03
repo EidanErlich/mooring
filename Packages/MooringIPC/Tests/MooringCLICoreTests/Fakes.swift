@@ -77,6 +77,8 @@ struct Harness {
     let parentPID: Int32
     let ownBinaryPath: String
     let pathEnv: String?
+    /// The home folder doctor looks in for MCP client configs; nothing lives at the default.
+    let home: URL
     /// What stdin holds for `mooring hook`.
     let input: Data
     /// What `claude` reported to doctor; nil when it wasn't found.
@@ -86,8 +88,8 @@ struct Harness {
         client: RecordingClient = RecordingClient(), hookClient: RecordingClient = RecordingClient(),
         lidClient: RecordingClient = RecordingClient(),
         table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100,
-        ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil, input: Data = Data(),
-        claude: ClaudeSnapshot? = nil
+        ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil, home: URL = URL(fileURLWithPath: "/nowhere/home"),
+        input: Data = Data(), claude: ClaudeSnapshot? = nil
     ) {
         self.client = client
         self.hookClient = hookClient
@@ -98,16 +100,18 @@ struct Harness {
         self.parentPID = parentPID
         self.ownBinaryPath = ownBinaryPath
         self.pathEnv = pathEnv
+        self.home = home
     }
 
     func run(_ arguments: [String]) async -> Int32 {
         let capture = capture
         let input = input
         let claude = claude
+        let home = home
         let environment = CLIEnvironment(
             client: client, processes: table, ownPID: 500, parentPID: parentPID,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
-            newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv,
+            newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv, home: home,
             readInput: { Data(input.prefix($0)) }, hookClient: hookClient, lidClient: lidClient, claude: { claude },
             readLine: { nil }, appVersion: "9.9.9-test"
         )

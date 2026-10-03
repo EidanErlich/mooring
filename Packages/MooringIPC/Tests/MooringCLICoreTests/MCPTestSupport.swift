@@ -79,6 +79,7 @@ struct MCPHarness {
             client: client, processes: FakeProcessTable([proc(ownPID, 90, "mooring")]), ownPID: ownPID, parentPID: 90,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
+            home: URL(fileURLWithPath: "/nowhere/home"),
             readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, claude: { nil },
             readLine: { feed.next() }, appVersion: Self.appVersion
         )
