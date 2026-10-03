@@ -32,3 +32,18 @@ import Testing
     let request = Request(v: 1, id: "b", op: .acquire, args: .acquire(withClient))
     #expect(try WireCoding.decodeRequest(WireCoding.encodeLine(request)).get() == request)
 }
+
+@Test func acquireUntilOffIsOptional() throws {
+    let line = Data(#"{"v":1,"id":"a","op":"acquire","args":{"kind":"on"}}"#.utf8)
+    guard case .acquire(let old) = try WireCoding.decodeRequest(line).get().args else {
+        Issue.record("expected acquire args")
+        return
+    }
+    #expect(old.untilOff == nil)
+
+    let open = AcquireArgs(kind: .on, id: nil, level: "system", ttl: nil, watchPid: nil, reason: nil, agent: nil, untilOff: true)
+    let request = Request(v: 1, id: "b", op: .acquire, args: .acquire(open))
+    #expect(try WireCoding.decodeRequest(WireCoding.encodeLine(request)).get() == request)
+    let object = try #require(try JSONSerialization.jsonObject(with: WireCoding.encodeLine(request)) as? [String: Any])
+    #expect((object["args"] as? [String: Any])?["untilOff"] as? Bool == true)
+}

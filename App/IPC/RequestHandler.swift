@@ -224,7 +224,7 @@ final class RequestHandler {
         let level = try args.level.map(parseLevel)
         let session = engine.menuLease ?? engine.sessionApps.first
         let lease: Lease
-        if ttl == nil && level == nil, let session {
+        if ttl == nil && level == nil && args.untilOff != true, let session {
             lease = session
         } else {
             let current = now()
@@ -237,7 +237,8 @@ final class RequestHandler {
             )
             let defaults = settings()
             let requested = level ?? engine.sessionLevel ?? defaults.clickLevel
-            let duration = ttl ?? defaults.clickDuration
+            // `untilOff` asks for no end, which the click duration would otherwise fill in.
+            let duration = ttl ?? (args.untilOff == true ? nil : defaults.clickDuration)
             let existing = session.flatMap { liveLease($0.id) }
             // `on` replaces the session, and may drop its end, so only an open-ended lid session already covers it.
             let covers = existing.map { $0.level.lid && $0.expiresAt == nil && $0.watch == nil } ?? false
@@ -252,8 +253,11 @@ final class RequestHandler {
                 return lease
             }
         }
-        if let message = guardrailMessage(holdingBack: lease.level) {
-            throw WireError(code: .guardrail, message: Self.holdNotice(message, kind: .on, id: lease.id, mcp: false))
+        if let held = heldSuspension(holdingBack: lease.level) {
+            let notice = caller.identity == .person
+                ? personHoldNotice(held)
+                : Self.holdNotice(Self.guardrailMessage(held), kind: .on, id: lease.id, mcp: false)
+            throw WireError(code: .guardrail, message: notice)
         }
         return MooringIPC.AcquireResult(lease: LeaseInfo(lease), clamped: (ttl ?? 0) > AwakeEngine.maxLeaseLength)
     }
@@ -308,15 +312,32 @@ final class RequestHandler {
         }
     }
 
-    /// Why a guardrail holds back a lease at `level`, if one does. Low battery pauses everything;
-    /// the others pause only lid mode.
-    private func guardrailMessage(holdingBack level: AwakeLevel) -> String? {
+    /// The guardrail that holds back a lease at `level`, if one does. Low battery pauses everything; the others
+    /// pause only lid mode.
+    private func heldSuspension(holdingBack level: AwakeLevel) -> Suspension? {
         let active = engine.state.suspensions
-        if active.contains(.lowBatteryAll) { return "Paused: battery low" }
+        if active.contains(.lowBatteryAll) { return .lowBatteryAll }
         guard level.lid else { return nil }
-        if active.contains(.lowBatteryLid) { return "Lid mode paused: battery low" }
-        if active.contains(.thermal) { return "Lid mode paused: Mac too warm" }
-        if active.contains(.lidNeedsAC) { return "Lid mode paused: needs power" }
-        return nil
+        return [Suspension.lowBatteryLid, .thermal, .lidNeedsAC].first { active.contains($0) }
+    }
+
+    private func guardrailMessage(holdingBack level: AwakeLevel) -> String? {
+        heldSuspension(holdingBack: level).map(Self.guardrailMessage)
+    }
+
+    private static func guardrailMessage(_ suspension: Suspension) -> String {
+        switch suspension {
+        case .lowBatteryAll: "Paused: battery low"
+        case .lowBatteryLid: "Lid mode paused: battery low"
+        case .thermal: "Lid mode paused: Mac too warm"
+        case .lidNeedsAC: "Lid mode paused: needs power"
+        }
+    }
+
+    /// What a person (the Shortcuts actions) is told when `suspension` holds their session back: the title of the
+    /// notification that guardrail posts, without the CLI advice to end it.
+    private func personHoldNotice(_ suspension: Suspension) -> String {
+        let title = GuardrailNotifier.message(for: suspension, settings: settings()).title
+        return "\(title). Mooring is on and starts when that clears."
     }
 }

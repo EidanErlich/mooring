@@ -54,7 +54,11 @@ final class IntentActions {
     /// status summary, or the guardrail that holds the session back (it is on, but paused).
     func keepAwake(duration: TimeInterval?, level: IntentLevel) async throws -> String {
         let handler = try await readyHandler()
-        let args = AcquireArgs(kind: .on, id: nil, level: level.wire, ttl: duration, watchPid: nil, reason: nil, agent: nil)
+        // An empty Duration is "until turned off", not the menu click's duration.
+        let args = AcquireArgs(
+            kind: .on, id: nil, level: level.wire, ttl: duration, watchPid: nil, reason: nil, agent: nil,
+            untilOff: duration == nil ? true : nil
+        )
         let response = await send(.acquire, .acquire(args), to: handler)
         if let error = response.error {
             if error.code == .guardrail { return error.message }

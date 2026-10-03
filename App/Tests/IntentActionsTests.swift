@@ -38,6 +38,30 @@ struct IntentActionsTests {
         #expect(lease.level == .system)
     }
 
+    @Test func emptyDurationIgnoresClickDuration() async throws {
+        fixture.knobs.settings.clickDuration = 3600
+
+        _ = try await actions().keepAwake(duration: nil, level: .normal)
+
+        #expect(try #require(fixture.lease(AwakeEngine.menuLeaseID)).expiresAt == nil)
+    }
+
+    /// A Shortcut that launches Mooring runs before the handler exists, and waits for it.
+    @Test func requestBeforeHandlerReadyIsServed() async throws {
+        let gate = HandlerGate()
+        let actions = IntentActions()
+        actions.gate = gate
+        let running = Task { try await actions.keepAwake(duration: 600, level: .normal) }
+        for _ in 0..<10 { await Task.yield() }
+        #expect(fixture.lease(AwakeEngine.menuLeaseID) == nil)
+
+        gate.set(fixture.handler)
+        let text = try await running.value
+
+        #expect(try #require(fixture.lease(AwakeEngine.menuLeaseID)).expiresAt == fixture.clock.addingTimeInterval(600))
+        #expect(!text.isEmpty)
+    }
+
     @Test func keepAwakeReturnsTheStatusSummary() async throws {
         let text = try await actions().keepAwake(duration: 600, level: .display)
 
@@ -50,7 +74,8 @@ struct IntentActionsTests {
 
         let text = try await actions().keepAwake(duration: nil, level: .lid)
 
-        #expect(text.contains("needs power"))
+        #expect(text.contains("waits for power"))
+        #expect(!text.contains("mooring off"))
         #expect(fixture.lease(AwakeEngine.menuLeaseID) != nil)
     }
 

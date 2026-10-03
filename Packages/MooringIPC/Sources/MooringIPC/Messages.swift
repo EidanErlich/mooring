@@ -25,9 +25,12 @@ public struct AcquireArgs: Codable, Sendable, Equatable {
     public var agent: String?
     /// The MCP client's self-reported name. Only the MCP server sets it.
     public var client: String?
+    /// For `on` with no `ttl`: true asks for a session with no end, instead of the menu click's duration. Absent from
+    /// older clients, which keep the click duration.
+    public var untilOff: Bool?
 
     public init(kind: AcquireKind, id: String?, level: String?, ttl: Double?, watchPid: Int32?, reason: String?, agent: String?,
-                client: String? = nil) {
+                client: String? = nil, untilOff: Bool? = nil) {
         self.kind = kind
         self.id = id
         self.level = level
@@ -36,6 +39,7 @@ public struct AcquireArgs: Codable, Sendable, Equatable {
         self.reason = reason
         self.agent = agent
         self.client = client
+        self.untilOff = untilOff
     }
 }
 

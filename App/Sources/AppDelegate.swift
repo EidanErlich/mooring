@@ -36,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Links are taken from here on, so one that launches the app isn't lost; it waits for the handler.
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // A Shortcut that launches the app waits at the gate for the handler.
+        IntentActions.shared.gate = gate
         NSAppleEventManager.shared().setEventHandler(
             self, andSelector: #selector(handleGetURL(_:withReplyEvent:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL)
@@ -152,7 +154,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             poster: poster
         )
         gate.set(handler)
-        IntentActions.shared.gate = gate
         // Never, or session lid switched off, takes lid mode back from live agent leases right away.
         lidSettingUpdates = Task {
             for await _ in Defaults.updates(.awake, initial: false) { handler.applyLidSettings() }
