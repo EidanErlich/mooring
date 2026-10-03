@@ -466,12 +466,12 @@ A hook can't wait (Claude gives it 2 s), so under "Always ask" the session start
 
 | Tool | Arguments | Notes |
 | --- | --- | --- |
-| `keep_awake` | `minutes` (integer 1–240, required), `reason`, `level` (`system`, `display` or `lid`, default `system`), `lease_id` (optional, to extend one of this client's leases) | Creates `mcp-<slug>-<pid>-<n>`, or renews the named lease, with expiry = now + minutes and a watch on the `mooring mcp` process. It always has an end, so lid needs no prompt under the default setting; under "Always ask" the call waits for the answer (up to 60 s). A `lease_id` never shortens a lease. Returns `lease_id`, `level` and `ends_at` |
+| `keep_awake` | `minutes` (integer 1–240, required), `reason`, `level` (`system`, `display` or `lid`, default `system`), `lease_id` (optional, to extend one of this client's leases) | Creates `mcp-<slug>-<pid>-<n>`, or renews the named lease, with expiry = now + minutes and a watch on the `mooring mcp` process. It always has an end, so lid needs no prompt under the default setting; under "Always ask" the call waits for the answer (up to 60 s). A `lease_id` never shortens a lease. Every success has the same `structuredContent`: `{lease_id, level, ends_at, guardrail?}`, with `guardrail` only when the lease is held |
 | `release_awake` | `lease_id` (optional) | Releases that lease, or every lease this server created when none is given. Another owner's lease gets "not one of this client's leases" |
 | `awake_status` | none | Summary line, effective level, this client's leases, battery %, on AC, thermal state |
 | `notify` | `title` (required, ≤ 80 characters), `body` (optional, ≤ 300) | Posts a macOS notification (see Notify, below) |
 
-- **Under a guardrail,** `keep_awake` is still a success: the result carries `lease_id`, `level`, `ends_at` and `guardrail` (for example "Lid mode waits for power"), because the app keeps the lease and applies it when the guardrail clears. The notice names `release_awake` as the way to end it.
+- **Under a guardrail,** `keep_awake` is still a success: the result carries `lease_id`, `level` and `ends_at` as usual, plus `guardrail` (for example "Lid mode waits for power"), because the app keeps the lease and applies it when the guardrail clears. The notice names `release_awake` as the way to end it.
 - **"This client's leases"** means `owner == .mcp(client:)` with this client's display name **and** a watch on this server's pid. The server filters `status` itself and releases only the ids it created; the wire has no MCP-specific acquire or release kind. So two windows of one client can't release each other's leases.
 - The MCP server never has clipboard tools; its window tools arrive with level 3 (3.4). It exposes no way to end leases owned by the menu or by other agents.
 

@@ -32,3 +32,8 @@ import Testing
     #expect(MCPClientName.display(" TERMINAL\n") == "MCP client")
     #expect(MCPClientName.display("Terminal app") == "Terminal app")
 }
+
+@Test func displayTrimsAfterTheCut() {
+    #expect(MCPClientName.display("Terminal" + String(repeating: " ", count: 32) + "x") == "MCP client")
+    #expect(MCPClientName.display("Zed" + String(repeating: " ", count: 37) + "x") == "Zed")
+}

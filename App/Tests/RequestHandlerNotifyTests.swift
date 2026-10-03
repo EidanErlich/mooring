@@ -76,6 +76,17 @@ struct RequestHandlerNotifyTests {
         #expect(fixture.poster.posts.map(\.title) == ["Claude Code: One", "Claude Code: Three"])
     }
 
+    @Test func clockMovedBackDoesNotBlockNotify() async {
+        let fixture = RequestFixture.agent()
+        #expect(posted(await fixture.notify("One")) == true)
+
+        fixture.knobs.clock -= 3600
+        #expect(posted(await fixture.notify("Two")) == true)
+
+        fixture.knobs.clock += 5
+        #expect(wireFailure(await fixture.notify("Three")) == denied("Rate-limited: try again in 25 s"))
+    }
+
     @Test func personNotifyIsNotRateLimited() async {
         let fixture = RequestFixture()
 
@@ -101,7 +112,7 @@ struct RequestHandlerNotifyTests {
 
         let response = await fixture.notify("Done")
 
-        #expect(wireFailure(response) == denied(LidMessage.unavailable))
+        #expect(wireFailure(response) == denied("Turn on notifications for Mooring in System Settings"))
         #expect(fixture.poster.posts.isEmpty)
     }
 

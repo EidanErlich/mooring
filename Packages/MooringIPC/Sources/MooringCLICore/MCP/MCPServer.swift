@@ -135,14 +135,18 @@ extension MCPSession {
         switch await send(args, through: environment.acquireClient(kind: .lease, level: level)) {
         case .done(let result, let request):
             remember(id)
-            return MCPTools.result(humanText(result, for: request), structured: JSONValue(encoding: result))
+            var lease: LeaseInfo?
+            if case .acquire(let acquired) = result { lease = acquired.lease }
+            let endsAt = lease?.expiresAt ?? environment.now().addingTimeInterval(ttl)
+            return MCPTools.result(humanText(result, for: request), structured: Self.leaseResult(
+                id: id, level: lease?.level ?? level, endsAt: endsAt, guardrail: nil
+            ))
         case .held(let guardrail):
             // The app keeps the lease and applies it when the guardrail clears, so this is a success the client must know about.
             remember(id)
-            let endsAt = ISO8601DateFormatter().string(from: environment.now().addingTimeInterval(ttl))
-            return MCPTools.result("Lease \(id) (\(level), \(CLIText.remaining(ttl))): \(guardrail)", structured: .object([
-                "lease_id": .string(id), "level": .string(level), "ends_at": .string(endsAt), "guardrail": .string(guardrail)
-            ]))
+            return MCPTools.result("Lease \(id) (\(level), \(CLIText.remaining(ttl))): \(guardrail)", structured: Self.leaseResult(
+                id: id, level: level, endsAt: environment.now().addingTimeInterval(ttl), guardrail: guardrail
+            ))
         case .failed(let message, let lost):
             // A lost reply may have created the lease, so it may be ours to release.
             if lost { remember(id) }
@@ -203,6 +207,15 @@ extension MCPSession {
         case .held(let message), .failed(let message, _):
             return MCPTools.failure(message)
         }
+    }
+
+    /// `keep_awake`'s `structuredContent`, one shape for every success; `guardrail` only when the lease is held.
+    private static func leaseResult(id: String, level: String, endsAt: Date, guardrail: String?) -> JSONValue {
+        var fields: [String: JSONValue] = [
+            "lease_id": .string(id), "level": .string(level), "ends_at": .string(ISO8601DateFormatter().string(from: endsAt))
+        ]
+        if let guardrail { fields["guardrail"] = .string(guardrail) }
+        return .object(fields)
     }
 
     private static func leaseSummary(_ lease: LeaseInfo) -> JSONValue {

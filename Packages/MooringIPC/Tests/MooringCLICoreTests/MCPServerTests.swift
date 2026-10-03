@@ -131,8 +131,12 @@ import Testing
     #expect(harness.isError(2) == false)
     #expect(harness.text(2)?.contains("mcp-claude-desktop-500-1") == true)
     #expect(harness.text(2)?.contains("lid mode") == true)
-    let structured = harness.toolResult(2)?["structuredContent"] as? [String: Any]
-    #expect((structured?["lease"] as? [String: Any])?["id"] as? String == "mcp-claude-desktop-500-1")
+    // One shape for every success; `guardrail` only when the lease is held.
+    let structured = try #require(harness.structured(2))
+    #expect(structured.keys.sorted() == ["ends_at", "lease_id", "level"])
+    #expect(structured["lease_id"] as? String == "mcp-claude-desktop-500-1")
+    #expect(structured["level"] as? String == "lid")
+    #expect(structured["ends_at"] as? String == ISO8601DateFormatter().string(from: fixedNow.addingTimeInterval(1200)))
 }
 
 @Test func keepAwakeNumbersLeasesAndDefaultsToSystem() async {
@@ -186,6 +190,7 @@ import Testing
     #expect(structured["level"] as? String == "lid")
     #expect(structured["ends_at"] as? String == ISO8601DateFormatter().string(from: fixedNow.addingTimeInterval(1200)))
     #expect(structured["guardrail"] as? String == message)
+    #expect(structured.keys.sorted() == ["ends_at", "guardrail", "lease_id", "level"])
     // The app holds the lease, so it is this client's to release.
     #expect(harness.text(3) == "Released mcp-claude-desktop-500-1")
 }

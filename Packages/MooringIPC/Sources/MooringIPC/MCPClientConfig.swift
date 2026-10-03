@@ -106,7 +106,7 @@ public struct MCPClientConfig {
     /// Writes through a symlink to its target, copies the current contents to a backup (replacing any earlier one,
     /// with the original's permissions) and replaces the file atomically.
     private func write(_ root: [String: Any]) throws {
-        let target = fileURL.resolvingSymlinksInPath()
+        let target = try writeTarget()
         if let original = fileManager.contents(atPath: target.path) {
             let backup = target.path + ".mooring-backup"
             let permissions = (try? fileManager.attributesOfItem(atPath: target.path))?[.posixPermissions]
@@ -117,5 +117,19 @@ public struct MCPClientConfig {
             }
         }
         try Self.serialize(root).write(to: target, options: .atomic)
+    }
+
+    /// The file to write: the config file, or what a symlink there points to. A dangling link (a dotfiles repo not
+    /// checked out yet, say) is followed to where it points, read relative to its folder, so it stays a link.
+    private func writeTarget() throws -> URL {
+        let resolved = fileURL.resolvingSymlinksInPath()
+        guard !fileManager.fileExists(atPath: resolved.path),
+              let destination = try? fileManager.destinationOfSymbolicLink(atPath: fileURL.path) else { return resolved }
+        let linkFolder = fileURL.deletingLastPathComponent()
+        let target = URL(fileURLWithPath: destination, relativeTo: linkFolder).standardizedFileURL
+        if fileManager.fileExists(atPath: linkFolder.path) {
+            try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
+        return target
     }
 }

@@ -23,8 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lidSettingUpdates: Task<Void, Never>?
     /// Posts `notify`'s notifications and link errors.
     private let poster = SystemNotificationPoster()
-    /// Hands the handler to links, which can arrive before it's built.
-    private let gate = HandlerGate()
+    /// Hands the handler to links and Shortcuts, which can arrive before it's built. It is the Shortcuts actions' own.
+    private var gate: HandlerGate { IntentActions.shared.gate }
     private lazy var links = LinkHandler(
         gate: gate, poster: poster, appName: { NSRunningApplication(processIdentifier: $0)?.localizedName }
     )
@@ -36,8 +36,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Links are taken from here on, so one that launches the app isn't lost; it waits for the handler.
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // A Shortcut that launches the app waits at the gate for the handler.
-        IntentActions.shared.gate = gate
         NSAppleEventManager.shared().setEventHandler(
             self, andSelector: #selector(handleGetURL(_:withReplyEvent:)),
             forEventClass: AEEventClass(kInternetEventClass), andEventID: AEEventID(kAEGetURL)

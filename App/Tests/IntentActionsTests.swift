@@ -13,9 +13,7 @@ struct IntentActionsTests {
     private func actions() -> IntentActions {
         let gate = HandlerGate()
         gate.set(fixture.handler)
-        let actions = IntentActions()
-        actions.gate = gate
-        return actions
+        return IntentActions(gate: gate)
     }
 
     @Test func keepAwakeTurnsOnWithDurationAndLevel() async throws {
@@ -71,8 +69,7 @@ struct IntentActionsTests {
     /// A Shortcut that launches Mooring runs before the handler exists, and waits for it.
     @Test func requestBeforeHandlerReadyIsServed() async throws {
         let gate = HandlerGate()
-        let actions = IntentActions()
-        actions.gate = gate
+        let actions = IntentActions(gate: gate)
         let running = Task { try await actions.keepAwake(duration: 600, level: .normal) }
         for _ in 0..<10 { await Task.yield() }
         #expect(fixture.lease(AwakeEngine.menuLeaseID) == nil)
@@ -146,13 +143,15 @@ struct IntentActionsTests {
         #expect(entity.level == "off")
     }
 
-    @Test func noGateThrowsNotReady() async {
+    /// The shared actions own the gate the app hands its handler to, so an action never finds no gate.
+    @Test func sharedActionsWaitAtTheirOwnGate() async throws {
         let actions = IntentActions()
+        let running = Task { try await actions.letSleep() }
+        for _ in 0..<10 { await Task.yield() }
 
-        await #expect(throws: IntentError.notReady) { try await actions.keepAwake(duration: nil, level: .normal) }
-        await #expect(throws: IntentError.notReady) { try await actions.letSleep() }
-        await #expect(throws: IntentError.notReady) { _ = try await actions.status() }
-        #expect(IntentError.notReady.localizedDescription == "Mooring isn't running yet")
+        actions.gate.set(fixture.handler)
+
+        try await running.value
     }
 
     @Test func levelsMapToWireLevels() {

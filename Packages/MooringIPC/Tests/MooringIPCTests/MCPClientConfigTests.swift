@@ -125,6 +125,21 @@ private func json(_ url: URL) throws -> [String: Any] {
     _ = try FileManager.default.destinationOfSymbolicLink(atPath: value.fileURL.path)
 }
 
+@Test func addWritesThroughDanglingSymlink() throws {
+    // A dotfiles repo that isn't checked out yet: the link points at a file, and a folder, that don't exist.
+    let home = try makeHome()
+    let value = try config(home)
+    try FileManager.default.createSymbolicLink(atPath: value.fileURL.path, withDestinationPath: "../dotfiles/cursor/mcp.json")
+
+    try value.add(helperPath: helper)
+
+    #expect(try FileManager.default.destinationOfSymbolicLink(atPath: value.fileURL.path) == "../dotfiles/cursor/mcp.json")
+    let target = home.appendingPathComponent("dotfiles/cursor/mcp.json")
+    let servers = try #require(try json(target)["mcpServers"] as? [String: Any])
+    #expect(servers["mooring"] != nil)
+    #expect(value.state(helperPath: helper) == .added)
+}
+
 @Test func snippetIsValidJSON() throws {
     let text = MCPClientConfig.snippet(helperPath: helper)
     let root = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])

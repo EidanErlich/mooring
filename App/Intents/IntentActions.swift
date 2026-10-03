@@ -26,14 +26,11 @@ enum IntentLevel: String, AppEnum {
 
 /// What a Shortcuts action can't do. `LocalizedError` is what Shortcuts shows.
 enum IntentError: Error, Equatable, LocalizedError {
-    /// No handler exists yet, which happens only before the app has set itself up.
-    case notReady
     /// The request was refused; `message` is the app's reason.
     case failed(String)
 
     var errorDescription: String? {
         switch self {
-        case .notReady: "Mooring isn't running yet"
         case .failed(let message): message
         }
     }
@@ -45,8 +42,13 @@ enum IntentError: Error, Equatable, LocalizedError {
 final class IntentActions {
     static let shared = IntentActions()
 
-    /// Set by the app once the handler exists.
-    var gate: HandlerGate?
+    /// Where an action waits for the handler. The app hands its handler to the shared actions' gate, so an action that
+    /// runs before the app has set itself up (a Shortcut that launches it) waits rather than fails.
+    let gate: HandlerGate
+
+    init(gate: HandlerGate = HandlerGate()) {
+        self.gate = gate
+    }
 
     private let caller = Caller(uid: getuid(), pid: getpid(), identity: .person)
 
@@ -54,7 +56,7 @@ final class IntentActions {
     /// session's level, else the click level, as `mooring on` does without `--level`. Returns the text for the dialog:
     /// the status summary, or the guardrail that holds the session back (it is on, but paused).
     func keepAwake(duration: TimeInterval?, level: IntentLevel?) async throws -> String {
-        let handler = try await readyHandler()
+        let handler = await gate.handler()
         // An empty Duration is "until turned off", not the menu click's duration.
         let args = AcquireArgs(
             kind: .on, id: nil, level: level?.wire, ttl: duration, watchPid: nil, reason: nil, agent: nil,
@@ -70,18 +72,13 @@ final class IntentActions {
 
     /// Ends the menu session.
     func letSleep() async throws {
-        let handler = try await readyHandler()
+        let handler = await gate.handler()
         let response = await send(.release, .release(ReleaseArgs(kind: .off, id: nil, after: nil)), to: handler)
         if let error = response.error { throw IntentError.failed(error.message) }
     }
 
     func status() async throws -> AwakeStatusEntity {
-        AwakeStatusEntity(try await statusResult(try await readyHandler()))
-    }
-
-    private func readyHandler() async throws -> RequestHandler {
-        guard let gate else { throw IntentError.notReady }
-        return await gate.handler()
+        AwakeStatusEntity(try await statusResult(await gate.handler()))
     }
 
     private func statusResult(_ handler: RequestHandler) async throws -> StatusResult {
