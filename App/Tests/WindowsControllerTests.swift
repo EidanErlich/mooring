@@ -10,6 +10,7 @@ final class FakeTrust: AccessibilityTrust {
     var trusted: Bool
     var calls = 0
     var panesOpened = 0
+    var listingRequests = 0
 
     init(trusted: Bool) {
         self.trusted = trusted
@@ -22,6 +23,10 @@ final class FakeTrust: AccessibilityTrust {
 
     func openSettingsPane() {
         panesOpened += 1
+    }
+
+    func requestListing() {
+        listingRequests += 1
     }
 }
 
@@ -86,8 +91,13 @@ final class FakeClock: WindowsClock {
 private final class FakeSheet: AccessibilitySheetPresenting {
     var shown = 0
     var closed = 0
+    var onShow: () -> Void = {}
 
-    func show() { shown += 1 }
+    func show() {
+        shown += 1
+        onShow()
+    }
+
     func close() { closed += 1 }
 }
 
@@ -298,6 +308,43 @@ struct WindowsControllerTests {
         harness.controller.launch()
         #expect(harness.controller.state == .off)
         #expect(pill() == .off)
+    }
+
+    /// Turn On without trust asks macOS once to list Mooring under Accessibility, before the sheet shows.
+    @Test func turnOnUntrustedRequestsListingOnce() {
+        let harness = Harness(enabled: false, trusted: false)
+        var requestsWhenShown: Int?
+        harness.sheet.onShow = { requestsWhenShown = harness.trust.listingRequests }
+        harness.controller.turnOn()
+        #expect(harness.trust.listingRequests == 1)
+        #expect(requestsWhenShown == 1)
+        harness.clock.advance(60)
+        harness.controller.turnOn()
+        #expect(harness.trust.listingRequests == 1)
+    }
+
+    /// Launch and polling (waiting, on, needing Accessibility) never ask for the listing.
+    @Test func launchNeverRequestsListing() {
+        for (enabled, trusted) in [(false, false), (true, false), (true, true)] {
+            let harness = Harness(enabled: enabled, trusted: trusted)
+            harness.controller.launch()
+            harness.clock.advance(60)
+            harness.trust.trusted.toggle()
+            harness.clock.advance(60)
+            #expect(harness.trust.listingRequests == 0, "enabled \(enabled), trusted \(trusted)")
+        }
+        let trusted = Harness(enabled: false, trusted: true)
+        trusted.controller.turnOn()
+        #expect(trusted.trust.listingRequests == 0)
+    }
+
+    @Test func pollingNeverRequestsListing() {
+        let harness = Harness(enabled: false, trusted: false)
+        harness.controller.turnOn()
+        let afterTurnOn = harness.trust.listingRequests
+        harness.clock.advance(WindowsController.trustPollLimit + 10)
+        #expect(harness.controller.state == .off)
+        #expect(harness.trust.listingRequests == afterTurnOn)
     }
 
     @Test func windowsAreOffByDefault() {

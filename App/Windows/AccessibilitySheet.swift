@@ -3,12 +3,18 @@ import SwiftUI
 
 /// Explains why Windows needs Accessibility, while the controller polls for it.
 struct AccessibilitySheet: View {
+    static let explanation = "Mooring moves and resizes other apps' windows. macOS calls this Accessibility."
+    static let listHint = "If Mooring isn't in the list, click + and choose Mooring in Applications."
+
     let openSettingsPane: () -> Void
     let cancel: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Mooring moves and resizes other apps' windows. macOS calls this Accessibility.")
+            Text(Self.explanation)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Self.listHint)
+                .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()

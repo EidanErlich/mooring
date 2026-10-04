@@ -84,7 +84,8 @@ final class WindowsController {
         }
     }
 
-    /// Turn On…: starts now if trusted, otherwise shows the sheet and waits up to 5 minutes for trust.
+    /// Turn On…: starts now if trusted, otherwise asks macOS to list Mooring under Accessibility, shows
+    /// the sheet and waits up to 5 minutes for trust.
     func turnOn() {
         switch state {
         case .on:
@@ -99,6 +100,7 @@ final class WindowsController {
             settings.windowsEnabled = true
             start()
         } else {
+            trust.requestListing()
             trustDeadline = clock.now.addingTimeInterval(Self.trustPollLimit)
             enter(.waitingForTrust)
             sheet?.show()

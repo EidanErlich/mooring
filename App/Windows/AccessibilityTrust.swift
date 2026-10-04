@@ -7,6 +7,8 @@ import ApplicationServices
 protocol AccessibilityTrust {
     func isTrusted() -> Bool
     func openSettingsPane()
+    /// Asks macOS to add Mooring to the Accessibility list. Only on Turn On, never at launch or while polling.
+    func requestListing()
 }
 
 struct LiveAccessibilityTrust: AccessibilityTrust {
@@ -19,5 +21,11 @@ struct LiveAccessibilityTrust: AccessibilityTrust {
 
     func openSettingsPane() {
         NSWorkspace.shared.open(Self.paneURL)
+    }
+
+    /// macOS lists an app under Accessibility only once it has asked; the prompt option is that ask.
+    /// The key is `kAXTrustedCheckOptionPrompt`'s value: Swift 6 rejects reading that C global.
+    func requestListing() {
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
     }
 }
