@@ -230,6 +230,15 @@ public struct WinLayoutArgs: Codable, Sendable, Equatable {
     }
 }
 
+/// `win.undo`: no args from the CLI; `client` is set only by the MCP server.
+public struct WinUndoArgs: Codable, Sendable, Equatable {
+    public var client: String?
+
+    public init(client: String? = nil) {
+        self.client = client
+    }
+}
+
 /// The result of `win.layout`: the saved layout names, and for `apply`, how the arrangement went.
 public struct WinLayoutResult: Codable, Sendable, Equatable {
     public var names: [String]

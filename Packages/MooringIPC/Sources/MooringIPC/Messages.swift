@@ -119,7 +119,7 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
     case notify(NotifyArgs)
     case winList
     case winArrange(WinPlan)
-    case winUndo
+    case winUndo(WinUndoArgs)
     case winLayout(WinLayoutArgs)
 
     public func encode(to encoder: any Encoder) throws {
@@ -131,7 +131,8 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
         case .notify(let args): try args.encode(to: encoder)
         case .winArrange(let args): try args.encode(to: encoder)
         case .winLayout(let args): try args.encode(to: encoder)
-        case .status, .winList, .winUndo:
+        case .winUndo(let args): try args.encode(to: encoder)
+        case .status, .winList:
             _ = encoder.container(keyedBy: EmptyKeys.self)
         }
     }
@@ -170,7 +171,8 @@ public struct Request: Codable, Sendable, Equatable {
         case .notify: args = .notify(try container.decode(NotifyArgs.self, forKey: .args))
         case .winList: args = .winList
         case .winArrange: args = .winArrange(try container.decode(WinPlan.self, forKey: .args))
-        case .winUndo: args = .winUndo
+        // The CLI sends no args; the MCP server sends its client.
+        case .winUndo: args = .winUndo(try container.decodeIfPresent(WinUndoArgs.self, forKey: .args) ?? WinUndoArgs())
         case .winLayout: args = .winLayout(try container.decode(WinLayoutArgs.self, forKey: .args))
         }
     }

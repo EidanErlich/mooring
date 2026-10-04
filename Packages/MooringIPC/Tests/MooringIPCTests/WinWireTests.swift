@@ -30,7 +30,8 @@ import Testing
         let requests: [(Request, String)] = [
             (Request(v: 1, id: "a", op: .winList, args: .winList), "win.list"),
             (Request(v: 1, id: "b", op: .winArrange, args: .winArrange(plan)), "win.arrange"),
-            (Request(v: 1, id: "c", op: .winUndo, args: .winUndo), "win.undo"),
+            (Request(v: 1, id: "c", op: .winUndo, args: .winUndo(WinUndoArgs())), "win.undo"),
+            (Request(v: 1, id: "e", op: .winUndo, args: .winUndo(WinUndoArgs(client: "Zed"))), "win.undo"),
             (Request(v: 1, id: "d", op: .winLayout, args: .winLayout(WinLayoutArgs(action: "save", name: "coding", client: "Zed"))),
              "win.layout")
         ]
@@ -67,14 +68,21 @@ import Testing
         #expect(WinStatus.notFound.rawValue == "not_found")
     }
 
-    @Test func winUndoHasNoArgs() throws {
-        let line = try WireCoding.encodeLine(Request(v: 1, id: "u", op: .winUndo, args: .winUndo))
-        #expect((try object(line)["args"] as? [String: Any])?.isEmpty == true)
+    /// `win.undo`'s args are optional: none from the CLI, just `client` from the MCP server.
+    @Test func winUndoArgsAreOptional() throws {
+        let bare = try WireCoding.encodeLine(Request(v: 1, id: "u", op: .winUndo, args: .winUndo(WinUndoArgs())))
+        #expect((try object(bare)["args"] as? [String: Any])?.isEmpty == true)
+        let mcp = try WireCoding.encodeLine(Request(v: 1, id: "u", op: .winUndo, args: .winUndo(WinUndoArgs(client: "Zed"))))
+        #expect((try object(mcp)["args"] as? [String: Any])?["client"] as? String == "Zed")
 
+        let none = Request(v: 1, id: "u", op: .winUndo, args: .winUndo(WinUndoArgs()))
         for json in [#"{"v":1,"id":"u","op":"win.undo","args":{}}"#, #"{"v":1,"id":"u","op":"win.undo"}"#,
                      #"{"v":1,"id":"u","op":"win.undo","args":{"stray":1}}"#] {
-            #expect(try WireCoding.decodeRequest(Data(json.utf8)).get() == Request(v: 1, id: "u", op: .winUndo, args: .winUndo))
+            #expect(try WireCoding.decodeRequest(Data(json.utf8)).get() == none)
         }
+        let named = #"{"v":1,"id":"u","op":"win.undo","args":{"client":"Zed","stray":1}}"#
+        #expect(try WireCoding.decodeRequest(Data(named.utf8)).get()
+            == Request(v: 1, id: "u", op: .winUndo, args: .winUndo(WinUndoArgs(client: "Zed"))))
     }
 
     @Test func nilPlacementFieldsAreOmitted() throws {

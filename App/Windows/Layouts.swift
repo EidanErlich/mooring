@@ -54,8 +54,7 @@ extension Arranger {
         case "apply":
             let name = try Self.layoutName(args)
             guard let placements = saved[name] else { throw Self.noLayout(name) }
-            let result = await arrange(WinPlan(placements: placements, launch: true))
-            return WinLayoutResult(names: saved.keys.sorted(), arrange: result)
+            return WinLayoutResult(names: saved.keys.sorted(), arrange: await apply(layout: placements))
         case "delete":
             let name = try Self.layoutName(args)
             guard saved.removeValue(forKey: name) != nil else { throw Self.noLayout(name) }
@@ -65,6 +64,11 @@ extension Arranger {
             throw WireError(code: .badRequest,
                             message: "Unknown layout action “\(args.action)” (use save, apply, list or delete)")
         }
+    }
+
+    /// Arranges a saved layout's placements, opening apps that aren't running.
+    func apply(layout placements: [WinPlacement]) async -> WinArrangeResult {
+        await arrange(WinPlan(placements: placements, launch: true))
     }
 
     private static func layoutName(_ args: WinLayoutArgs) throws -> String {
