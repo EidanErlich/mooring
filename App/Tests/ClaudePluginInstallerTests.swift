@@ -154,8 +154,20 @@ struct ClaudePluginInstallerTests {
         status: 0, stdout: listJSON([Entry(id: "mooring@mooring-app", version: "0.9", enabled: true)]))
     private static let pluginListWithout = ToolResult(status: 0, stdout: listJSON([]))
 
-    private func install(_ runner: FakeRunner, ensureCLI: () throws -> Void = {}) -> Result<Void, ClaudePluginInstaller.InstallError> {
-        ClaudePluginInstaller.install(claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", runner: runner, ensureCLI: ensureCLI)
+    private func install(_ runner: FakeRunner, transient: Bool = false, ensureCLI: () throws -> Void = {})
+        -> Result<Void, ClaudePluginInstaller.InstallError> {
+        ClaudePluginInstaller.install(
+            claude: "/x/claude", bundlePlugin: "/App/ClaudePlugin", runner: runner, isTransient: transient, ensureCLI: ensureCLI
+        )
+    }
+
+    @Test func installRefusesWhileTheAppIsInATransientLocation() {
+        let runner = FakeRunner([])
+        var linked = false
+        let result = install(runner, transient: true, ensureCLI: { linked = true })
+        #expect(failure(result) == .command("Move Mooring to Applications first"))
+        #expect(!linked)
+        #expect(runner.calls.isEmpty)
     }
 
     @Test func firstInstallListsThenAddsAndInstalls() {

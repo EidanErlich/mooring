@@ -361,6 +361,7 @@ struct RequestHandlerLidTests {
         #expect(status.leases.first { $0.id == "menu" }?.pendingApproval == true)
         #expect(status.notifications == "notDetermined")
         #expect(status.agentLidApproval == "askWhenOpenEnded")
+        #expect(status.agentSessionLid == true)
         fixture.approver.resolve("menu", with: .deny)
         _ = await ask.value
     }

@@ -34,7 +34,7 @@ public enum Doctor {
         [
             appCheck(status, unavailable: unavailable, appError: appError),
             pathCheck(pathEnv: pathEnv, ownBinary: ownBinary, resolve: resolve),
-            helperCheck(status),
+            helperCheck(status, claude: claude),
             lidCheck(status),
             pluginCheck(claude),
             claudeVersionCheck(claude),
@@ -91,16 +91,24 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: found, fix: nil)
     }
 
-    /// The helper only matters for lid mode, so a helper that isn't approved passes when nothing wants the lid held.
-    private static func helperCheck(_ status: StatusResult?) -> Check {
+    /// The helper only matters for lid mode. A helper that was never registered passes as "not needed" when nothing wants
+    /// the lid held: no lid is wanted now, and the Claude hooks (which ask for lid when a session starts) can't, because
+    /// the plugin isn't installed or session lid is off. A helper that is missing or awaiting approval always fails.
+    private static func helperCheck(_ status: StatusResult?, claude: ClaudeSnapshot?) -> Check {
         guard let status else { return Check(name: "Helper", state: "skip", detail: "needs the app", fix: nil) }
         guard status.helper == "enabled" else {
-            guard status.wantsLid || status.leases.contains(where: { $0.level == "lid" }) else {
+            if status.helper == "notRegistered", !status.wantsLid, !hooksWantLid(status, claude: claude) {
                 return Check(name: "Helper", state: "pass", detail: "not needed", fix: nil)
             }
             return Check(name: "Helper", state: "fail", detail: status.helper, fix: "Settings → Lid & Battery → Approve")
         }
         return Check(name: "Helper", state: "pass", detail: status.helper, fix: nil)
+    }
+
+    /// True when a Claude Code session would ask for lid mode: the plugin is installed and session lid is on and not forbidden.
+    private static func hooksWantLid(_ status: StatusResult, claude: ClaudeSnapshot?) -> Bool {
+        guard status.agentSessionLid == true, status.agentLidApproval != "never" else { return false }
+        return (claude?.plugins ?? []).contains { $0.id == ClaudeCode.appPluginID || $0.id == ClaudeCode.repoPluginID }
     }
 
     private static func lidCheck(_ status: StatusResult?) -> Check {

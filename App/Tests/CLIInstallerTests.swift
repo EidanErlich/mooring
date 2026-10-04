@@ -72,6 +72,19 @@ struct CLIInstallerTests {
         #expect(CLIInstaller.state(link: link, target: target) == .notALink)
     }
 
+    @Test func directoryIsNotALinkAndIsNeverReplaced() throws {
+        let folder = try makeFolder()
+        let (root, link, target) = (folder.root, folder.link, folder.target)
+        defer { try? fileManager.removeItem(at: root) }
+        try fileManager.createDirectory(at: link, withIntermediateDirectories: true)
+        #expect(CLIInstaller.state(link: link, target: target) == .notALink)
+        #expect(throws: CLIInstallerError.notALink) { try CLIInstaller.install(link: link, target: target) }
+        var isFolder: ObjCBool = false
+        #expect(fileManager.fileExists(atPath: link.path, isDirectory: &isFolder) && isFolder.boolValue)
+        #expect(CLIInstallerError.notALink.errorDescription
+            == "Something that isn't a link is already at ~/.local/bin/mooring. Move it away first.")
+    }
+
     @Test func regularFileIsNotALink() throws {
         let folder = try makeFolder()
         let (root, link, target) = (folder.root, folder.link, folder.target)

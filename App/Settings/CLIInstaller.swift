@@ -1,14 +1,14 @@
 import Foundation
 
 enum CLIInstallerError: Error, Equatable {
-    /// Something other than a symlink already sits at the link path, and we won't replace it.
+    /// Something other than a symlink (a file or a folder) already sits at the link path, and we won't replace it.
     case notALink
 }
 
 extension CLIInstallerError: LocalizedError {
     var errorDescription: String? {
         switch self {
-        case .notALink: "A file that isn't a link is already at ~/.local/bin/mooring. Move it away first."
+        case .notALink: "Something that isn't a link is already at ~/.local/bin/mooring. Move it away first."
         }
     }
 }

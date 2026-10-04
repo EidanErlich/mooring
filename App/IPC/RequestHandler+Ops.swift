@@ -69,7 +69,8 @@ extension RequestHandler {
             power: PowerInfo(onAC: engine.power.onAC, batteryPercent: engine.power.batteryPercent),
             thermal: Self.thermalName(engine.thermal), lidClosed: engine.lidClosed, helper: helperStatus(),
             suspensions: state.suspensions.map { String(describing: $0) }.sorted(),
-            notifications: notifications, agentLidApproval: settings().agentLidApproval.rawValue
+            notifications: notifications, agentLidApproval: settings().agentLidApproval.rawValue,
+            agentSessionLid: settings().agentSessionLid
         )
     }
 

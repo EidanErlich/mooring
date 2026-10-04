@@ -6,14 +6,14 @@ import Testing
 private func doctorStatus(
     helper: String = "enabled", helperSleepDisabled: Bool? = false, lidSleepDisabled: Bool = false,
     notifications: String? = "allowed", agentLidApproval: String? = "askWhenOpenEnded", wantsLid: Bool? = nil,
-    leases: [LeaseInfo] = []
+    agentSessionLid: Bool? = nil
 ) -> StatusResult {
     StatusResult(
         summary: "On · 1h left", effective: LevelInfo(system: true, display: false, lid: lidSleepDisabled),
         systemAssertion: true, displayAssertion: false, lidSleepDisabled: lidSleepDisabled,
-        helperSleepDisabled: helperSleepDisabled, wantsLid: wantsLid ?? lidSleepDisabled, leases: leases,
+        helperSleepDisabled: helperSleepDisabled, wantsLid: wantsLid ?? lidSleepDisabled, leases: [],
         power: PowerInfo(onAC: true, batteryPercent: 90), thermal: "nominal", lidClosed: false, helper: helper, suspensions: [],
-        notifications: notifications, agentLidApproval: agentLidApproval
+        notifications: notifications, agentLidApproval: agentLidApproval, agentSessionLid: agentSessionLid
     )
 }
 
@@ -117,12 +117,42 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     let fix = "Settings → Lid & Battery → Approve"
     let wanted = runChecks(doctorStatus(helper: "notRegistered", wantsLid: true), pathEnv: bin.path, ownBinary: bin.binary)
     #expect(wanted[2] == Doctor.Check(name: "Helper", state: "fail", detail: "notRegistered", fix: fix))
-    // A live lease at lid level counts even when the app reports no wish for lid.
-    let leased = runChecks(
-        doctorStatus(helper: "notRegistered", wantsLid: false, leases: [leaseInfo(level: "lid")]),
-        pathEnv: bin.path, ownBinary: bin.binary
+    // The Claude hooks ask for lid when a session starts, so an installed plugin with session lid on needs the helper
+    // even though no session is running yet.
+    let hooks = runChecks(
+        doctorStatus(helper: "notRegistered", wantsLid: false, agentSessionLid: true),
+        pathEnv: bin.path, ownBinary: bin.binary, claude: ClaudeSnapshot(
+            version: "2.1.285", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
     )
-    #expect(leased[2] == Doctor.Check(name: "Helper", state: "fail", detail: "notRegistered", fix: fix))
+    #expect(hooks[2] == Doctor.Check(name: "Helper", state: "fail", detail: "notRegistered", fix: fix))
+}
+
+@Test func helperNotRegisteredIsNotNeededWithoutHooksWantingLid() throws {
+    let bin = try BinFolder()
+    let installed = ClaudeSnapshot(version: "2.1.285", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
+    let notNeeded = Doctor.Check(name: "Helper", state: "pass", detail: "not needed", fix: nil)
+    func helperCheck(_ status: StatusResult, claude: ClaudeSnapshot?) -> Doctor.Check {
+        runChecks(status, pathEnv: bin.path, ownBinary: bin.binary, claude: claude)[2]
+    }
+    let sessionLid = doctorStatus(helper: "notRegistered", wantsLid: false, agentSessionLid: true)
+    #expect(helperCheck(sessionLid, claude: nil) == notNeeded)
+    #expect(helperCheck(sessionLid, claude: ClaudeSnapshot(version: "2.1.285", plugins: [], testedWith: nil)) == notNeeded)
+    let off = doctorStatus(helper: "notRegistered", wantsLid: false, agentSessionLid: false)
+    #expect(helperCheck(off, claude: installed) == notNeeded)
+    let never = doctorStatus(helper: "notRegistered", agentLidApproval: "never", wantsLid: false, agentSessionLid: true)
+    #expect(helperCheck(never, claude: installed) == notNeeded)
+    // An older app doesn't report the setting.
+    #expect(helperCheck(doctorStatus(helper: "notRegistered", wantsLid: false), claude: installed) == notNeeded)
+}
+
+@Test func notFoundStillFails() throws {
+    let bin = try BinFolder()
+    let checks = runChecks(doctorStatus(helper: "notFound", wantsLid: false), pathEnv: bin.path, ownBinary: bin.binary)
+    #expect(checks[2] == Doctor.Check(
+        name: "Helper", state: "fail", detail: "notFound", fix: "Settings → Lid & Battery → Approve"
+    ))
+    let unapproved = runChecks(doctorStatus(helper: "requiresApproval", wantsLid: false), pathEnv: bin.path, ownBinary: bin.binary)
+    #expect(unapproved[2].state == "fail")
 }
 
 @Test func stuckLidSleepFails() throws {

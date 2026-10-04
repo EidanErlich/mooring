@@ -163,13 +163,15 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
         leases: [], power: PowerInfo(onAC: true, batteryPercent: nil), thermal: "nominal", lidClosed: false,
         helper: "enabled", suspensions: [], notifications: nil, agentLidApproval: nil)
     let bare = try object(WireCoding.encodeLine(Response.success(id: "a", .status(status))))["result"] as? [String: Any]
-    #expect(bare?["notifications"] == nil && bare?["agentLidApproval"] == nil)
+    #expect(bare?["notifications"] == nil && bare?["agentLidApproval"] == nil && bare?["agentSessionLid"] == nil)
     status.notifications = "granted"
     status.agentLidApproval = "ask"
+    status.agentSessionLid = true
     let response = Response.success(id: "b", .status(status))
     let line = try WireCoding.encodeLine(response)
     let result = try #require(try object(line)["result"] as? [String: Any])
     #expect(result["notifications"] as? String == "granted" && result["agentLidApproval"] as? String == "ask")
+    #expect(result["agentSessionLid"] as? Bool == true)
     #expect(try WireCoding.decodeResponse(line, op: .status) == response)
 }
 

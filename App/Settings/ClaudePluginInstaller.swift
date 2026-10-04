@@ -204,8 +204,11 @@ enum ClaudePluginInstaller {
 
     /// Links `mooring` onto the PATH first (an installed plugin runs from Claude's cache, so its hook finds `mooring` there),
     /// then registers, refreshes or re-points the marketplace and installs or updates the plugin, stopping at the first failure.
+    /// Does nothing but fail while the app is in a transient location, since both the link and the marketplace would point into it.
     static func install(claude: String, bundlePlugin: String, runner: ToolRunning,
+                        isTransient: Bool = BundleLocation.isRunningTransient,
                         ensureCLI: () throws -> Void) -> Result<Void, InstallError> {
+        guard !isTransient else { return .failure(.command(BundleLocation.moveCaption)) }
         do {
             try ensureCLI()
         } catch {

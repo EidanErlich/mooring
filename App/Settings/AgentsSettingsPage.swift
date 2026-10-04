@@ -30,10 +30,13 @@ struct AgentsSettingsPage: View {
                     HStack {
                         Text(statusText).foregroundStyle(.secondary)
                         if let title = status?.buttonTitle {
-                            Button(title) { install() }.disabled(installing)
+                            Button(title) { install() }.disabled(installing || BundleLocation.isRunningTransient)
                         }
                         if installing { ProgressView().controlSize(.small) }
                     }
+                }
+                if BundleLocation.isRunningTransient {
+                    Text(BundleLocation.moveCaption).font(.caption).foregroundStyle(.secondary)
                 }
                 if let error {
                     Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
