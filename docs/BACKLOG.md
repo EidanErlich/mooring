@@ -75,8 +75,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **A just-launched app** with no window yet reports `not_found` rather than "didn't open in time".
 - **Left and right screens** are picked by the screen's right edge, which can prefer a diagonal screen over the true neighbour.
 - **Layouts:** a layout saved with an exact title breaks when that title changes.
-  - a corrupt `layouts.json` blocks save and list instead of being set aside;
-  - the ask text for a layout shows bundle ids, not app names.
 - **App search** scans the top level of the Applications folders only.
 - **Results:** `WinStatus` has no fallback for a status a newer app might send; the folded region-name uniqueness is untested; `partial` ignores position clamps, so an off-position window can report `ok`.
 - **Accessibility timeouts:** setting the timeout (process-wide and per element) ignores its error.
@@ -222,3 +220,4 @@ Found while hardening v0.1 and deferred. Still deferred from before, as the stag
   - a pre-existing Sendable warning at `DropdownMenu.swift:131`;
   - `SocketServer.stop()` doesn't reset the accept back-off's episode flag.
 - **Notify:** the rate limit counts a post that wasn't shown.
+- **Small leftovers:** `CLIInstaller.install`'s doc comment still says "regular file" (it also refuses a folder); no test decodes an older status without `agentSessionLid`; `SocketServer` tests don't assert stop-while-suspended explicitly; an image's data is read on the main thread before text recognition (a file read for a Universal Clipboard image).

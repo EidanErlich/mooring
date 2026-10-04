@@ -83,7 +83,9 @@ check_signature() { # app
 # Refuses a tag that exists on origin. Not being able to ask (offline, no origin) is a warning, not a pass.
 check_remote_tag() { # repo root, version
     local code=0
-    git -C "$1" ls-remote --exit-code --tags origin "refs/tags/v$2" >/dev/null 2>&1 || code=$?
+    # Never wait on a password or host-key prompt: a stalled check becomes the warning below.
+    GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" \
+        git -C "$1" ls-remote --exit-code --tags origin "refs/tags/v$2" </dev/null >/dev/null 2>&1 || code=$?
     case "$code" in
         0) die "Tag v$2 already exists on origin" ;;
         2) ;;

@@ -245,6 +245,8 @@ class HistoryItem {
         return
       }
       await MainActor.run {
+        // The item may have been deleted (a duplicate, Clear) while its text was recognised.
+        guard !item.isDeleted else { return }
         item.title = title
       }
     }
