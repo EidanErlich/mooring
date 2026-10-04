@@ -51,7 +51,8 @@ extension RequestHandler {
         let agent = try agentToAsk(caller)
         let plan = try plan.validated()
         if let agent {
-            try await askToArrange(agent, count: plan.placements.count, body: WindowApproval.body(plan.placements))
+            try await askToArrange(agent, count: plan.placements.count,
+                                   body: WindowApproval.body(plan.placements, launch: plan.launch == true))
         }
         return try await onItsTurn(for: caller) { await $0.arrange(plan) }
     }
@@ -67,7 +68,8 @@ extension RequestHandler {
     }
 
     /// `win.layout`: `list` is read-only; `apply` is an arrangement and asks; `save` and `delete` don't ask.
-    /// `apply` moves the placements read (and shown in the ask) up front, whatever is saved meanwhile.
+    /// `apply` checks the saved placements as any plan, then moves those read (and shown in the ask) up front, whatever
+    /// is saved meanwhile.
     func winLayout(_ args: WinLayoutArgs, from caller: Caller) async throws -> WinLayoutResult {
         let arranger = try runningArranger()
         let action = args.action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -77,12 +79,14 @@ extension RequestHandler {
         }
         let agent = try agentToAsk(caller)
         let name = args.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard action == "apply", !name.isEmpty, let placements = try arranger.layouts.load()[name] else {
+        guard action == "apply", !name.isEmpty, let saved = try arranger.layouts.load()[name] else {
             // Save, delete, and an apply `layout` refuses (no name, or no such layout), which is never asked about.
             return try await onItsTurn(for: caller) { try await $0.layout(args) }
         }
+        let placements = try Arranger.validated(layout: saved, named: name)
         if let agent {
-            try await askToArrange(agent, count: placements.count, body: "Layout “\(name)”: \(WindowApproval.body(placements))")
+            let body = "Layout “\(WindowApproval.shown(name))”: \(WindowApproval.body(placements, launch: true))"
+            try await askToArrange(agent, count: placements.count, body: body)
         }
         return try await onItsTurn(for: caller) { arranger in
             let result = await arranger.apply(layout: placements)

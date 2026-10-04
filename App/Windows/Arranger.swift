@@ -187,7 +187,7 @@ extension Arranger {
         case .one(let app):
             return step(for: placement, in: app, screens: screens, note: nil)
         case .ambiguous(let apps):
-            return .done(WinPlacementResult(app: label, status: .ambiguous, candidates: apps.map(\.name)))
+            return .done(Self.ambiguous(label, apps.map(\.name), several: "apps"))
         case .none:
             guard canLaunch else { return .done(WinPlacementResult(app: label, status: .notRunning, reason: "isn't running")) }
             guard let bundleID = locateApp(placement.app) else {
@@ -239,12 +239,18 @@ extension Arranger {
         let exact = app.windows.filter { $0.title.caseInsensitiveCompare(title) == .orderedSame }
         let matches = exact.isEmpty ? app.windows.filter { $0.title.range(of: title, options: .caseInsensitive) != nil } : exact
         guard matches.count < 2 else {
-            throw Refusal(result: .init(app: label, status: .ambiguous, candidates: matches.map(\.title)))
+            throw Refusal(result: ambiguous(label, matches.map(\.title), several: "windows"))
         }
         guard let match = matches.first else {
             throw Refusal(result: .init(app: label, status: .notFound, reason: "no window titled “\(title)”"))
         }
         return match
+    }
+
+    /// "matches several apps: Visual Studio Code, Xcode", so the agent knows whether to refine `app` or `title`.
+    private static func ambiguous(_ label: String, _ names: [String], several kind: String) -> WinPlacementResult {
+        WinPlacementResult(app: label, status: .ambiguous, candidates: names,
+                           reason: "matches several \(kind): \(names.joined(separator: ", "))")
     }
 
     /// The first app in the system's front-to-back order that isn't Mooring.

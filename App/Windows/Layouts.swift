@@ -54,7 +54,8 @@ extension Arranger {
         case "apply":
             let name = try Self.layoutName(args)
             guard let placements = saved[name] else { throw Self.noLayout(name) }
-            return WinLayoutResult(names: saved.keys.sorted(), arrange: await apply(layout: placements))
+            let checked = try Self.validated(layout: placements, named: name)
+            return WinLayoutResult(names: saved.keys.sorted(), arrange: await apply(layout: checked))
         case "delete":
             let name = try Self.layoutName(args)
             guard saved.removeValue(forKey: name) != nil else { throw Self.noLayout(name) }
@@ -69,6 +70,16 @@ extension Arranger {
     /// Arranges a saved layout's placements, opening apps that aren't running.
     func apply(layout placements: [WinPlacement]) async -> WinArrangeResult {
         await arrange(WinPlan(placements: placements, launch: true))
+    }
+
+    /// A saved layout's placements checked as any plan (`WinPlan.validated()`: at most 32, frames clamped), since the
+    /// file can be edited by hand; `bad_request` "Layout <name> is invalid: …" otherwise.
+    static func validated(layout placements: [WinPlacement], named name: String) throws -> [WinPlacement] {
+        do {
+            return try WinPlan(placements: placements, launch: true).validated().placements
+        } catch let error as WireError {
+            throw WireError(code: .badRequest, message: "Layout \(name) is invalid: \(error.message)")
+        }
     }
 
     private static func layoutName(_ args: WinLayoutArgs) throws -> String {

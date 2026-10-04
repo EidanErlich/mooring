@@ -87,6 +87,16 @@ enum WindowSystemTiming {
     /// without this a hung app would stall Mooring's menu, IPC and lease renewals for the system default (about 6 s)
     /// per call, and `apps()` makes several per app.
     static let axTimeout: Float = 1.5
+    /// `AXUIElementSetMessagingTimeout`, swapped in tests.
+    static var setMessagingTimeout: (AXUIElement, Float) -> AXError = AXUIElementSetMessagingTimeout
+
+    /// Makes `axTimeout` the process's default for every Accessibility element (a timeout set on the system-wide
+    /// element is the global one), so Loop's own calls on elements it creates, such as `Window.setFrame`'s
+    /// `enhancedUserInterface` reads on a fresh app element, are bounded too. `WindowKit.start()` calls it;
+    /// `LiveWindowSystem` still bounds its own elements.
+    static func boundEveryAccessibilityCall() {
+        _ = setMessagingTimeout(AXUIElementCreateSystemWide(), axTimeout)
+    }
     /// How long Loop's preview overlay shows each target.
     static let previewDuration: Duration = .milliseconds(600)
     /// How long an app gets to unhide before its window is moved.

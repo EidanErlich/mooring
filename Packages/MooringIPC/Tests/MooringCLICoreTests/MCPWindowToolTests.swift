@@ -47,8 +47,9 @@ private func winArrangeReply(_ results: [WinPlacementResult], to request: Reques
     harness.windowClient = ScriptedClient { request in
         winArrangeReply([
             WinPlacementResult(app: "Safari", status: .ok),
-            WinPlacementResult(app: "Slack", status: .ambiguous, candidates: ["Inbox", "Drafts"]),
-            WinPlacementResult(app: "Zed", status: .notRunning, reason: "Zed isn't running")
+            WinPlacementResult(app: "Slack", status: .ambiguous, candidates: ["Inbox", "Drafts"],
+                               reason: "matches several windows: Inbox, Drafts"),
+            WinPlacementResult(app: "Zed", status: .notRunning, reason: "isn't running")
         ], to: request)
     }
     let arguments = #"{"placements":[{"app":"Safari","region":"left-half"},{"app":"Slack","region":"right-half"},"#
@@ -57,8 +58,9 @@ private func winArrangeReply(_ results: [WinPlacementResult], to request: Reques
     #expect(harness.isError(2) == false)
     let text = try #require(harness.text(2))
     #expect(text.split(separator: "\n").count == 3)
-    #expect(text.contains("Slack ambiguous: 2 windows (Inbox, Drafts)"))
-    #expect(text.contains("Zed not running"))
+    #expect(text.contains("Slack ambiguous: matches several windows: Inbox, Drafts"))
+    #expect(text.contains("Zed isn't running"))
+    #expect(!text.contains("running: isn't running"))
     let results = try #require(harness.structured(2)?["results"] as? [[String: Any]])
     #expect(results.map { $0["status"] as? String } == ["ok", "ambiguous", "not_running"])
 }
@@ -78,13 +80,13 @@ private func winArrangeReply(_ results: [WinPlacementResult], to request: Reques
     }
 }
 
-@Test func listWindowsUsesTheNormalClientAndIsErrorOnDenied() async throws {
+@Test func listWindowsUsesTheWindowClientAndIsErrorOnDenied() async throws {
     var harness = MCPHarness()
-    harness.client = ScriptedClient { .success(.failure(id: $0.id, .denied, "Windows is off. Turn it on from the menu bar.")) }
+    harness.windowClient = ScriptedClient { .success(.failure(id: $0.id, .denied, "Windows is off. Turn it on from the menu bar.")) }
     _ = await harness.run([initialize(), call(2, "list_windows")])
     // Named as the client, so the app counts it as an agent's (and refuses it when agents are Off).
-    #expect(harness.client.requests.first?.args == .winList(WinListArgs(client: "claude-ai")))
-    #expect(harness.windowClient.requests.isEmpty)
+    #expect(harness.windowClient.requests.first?.args == .winList(WinListArgs(client: "claude-ai")))
+    #expect(harness.client.requests.isEmpty)
     #expect(harness.isError(2) == true)
     #expect(harness.text(2) == "Windows is off. Turn it on from the menu bar.")
 }
@@ -96,7 +98,7 @@ private func winArrangeReply(_ results: [WinPlacementResult], to request: Reques
         screens: [WinScreenInfo(index: 0, name: "Built-in", visibleFrame: WinFrame(x: 0, y: 0, w: 1440, h: 900), position: "main")],
         regions: ["left-half"]
     )
-    harness.client = ScriptedClient { .success(.success(id: $0.id, .winList(list))) }
+    harness.windowClient = ScriptedClient { .success(.success(id: $0.id, .winList(list))) }
     _ = await harness.run([initialize(), call(2, "list_windows")])
     #expect(harness.isError(2) == false)
     #expect((harness.structured(2)?["apps"] as? [[String: Any]])?.count == 1)

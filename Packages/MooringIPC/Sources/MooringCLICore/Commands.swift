@@ -161,11 +161,12 @@ struct CommandRunner {
     }
 
     /// An acquire that may need the user's approval waits for it, so it uses the client with the long reply timeout.
-    /// So does a window request that changes something: it may ask, wait its turn and launch apps.
+    /// So does a window request that changes something (it may ask, wait its turn and launch apps), and listing windows,
+    /// which can wait on several hung apps.
     private func client(for args: RequestArgs) -> any RequestSending {
         switch args {
         case .acquire(let acquire): env.acquireClient(kind: acquire.kind, level: acquire.level)
-        case .winArrange, .winUndo: env.windowClient
+        case .winList, .winArrange, .winUndo: env.windowClient
         case .winLayout(let layout): layout.action == "list" ? env.client : env.windowClient
         default: env.client
         }

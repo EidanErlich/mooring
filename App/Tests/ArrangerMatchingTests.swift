@@ -35,8 +35,8 @@ extension ArrangerTests {
     @Test func twoExactTitlesAmbiguous() async {
         addGitHubWindows(home: "GitHub", pulls: "github")
         let results = await arrange(WinPlacement(app: "chrome", region: "left-half", title: "GitHub"))
-        #expect(results.map(\.status) == [.ambiguous])
-        #expect(results.first?.candidates == ["github", "GitHub"])
+        #expect(results == [WinPlacementResult(app: "chrome", status: .ambiguous, candidates: ["github", "GitHub"],
+                                               reason: "matches several windows: github, GitHub")])
         #expect(moves.isEmpty)
     }
 }

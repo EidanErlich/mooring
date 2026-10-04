@@ -71,7 +71,8 @@ struct ArrangerTests {
         #expect(AppMatcher.match("code", in: apps) == .ambiguous([apps[6], apps[7]]))
 
         let results = await arrange(WinPlacement(app: "code", region: "left-half"))
-        #expect(results == [WinPlacementResult(app: "code", status: .ambiguous, candidates: ["Visual Studio Code", "Xcode"])])
+        #expect(results == [WinPlacementResult(app: "code", status: .ambiguous, candidates: ["Visual Studio Code", "Xcode"],
+                                               reason: "matches several apps: Visual Studio Code, Xcode")])
         #expect(moves.isEmpty)
     }
 
@@ -98,7 +99,8 @@ struct ArrangerTests {
     @Test func titleMatchingTwoIsAmbiguous() async {
         let results = await arrange(WinPlacement(app: "chrome", region: "left-half", title: "google"))
         #expect(results == [WinPlacementResult(app: "chrome", status: .ambiguous,
-                                               candidates: ["Inbox – Mail – Google", "Docs – Google"])])
+                                               candidates: ["Inbox – Mail – Google", "Docs – Google"],
+                                               reason: "matches several windows: Inbox – Mail – Google, Docs – Google")])
         #expect(moves.isEmpty)
     }
 

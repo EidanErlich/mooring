@@ -72,8 +72,8 @@ public struct CLIEnvironment: Sendable {
     public var hookClient: any RequestSending
     /// What an acquire whose level includes lid goes through: it waits long enough for the user to answer an approval.
     public var lidClient: any RequestSending
-    /// What a mutating `mooring win` request goes through: an ask (60 s), a wait in the queue and launching apps can add up
-    /// to more than `lidClient`'s 65 s.
+    /// What `mooring win list` and a mutating `mooring win` request go through: an ask (60 s), a wait in the queue and
+    /// launching apps can add up to more than `lidClient`'s 65 s, and a list can wait on several hung apps.
     public var windowClient: any RequestSending
     /// Asks Claude Code about itself, for doctor. Blocks for a few seconds at most; nil when `claude` isn't found.
     public var claude: @Sendable () -> ClaudeSnapshot?

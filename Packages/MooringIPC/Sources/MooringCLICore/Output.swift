@@ -143,6 +143,8 @@ public enum StatusText {
 /// Human-readable text for the `win` commands.
 enum WinText {
     static let nothingToUndo = "Nothing to undo"
+    /// The status text of `not_running`, and the app's reason when it has nothing more to say.
+    private static let notRunning = "isn't running"
 
     /// 0 when every placement landed, 2 when any didn't; everything else is 0.
     static func exitStatus(for result: ResponseResult) -> Int32 {
@@ -155,7 +157,8 @@ enum WinText {
         return results.allSatisfy { $0.status == .ok } ? 0 : 2
     }
 
-    /// One line per placement: "iterm ok (was minimized, restored)", "slack ambiguous: 2 windows (Inbox, Drafts)".
+    /// One line per placement: "iterm ok (was minimized, restored)", "code ambiguous: matches several apps: Visual Studio
+    /// Code, Xcode", "notes isn't running".
     static func arrange(_ results: [WinPlacementResult]) -> String {
         results.map(line).joined(separator: "\n")
     }
@@ -172,7 +175,7 @@ enum WinText {
         case .ok: "ok"
         case .partial: "partial"
         case .ambiguous: "ambiguous"
-        case .notRunning: "not running"
+        case .notRunning: notRunning
         case .notFound: "not found"
         case .failed: "failed"
         }
@@ -183,8 +186,10 @@ enum WinText {
         case .ok: return nil
         case .partial: return result.frame.map { "stopped at \(size($0))" }
         case .ambiguous:
+            if let reason = result.reason, !reason.isEmpty { return reason }
             guard let names = result.candidates, !names.isEmpty else { return nil }
-            return "\(names.count) \(names.count == 1 ? "window" : "windows") (\(names.joined(separator: ", ")))"
+            return "matches several: \(names.joined(separator: ", "))"
+        case .notRunning: return result.reason == notRunning ? nil : result.reason
         default: return result.reason
         }
     }

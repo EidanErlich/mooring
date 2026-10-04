@@ -22,22 +22,36 @@ enum WindowApproval {
     static let unavailable = "Turn on notifications for Mooring in System Settings to approve window arrangement"
     /// The most placements the body names; the rest are counted.
     static let listedPlacements = 6
+    /// The most characters of an agent's app or title the body shows.
+    static let longestName = 40
+    /// The body's last line when the arrangement may open apps.
+    static let mayOpenApps = "May open apps that aren't running."
 
     /// "<Agent> wants to arrange N windows".
     static func title(agent: String, count: Int) -> String {
         "\(agent) wants to arrange \(count) \(count == 1 ? "window" : "windows")"
     }
 
-    /// "chrome → right half · iterm → bottom left · …", naming at most `listedPlacements`.
-    static func body(_ placements: [WinPlacement]) -> String {
+    /// "chrome → right half · iterm → bottom left · …", naming at most `listedPlacements`, then `mayOpenApps` on a line
+    /// of its own when `launch`.
+    static func body(_ placements: [WinPlacement], launch: Bool = false) -> String {
         var parts = placements.prefix(listedPlacements).map(describe)
         if placements.count > listedPlacements { parts.append("and \(placements.count - listedPlacements) more") }
-        return parts.joined(separator: " · ")
+        let body = parts.joined(separator: " · ")
+        return launch ? body + "\n" + mayOpenApps : body
+    }
+
+    /// An agent's text as the body shows it: without control or formatting characters (so no line breaks or
+    /// direction overrides), and at most `longestName` characters.
+    static func shown(_ text: String) -> String {
+        let hidden: Set<Unicode.GeneralCategory> = [.control, .format, .lineSeparator, .paragraphSeparator]
+        let kept = String(String.UnicodeScalarView(text.unicodeScalars.filter { !hidden.contains($0.properties.generalCategory) }))
+        return kept.count > longestName ? String(kept.prefix(longestName - 1)) + "…" : kept
     }
 
     private static func describe(_ placement: WinPlacement) -> String {
-        var app = placement.app == WinPlacement.frontmostApp ? "the frontmost app" : placement.app
-        if let title = placement.title, !title.isEmpty { app += " “\(title)”" }
+        var app = placement.app == WinPlacement.frontmostApp ? "the frontmost app" : shown(placement.app)
+        if let title = placement.title, !title.isEmpty { app += " “\(shown(title))”" }
         var target = placement.region.map { $0.replacingOccurrences(of: "-", with: " ") } ?? ""
         if let frame = placement.frame {
             target = "\(percent(frame.w)) × \(percent(frame.h)) at \(percent(frame.x)), \(percent(frame.y))"

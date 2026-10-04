@@ -1,3 +1,4 @@
+import ApplicationServices
 import Testing
 @testable import WindowKit
 
@@ -12,5 +13,34 @@ struct WindowSystemTimingTests {
         #expect(WindowSystemTiming.unhideDelay == .milliseconds(150))
         #expect(WindowSystemTiming.restoreDelay == .milliseconds(350))
         #expect(WindowSystemTiming.previewDuration == .milliseconds(600))
+    }
+}
+
+/// The timeouts a test's `setMessagingTimeout` was asked to set.
+private final class TimeoutCalls {
+    var made: [(element: AXUIElement, seconds: Float)] = []
+}
+
+extension WindowKitGlobalStateTests {
+    /// `start()` sets the process-wide Accessibility timeout, which bounds Loop's own calls on elements it creates.
+    @Suite
+    @MainActor
+    struct GlobalTimeoutTests {
+        @Test func startBoundsEveryAccessibilityCall() {
+            let calls = TimeoutCalls()
+            let saved = WindowSystemTiming.setMessagingTimeout
+            WindowSystemTiming.setMessagingTimeout = { element, seconds in
+                calls.made.append((element, seconds))
+                return .success
+            }
+            defer { WindowSystemTiming.setMessagingTimeout = saved }
+
+            let kit = WindowKit()
+            kit.start()
+            kit.stop()
+            #expect(calls.made.count == 1)
+            #expect(calls.made.first?.seconds == 1.5)
+            #expect(calls.made.first.map { CFEqual($0.element, AXUIElementCreateSystemWide()) } == true)
+        }
     }
 }

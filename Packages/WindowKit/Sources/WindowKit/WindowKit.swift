@@ -26,6 +26,7 @@ public final class WindowKit {
 
         Capabilities.active = capabilities
         capabilities.logFailures()
+        WindowSystemTiming.boundEveryAccessibilityCall()
         LoopManager.shared.start()
         WindowDragManager.shared.addObservers()
     }

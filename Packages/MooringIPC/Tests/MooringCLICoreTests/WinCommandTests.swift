@@ -135,8 +135,12 @@ private func planJSON(_ text: String) -> Data { Data(text.utf8) }
     let results = [
         okResult("chrome"),
         okResult("iterm", note: "was minimized, restored"),
-        WinPlacementResult(app: "slack", status: .ambiguous, candidates: ["Inbox", "Drafts"]),
+        WinPlacementResult(app: "slack", status: .ambiguous, candidates: ["Inbox", "Drafts"],
+                           reason: "matches several windows: Inbox, Drafts"),
+        WinPlacementResult(app: "code", status: .ambiguous, candidates: ["Visual Studio Code", "Xcode"],
+                           reason: "matches several apps: Visual Studio Code, Xcode"),
         WinPlacementResult(app: "notes", status: .notRunning, reason: "isn't running"),
+        WinPlacementResult(app: "spotify", status: .notRunning, reason: "couldn't find it to open"),
         WinPlacementResult(app: "mail", status: .partial, frame: WinFrame(x: 0, y: 0, w: 640, h: 480))
     ]
     let harness = Harness(windowClient: RecordingClient(reply: .success(arranged(results))))
@@ -144,8 +148,10 @@ private func planJSON(_ text: String) -> Data { Data(text.utf8) }
     #expect(harness.capture.stdout == """
         chrome ok
         iterm ok (was minimized, restored)
-        slack ambiguous: 2 windows (Inbox, Drafts)
-        notes not running: isn't running
+        slack ambiguous: matches several windows: Inbox, Drafts
+        code ambiguous: matches several apps: Visual Studio Code, Xcode
+        notes isn't running
+        spotify isn't running: couldn't find it to open
         mail partial: stopped at 640x480
 
         """)
@@ -232,7 +238,7 @@ private func layoutReply(_ names: [String], arrange: WinArrangeResult? = nil) ->
         ],
         screens: [WinScreenInfo(index: 0, name: "Built-in", visibleFrame: WinFrame(x: 0, y: 25, w: 1440, h: 875), position: "main")],
         regions: ["left-half", "maximize"])
-    let harness = Harness(client: RecordingClient(reply: .success(.success(id: "r", .winList(result)))))
+    let harness = Harness(windowClient: RecordingClient(reply: .success(.success(id: "r", .winList(result)))))
     #expect(await harness.run(["win", "list"]) == 0)
     #expect(harness.capture.stdout == """
         Safari
@@ -244,18 +250,19 @@ private func layoutReply(_ names: [String], arrange: WinArrangeResult? = nil) ->
           0 Built-in (main) · 0,25 1440x875
 
         """)
-    #expect(harness.client.lastRequest?.op == .winList)
+    #expect(harness.windowClient.lastRequest?.op == .winList)
 
-    let regions = Harness(client: RecordingClient(reply: .success(.success(id: "r", .winList(result)))))
+    let regions = Harness(windowClient: RecordingClient(reply: .success(.success(id: "r", .winList(result)))))
     #expect(await regions.run(["win", "list-regions"]) == 0)
     #expect(regions.capture.stdout == "left-half\nmaximize\n")
 }
 
-@Test func listUsesTheNormalClient() async {
+/// Listing makes several Accessibility calls per app, so a few hung apps can outlast the normal client's timeout.
+@Test func listUsesTheWindowClient() async {
     let harness = Harness()
     _ = await harness.run(["win", "list", "--json"])
-    #expect(harness.client.requests.count == 1)
-    #expect(harness.windowClient.requests.isEmpty)
+    #expect(harness.windowClient.requests.count == 1)
+    #expect(harness.client.requests.isEmpty)
 }
 
 // MARK: - Timeouts
