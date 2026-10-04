@@ -18,8 +18,10 @@ enum CLIInstaller {
     enum State: Equatable {
         case installed
         case missing
-        /// A link (or file) is there but doesn't lead to this app's binary; holds where it leads.
+        /// A link is there but doesn't lead to this app's binary; holds where it leads.
         case pointsElsewhere(String)
+        /// Something that isn't a link is there, and Mooring won't replace it.
+        case notALink
     }
 
     /// The line to add to `~/.zshrc` when `~/.local/bin` isn't on the shell's PATH.
@@ -36,7 +38,7 @@ enum CLIInstaller {
     static func state(link: URL, target: URL) -> State {
         let fileManager = FileManager.default
         guard let destination = try? fileManager.destinationOfSymbolicLink(atPath: link.path) else {
-            return fileManager.fileExists(atPath: link.path) ? .pointsElsewhere(link.path) : .missing
+            return fileManager.fileExists(atPath: link.path) ? .notALink : .missing
         }
         let resolved = URL(fileURLWithPath: destination, relativeTo: link.deletingLastPathComponent())
         return resolved.standardizedFileURL.path == target.standardizedFileURL.path ? .installed : .pointsElsewhere(destination)

@@ -16,7 +16,8 @@ struct MCPClientsModelTests {
         let copies = Copies()
         let model: MCPClientsModel
 
-        init(installed: [MCPClientConfig.Client] = MCPClientConfig.Client.allCases) throws {
+        init(installed: [MCPClientConfig.Client] = MCPClientConfig.Client.allCases,
+             bundleURL: URL = URL(fileURLWithPath: "/Applications/Mooring.app")) throws {
             home = FileManager.default.temporaryDirectory.appendingPathComponent("mooring-mcp-\(UUID().uuidString)")
             for client in installed {
                 try FileManager.default.createDirectory(
@@ -24,7 +25,9 @@ struct MCPClientsModelTests {
                 )
             }
             let copies = copies
-            model = MCPClientsModel(home: home, helperPath: MCPClientsModelTests.helperPath) { copies.texts.append($0) }
+            model = MCPClientsModel(home: home, helperPath: MCPClientsModelTests.helperPath, bundleURL: bundleURL) {
+                copies.texts.append($0)
+            }
         }
 
         func config(_ client: MCPClientConfig.Client) -> MCPClientConfig {
@@ -97,6 +100,38 @@ struct MCPClientsModelTests {
         let fixture = try Fixture()
         fixture.model.copyConfig()
         #expect(fixture.copies.texts == [MCPClientConfig.snippet(helperPath: Self.helperPath)])
+    }
+
+    @Test func transientLocations() {
+        func transient(_ path: String) -> Bool { BundleLocation.isTransient(URL(fileURLWithPath: path)) }
+        #expect(transient("/private/var/folders/xy/T/AppTranslocation/ABCD/d/Mooring.app"))
+        #expect(transient("/Volumes/Mooring/Mooring.app"))
+        #expect(!transient("/Applications/Mooring.app"))
+    }
+
+    @Test func addDisabledWhenTransient() throws {
+        let fixture = try Fixture(bundleURL: URL(fileURLWithPath: "/Volumes/Mooring/Mooring.app"))
+        try fixture.config(.cursor).add(helperPath: "/old/mooring")
+        fixture.model.refresh()
+        #expect(fixture.model.isTransient)
+        #expect(fixture.model.rows.map(\.buttonTitle) == ["Add", "Update"])
+        #expect(fixture.model.rows.map { fixture.model.isEnabled($0) } == [false, false])
+        fixture.model.perform(.claudeDesktop)
+        #expect(fixture.model.rows[0].state == .notAdded)
+        #expect(!FileManager.default.fileExists(atPath: fixture.config(.claudeDesktop).fileURL.path))
+    }
+
+    @Test func removeStaysEnabledWhenTransient() throws {
+        let fixture = try Fixture(bundleURL: URL(fileURLWithPath: "/Volumes/Mooring/Mooring.app"))
+        try fixture.config(.cursor).add(helperPath: Self.helperPath)
+        fixture.model.refresh()
+        #expect(fixture.model.isEnabled(fixture.model.rows[1]))
+    }
+
+    @Test func addEnabledInApplications() throws {
+        let fixture = try Fixture()
+        #expect(!fixture.model.isTransient)
+        #expect(fixture.model.rows.allSatisfy { fixture.model.isEnabled($0) })
     }
 
     @Test func helperPathPointsIntoTheBundle() {

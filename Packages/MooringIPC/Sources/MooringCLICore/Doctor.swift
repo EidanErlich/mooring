@@ -91,9 +91,13 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: found, fix: nil)
     }
 
+    /// The helper only matters for lid mode, so a helper that isn't approved passes when nothing wants the lid held.
     private static func helperCheck(_ status: StatusResult?) -> Check {
         guard let status else { return Check(name: "Helper", state: "skip", detail: "needs the app", fix: nil) }
         guard status.helper == "enabled" else {
+            guard status.wantsLid || status.leases.contains(where: { $0.level == "lid" }) else {
+                return Check(name: "Helper", state: "pass", detail: "not needed", fix: nil)
+            }
             return Check(name: "Helper", state: "fail", detail: status.helper, fix: "Settings → Lid & Battery → Approve")
         }
         return Check(name: "Helper", state: "pass", detail: status.helper, fix: nil)
@@ -106,8 +110,10 @@ public enum Doctor {
             return Check(name: name, state: "skip", detail: "the helper can't read it", fix: nil)
         }
         guard actual == status.lidSleepDisabled else {
-            return Check(name: name, state: "fail", detail: actual ? "stuck disabled" : "mismatch",
-                         fix: "Quit and reopen Mooring to restore sleep")
+            // Mooring believes lid mode is on but the helper reports sleep isn't disabled: toggling re-applies it.
+            return actual
+                ? Check(name: name, state: "fail", detail: "stuck disabled", fix: "Quit and reopen Mooring to restore sleep")
+                : Check(name: name, state: "fail", detail: "mismatch", fix: "Turn lid mode off and on again")
         }
         return Check(name: name, state: "pass", detail: "matches", fix: nil)
     }
