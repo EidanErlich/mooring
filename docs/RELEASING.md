@@ -8,7 +8,7 @@ Mooring has no paid Apple account, so a release is signed with the maintainer's 
 
 - The repository `EidanErlich/mooring` must be public when you publish. Sparkle fetches the appcast from GitHub Pages and the zip from a GitHub Release, and Homebrew downloads the same zip. A private repo serves neither.
 - `Config/Local.xcconfig` (gitignored) must name your signing certificate; copy `Config/Local.xcconfig.example` and fill it in.
-- You are on `main` with a clean tree. `scripts/release.sh` refuses a dirty tree and a version whose `v<version>` tag already exists here. That tag check is local only: it can't see a tag that exists only on GitHub, so look at the repo's tags yourself.
+- You are on `main` with a clean tree. `scripts/release.sh` refuses a dirty tree and a version whose `v<version>` tag already exists, here or on `origin` (`git ls-remote --tags origin`). If it can't reach `origin`, it warns "Couldn't check origin for tag v<version>" and goes on, so look at the repo's tags yourself before publishing.
 
 ## 1. Install Sparkle's tools and generate the signing key
 
@@ -53,7 +53,7 @@ bash scripts/release.sh --publish
 
 This is the one build of the release. The script:
 
-1. checks the tree is clean and the tag is unused;
+1. checks the tree is clean and the tag is unused, locally and on `origin`;
 2. runs `make test`;
 3. builds Release with the identity in `Local.xcconfig` (`make build-release`);
 4. refuses the build if its `SUPublicEDKey` is empty (a release without it could never update itself) or if it isn't signed with a certificate (ad-hoc, or no Authority or TeamIdentifier in `codesign -dv`);
@@ -63,7 +63,7 @@ This is the one build of the release. The script:
 8. writes the appcast and the Homebrew cask;
 9. prints three blocks of publishing commands for step 7, and runs none of them.
 
-(`make release` is the same run without `--publish`: it builds `dist/` but prints no commands.)
+(`make release` is the same run without `--publish`: it builds `dist/` but prints no commands. It passes flags in `ARGS`, so `make release ARGS=--publish` is step 4.)
 
 ## 5. Inspect `dist/`
 
@@ -73,7 +73,7 @@ Inspect the `dist/` that step 4 just built; the commands it printed publish exac
 | --- | --- |
 | `Mooring-<version>.zip` | The app, zipped with `Mooring.app` at the top |
 | `Mooring-<version>.zip.sig` | `sign_update`'s output for the zip |
-| `appcast.xml` | One `<item>`: version, `sparkle:version`, minimum macOS, the zip's byte length and `sparkle:edSignature` |
+| `appcast.xml` | One `<item>`: version, `sparkle:version`, minimum macOS, a `sparkle:releaseNotesLink` to the GitHub Release, the zip's byte length and `sparkle:edSignature` |
 | `homebrew/mooring.rb` | The cask for the tap, with the zip's sha256, `auto_updates true`, `uninstall quit:` and `zap trash:` |
 
 Check that:

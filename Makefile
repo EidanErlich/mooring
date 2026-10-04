@@ -66,9 +66,9 @@ install: build-release
 	ditto $(DERIVED)/Build/Products/Release/$(APP) $(INSTALL_DIR)/$(APP)
 
 # Builds dist/ (zip, appcast, cask) with the Local.xcconfig identity and your Sparkle key. Publishes nothing;
-# scripts/release.sh --publish prints the commands to run by hand.
+# scripts/release.sh --publish prints the commands to run by hand. Flags go in ARGS, e.g. make release ARGS=--publish.
 release:
-	bash scripts/release.sh
+	bash scripts/release.sh $(ARGS)
 
 # Manual safety valve if lid sleep is ever left disabled.
 reset-sleep:
