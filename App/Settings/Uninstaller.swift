@@ -10,7 +10,7 @@ import ServiceManagement
 /// One step of Settings → Advanced → "Uninstall Mooring…" (SPEC Appendix A), in the order they run.
 enum UninstallStep: CaseIterable, Hashable, Sendable {
     case endLeases, restoreSleep, unregisterHelper, unregisterLoginItem, removeCLILink, removeClaudePlugin,
-         removeMCPEntries, deleteClipboardHistory, removeSettings, moveAppToTrash
+         removeMCPEntries, deleteClipboardHistory, removeSupportFiles, removeSettings, moveAppToTrash
 
     /// The step in plain words, for the sheet and the failure summary.
     var title: String {
@@ -23,6 +23,7 @@ enum UninstallStep: CaseIterable, Hashable, Sendable {
         case .removeClaudePlugin: "Remove the Claude Code plugin that came with the app"
         case .removeMCPEntries: "Remove Mooring from Claude Desktop and Cursor"
         case .deleteClipboardHistory: "Delete clipboard history"
+        case .removeSupportFiles: "Delete saved sessions, layouts and the CLI socket"
         case .removeSettings: "Delete Mooring's settings"
         case .moveAppToTrash: "Move Mooring to the Trash"
         }
@@ -72,6 +73,43 @@ enum Uninstaller {
         return failures
     }
 
+    /// What `removeSupportFiles` deletes from `~/Library/Application Support/Mooring`, by exact name: the leases,
+    /// the saved window layouts and the CLI socket. `Clipboard/` is the checkbox's.
+    static let supportFileNames = ["leases.json", "layouts.json", "mooring.sock"]
+
+    /// Deletes `supportFileNames` from `folder`, then the folder itself only if nothing else is left in it.
+    /// Tries every file, then throws the first error.
+    static func removeSupportFiles(in folder: URL, fileManager: FileManager = .default) throws {
+        var firstError: Error?
+        for name in supportFileNames {
+            let file = folder.appendingPathComponent(name)
+            // attributesOfItem doesn't follow links, so a socket or a dangling link still counts as there.
+            guard (try? fileManager.attributesOfItem(atPath: file.path)) != nil else { continue }
+            do {
+                try fileManager.removeItem(at: file)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        if let left = try? fileManager.contentsOfDirectory(atPath: folder.path), left.isEmpty {
+            do {
+                try fileManager.removeItem(at: folder)
+            } catch {
+                firstError = firstError ?? error
+            }
+        }
+        if let firstError { throw firstError }
+    }
+
+    /// The failure summary shown before quitting. If lid sleep may still be off, it says how to fix that by hand.
+    static func summary(_ failures: [UninstallFailure]) -> String {
+        var text = failures.map { "• \($0.step.title): \($0.message)" }.joined(separator: "\n")
+        if failures.contains(where: { $0.step == .restoreSleep }) {
+            text += "\n\nSleep may still be disabled. Run in Terminal: sudo pmset -a disablesleep 0"
+        }
+        return text + "\n\nMooring will quit now."
+    }
+
     /// Windows' and Clipboard's settings suites, then the app's own domain.
     static func settingsDomains(appDomain: String) -> [String] {
         ["dev.mooring.windows", "dev.mooring.clipboard", appDomain]
@@ -91,6 +129,34 @@ enum Uninstaller {
             }
         }
         if let firstError { throw firstError }
+    }
+}
+
+/// Removes Mooring's settings domains at the uninstall step, and again at quit (`AppDelegate.applicationWillTerminate`),
+/// since AppKit or Sparkle can write a key back on the way out. Without an uninstall, quitting removes nothing.
+@MainActor
+final class SettingsDomainsRemover {
+    static let shared = SettingsDomainsRemover(
+        domains: Uninstaller.settingsDomains(appDomain: Bundle.main.bundleIdentifier ?? "dev.mooring.app")
+    ) { UserDefaults.standard.removePersistentDomain(forName: $0) }
+
+    private let domains: [String]
+    private let removeDomain: (String) -> Void
+    private(set) var didRemove = false
+
+    init(domains: [String], removeDomain: @escaping (String) -> Void) {
+        self.domains = domains
+        self.removeDomain = removeDomain
+    }
+
+    func remove() {
+        domains.forEach(removeDomain)
+        didRemove = true
+    }
+
+    func removeAgainAtQuit() {
+        guard didRemove else { return }
+        domains.forEach(removeDomain)
     }
 }
 
@@ -165,6 +231,8 @@ final class LiveUninstallSteps: UninstallPerforming {
                                   clipboard: settings.clipboard)
     }
 
+    // One case per step, in order: a flat switch, so each step reads in one line.
+    // swiftlint:disable:next cyclomatic_complexity
     func perform(_ step: UninstallStep) async throws {
         switch step {
         case .endLeases: endLeases()
@@ -177,7 +245,8 @@ final class LiveUninstallSteps: UninstallPerforming {
             try Uninstaller.removeMCPEntries(home: FileManager.default.homeDirectoryForCurrentUser,
                                              helperPath: MCPClientsModel.bundledHelperPath(in: Bundle.main.bundleURL))
         case .deleteClipboardHistory: try deleteClipboardHistory()
-        case .removeSettings: removeSettings()
+        case .removeSupportFiles: try Uninstaller.removeSupportFiles(in: FileLeaseStore.defaultDirectory)
+        case .removeSettings: SettingsDomainsRemover.shared.remove()
         case .moveAppToTrash: _ = try await NSWorkspace.shared.recycle([Bundle.main.bundleURL])
         }
     }
@@ -226,19 +295,11 @@ final class LiveUninstallSteps: UninstallPerforming {
         if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
     }
 
-    private func removeSettings() {
-        let appDomain = Bundle.main.bundleIdentifier ?? "dev.mooring.app"
-        for domain in Uninstaller.settingsDomains(appDomain: appDomain) {
-            UserDefaults.standard.removePersistentDomain(forName: domain)
-        }
-    }
-
     func report(_ failures: [UninstallFailure]) async {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Some steps didn't finish"
-        alert.informativeText = failures.map { "• \($0.step.title): \($0.message)" }.joined(separator: "\n")
-            + "\n\nMooring will quit now."
+        alert.informativeText = Uninstaller.summary(failures)
         alert.addButton(withTitle: "Quit")
         NSApp.activate()
         alert.runModal()

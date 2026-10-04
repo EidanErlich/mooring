@@ -244,6 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
         clipboard?.willTerminate()
+        // After an uninstall, whatever was written on the way out goes too.
+        SettingsDomainsRemover.shared.removeAgainAtQuit()
     }
 
     /// Never quit with lid sleep disabled (docs/SPEC.md 1.6, layer 4). The

@@ -13,6 +13,9 @@ struct AdvancedSettingsPage: View {
     static let updatesToggleTitle = "Check for updates automatically"
     static let checkNowTitle = "Check Now"
     static let uninstallTitle = "Uninstall Mooring…"
+    static let uninstallCaption = "Ends keep-awake sessions and turns lid sleep back on. Removes the helper, the login item, "
+        + "the mooring command, the Claude Code plugin, Mooring's Claude Desktop and Cursor entries, saved sessions and "
+        + "layouts, and settings, then moves the app to the Trash. Clipboard history goes only if you tick the box."
 
     let engine: AwakeEngine?
     let updates: UpdatesController?
@@ -49,7 +52,7 @@ struct AdvancedSettingsPage: View {
     private var uninstallSection: some View {
         Section("Uninstall") {
             Button(Self.uninstallTitle, role: .destructive) { uninstall.present() }
-            Text("Removes everything Mooring set up on this Mac, then moves the app to the Trash.")
+            Text(Self.uninstallCaption)
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
