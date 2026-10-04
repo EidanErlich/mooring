@@ -124,6 +124,20 @@ extension RequestHandler {
         return engine.leases.first { $0.id == lease.id } ?? lease
     }
 
+    /// Takes up the record of agent-granted lid saved before a relaunch. Runs after `engine.restore()`: an entry is
+    /// kept only while a restored lease has its id and, within `createdTolerance`, its creation time, and it takes
+    /// that lease's own time, so later checks compare exactly. The filtered record is written back.
+    func restoreAgentLid() {
+        var restored: [String: Date] = [:]
+        for (id, created) in agentLidRecord.load() {
+            guard let lease = engine.leases.first(where: { $0.id == id }),
+                  abs(lease.createdAt.timeIntervalSince(created)) <= AgentLidRecord.createdTolerance else { continue }
+            restored[id] = lease.createdAt
+        }
+        agentLid = restored
+        agentLidRecord.save(restored)
+    }
+
     /// Takes lid mode back from live leases that got it on an agent's behalf once the settings no longer allow it:
     /// Never takes it from every agent lease, "Keep working with the lid closed" off from Claude Code sessions.
     func applyLidSettings() {

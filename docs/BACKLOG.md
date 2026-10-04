@@ -35,6 +35,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Under Never,** an agent's refused `on --level lid` downgrades a person's lid session.
 - **Session acquires on battery** still log a guardrail notice (the notification is skipped).
 - **The decision tests** are tables, not a full exhaustive product of every input.
+- `AwakeEngine.acquire` keeps `createdAt` when it replaces an expired, not-yet-ticked lease; give it a fresh one.
 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 

@@ -69,6 +69,20 @@ struct RequestHandlerLidChangeTests {
         #expect(fixture.lease("menu") == before)
     }
 
+    @Test func neverKeepsAPersonsLidAnchor() async throws {
+        let fixture = RequestFixture.agent()
+        fixture.knobs.settings.agentLidApproval = .never
+        fixture.engine.acquire(
+            id: "anchor-4242", owner: .cli(pid: 1), reason: "mine", level: lidOnly, duration: nil, watchPID: 4242
+        )
+        let before = try #require(fixture.lease("anchor-4242"))
+
+        let response = await fixture.acquire(.anchor, level: "lid", watchPid: 4242, reason: "agent's")
+
+        #expect(wireFailure(response) == denied("Lid mode not approved (lid mode for agents is set to Never) Your lease is unchanged."))
+        #expect(fixture.lease("anchor-4242") == before)
+    }
+
     @Test func askLeavesAPersonsLidLeaseAlone() async throws {
         let fixture = RequestFixture.agent()
         fixture.knobs.settings.agentLidApproval = .alwaysAsk

@@ -72,6 +72,16 @@ final class FakeLidApprover: LidApproving {
     }
 }
 
+/// The app's `agentLidGrants` default, in memory.
+@MainActor
+final class MemoryAgentLidGrants {
+    var grants: [String: Double] = [:]
+
+    var record: AgentLidRecord {
+        AgentLidRecord(read: { self.grants }, write: { self.grants = $0 })
+    }
+}
+
 @MainActor
 struct RequestFixture {
     let knobs = RequestKnobs()
@@ -84,16 +94,24 @@ struct RequestFixture {
     let windowApprover = FakeWindowApprover()
     let windowCenter: WindowApprovalCenter?
     let caller: Caller
+    /// The engine's saved lease table; a fixture made over another's `leaseStore` is that app relaunched.
+    let leaseStore: MemoryStore
+    /// What the handler's `agentLidRecord` saves, in place of the app's defaults.
+    let agentLidGrants: MemoryAgentLidGrants
 
     /// `table` is the caller's ancestry; `callerPID` is where agent detection starts.
     init(
         processes: any ProcessInspecting = AliveProcesses(), table: FakeProcessTable = FakeProcessTable(), callerPID: Int32 = 77,
-        windowCenter: WindowApprovalCenter? = nil
+        windowCenter: WindowApprovalCenter? = nil, leaseStore: MemoryStore? = nil, agentLidGrants: MemoryAgentLidGrants? = nil
     ) {
         let knobs = knobs
         caller = Caller(uid: 501, pid: callerPID)
+        let leaseStore = leaseStore ?? MemoryStore()
+        let agentLidGrants = agentLidGrants ?? MemoryAgentLidGrants()
+        self.leaseStore = leaseStore
+        self.agentLidGrants = agentLidGrants
         let engine = AwakeEngine(
-            assertions: NullAssertions(), store: MemoryStore(), processes: processes,
+            assertions: NullAssertions(), store: leaseStore, processes: processes,
             lid: LidController(helper: FakeLidHelper()), settings: { knobs.settings }, now: { knobs.clock }
         )
         self.engine = engine
@@ -104,7 +122,8 @@ struct RequestFixture {
             processes: table, approver: approver, updateSettings: { change in change(&knobs.settings) },
             notificationStatus: { knobs.notifications }, poster: poster,
             windowsState: { knobs.windowsState }, arranger: { knobs.arranger },
-            windowApprover: windowCenter.map { $0 as any WindowApproving } ?? windowApprover
+            windowApprover: windowCenter.map { $0 as any WindowApproving } ?? windowApprover,
+            agentLidRecord: agentLidGrants.record
         )
     }
 

@@ -68,8 +68,12 @@ final class RequestHandler {
     var deniedLid: [String: (created: Date, until: Date)] = [:]
     /// Leases with an ask under way, from before its first suspension until it's answered: at most one ask per lease.
     var asking: Set<String> = []
-    /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
-    var agentLid: [String: Date] = [:]
+    /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back. Saved
+    /// to `agentLidRecord` on every change, so it survives a relaunch.
+    var agentLid: [String: Date] = [:] {
+        didSet { if agentLid != oldValue { agentLidRecord.save(agentLid) } }
+    }
+    let agentLidRecord: AgentLidRecord
     /// When each caller last posted with `notify`, by name (and by `pid-<pid>` for an MCP client), for the rate limit.
     var lastNotified: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
@@ -81,7 +85,7 @@ final class RequestHandler {
         approver: any LidApproving, updateSettings: @escaping @MainActor ((inout AwakeSettings) -> Void) -> Void,
         notificationStatus: @escaping @MainActor () async -> String?, poster: any NotificationPosting,
         windowsState: @escaping @MainActor () -> WindowsController.State, arranger: @escaping @MainActor () -> Arranger?,
-        windowApprover: any WindowApproving
+        windowApprover: any WindowApproving, agentLidRecord: AgentLidRecord
     ) {
         self.engine = engine
         self.settings = settings
@@ -96,6 +100,7 @@ final class RequestHandler {
         self.windowsState = windowsState
         self.arranger = arranger
         self.windowApprover = windowApprover
+        self.agentLidRecord = agentLidRecord
     }
 
     func handle(_ request: Request, from caller: Caller) async -> Response {

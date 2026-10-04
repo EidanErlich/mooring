@@ -6,6 +6,9 @@ extension AwakeSettings: @retroactive Defaults.Serializable {}
 extension Defaults.Keys {
     /// Everything the awake engine reads from Settings, stored as one Codable value.
     static let awake = Key<AwakeSettings>("awake", default: AwakeSettings())
+    /// Leases given lid mode on an agent's behalf: lease id → the lease's creation time, in seconds since 1970. Not a
+    /// setting: the request handler's record, kept so Never can still take that lid back after a relaunch.
+    static let agentLidGrants = Key<[String: Double]>("agentLidGrants", default: [:])
     /// Settings → General: left click opens the dropdown, right click toggles.
     static let swapClickActions = Key<Bool>("swapClickActions", default: false)
     /// Settings → Windows: the window manager. Off until turned on; stays true while Accessibility is revoked.
