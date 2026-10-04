@@ -8,6 +8,13 @@ public struct WindowMenuAction: Identifiable, Equatable, Sendable {
     public let title: String
     public let shortcut: String?
     public let group: String
+
+    public init(id: String, title: String, shortcut: String?, group: String) {
+        self.id = id
+        self.title = title
+        self.shortcut = shortcut
+        self.group = group
+    }
 }
 
 public struct WindowKeybind: Equatable, Sendable {

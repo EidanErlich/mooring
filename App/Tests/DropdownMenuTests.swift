@@ -2,6 +2,7 @@ import AppKit
 import AwakeKit
 import Foundation
 import Testing
+import WindowKit
 @testable import Mooring
 
 @MainActor
@@ -15,12 +16,15 @@ struct DropdownMenuTests {
         runningApps: @escaping () -> [NSRunningApplication] = { [] },
         model: DropdownModel = DropdownModel(),
         needsLidConfirmation: @escaping () -> Bool = { false },
-        confirmLidOnBattery: @escaping () -> Void = {}
+        confirmLidOnBattery: @escaping () -> Void = {},
+        windows: WindowsController? = nil,
+        windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil })
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
         let menu = DropdownMenu(engine: engine, model: model, helperEnabled: helperEnabled,
                                 runningApps: runningApps, openSettings: {},
+                                windows: windows ?? makeWindows(.off), windowActions: windowActions,
                                 needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery)
         return (menu, engine)
     }
@@ -34,7 +38,7 @@ struct DropdownMenuTests {
     }
 
     @Test func rootItemsInOrder() {
-        #expect(ids(makeMenu().root) == ["header", "-", "awake", "-", "settings", "quit"])
+        #expect(ids(makeMenu().root) == ["header", "-", "awake", "windows", "-", "settings", "quit"])
         #expect(makeMenu().root.item(withTitle: "Awake")?.submenu != nil)
     }
 
@@ -211,5 +215,137 @@ struct DropdownMenuTests {
         menu.menuWillOpen(menu.root)
         menu.requestLid { ran += 1 }
         #expect(confirms == 0 && ran == 1)
+    }
+}
+
+// MARK: Windows ›
+
+extension DropdownMenuTests {
+    private static let primary = [
+        WindowMenuAction(id: "leftHalf", title: "Left Half", shortcut: "⌃⌥←", group: "Halves"),
+        WindowMenuAction(id: "rightHalf", title: "Right Half", shortcut: "⌃⌥→", group: "Halves"),
+        WindowMenuAction(id: "maximize", title: "Maximize", shortcut: "⌃⌥↩", group: "General"),
+        WindowMenuAction(id: "center", title: "Center", shortcut: nil, group: "General"),
+        WindowMenuAction(id: "nextScreen", title: "Next Screen", shortcut: nil, group: "Screen Switching")
+    ]
+    private static let others = [
+        WindowMenuAction(id: "topHalf", title: "Top Half", shortcut: nil, group: "Halves"),
+        WindowMenuAction(id: "topLeftQuarter", title: "Top Left Quarter", shortcut: nil, group: "Quarters")
+    ]
+
+    /// A real controller over fakes; `trusted` and `enabled` pick the state it reaches.
+    private func makeWindows(_ state: WindowsController.State) -> WindowsController {
+        let controller = WindowsController(
+            trust: FakeTrust(trusted: state == .on), makeRuntime: { FakeRuntime() },
+            settings: FakeSettings(enabled: state != .off), clock: FakeClock())
+        controller.launch()
+        #expect(controller.state == state)
+        return controller
+    }
+
+    private func titles(_ menu: NSMenu) -> [String] {
+        menu.items.map { $0.isSeparatorItem ? "-" : $0.title }
+    }
+
+    private func windowsMenu(
+        _ state: WindowsController.State, pid: @escaping () -> pid_t? = { nil },
+        calls: Calls = Calls(), hidden: Set<String> = []
+    ) -> WindowsFixture {
+        let windows = makeWindows(state)
+        let actions = WindowActions(
+            menuActions: { primary in
+                calls.menuActionCalls += 1
+                return (primary ? Self.primary : Self.others).filter { !hidden.contains($0.id) }
+            },
+            perform: { calls.performed.append(Performed(action: $0, pid: $1)) }, frontmostPID: pid)
+        let (menu, _) = makeMenuAndEngine(windows: windows, windowActions: actions)
+        menu.menuWillOpen(menu.root)
+        return WindowsFixture(menu: menu, windows: windows, calls: calls)
+    }
+
+    struct WindowsFixture {
+        let menu: DropdownMenu
+        let windows: WindowsController
+        let calls: Calls
+    }
+
+    struct Performed: Equatable {
+        let action: String
+        let pid: pid_t
+    }
+
+    final class Calls {
+        var menuActionCalls = 0
+        var performed: [Performed] = []
+    }
+
+    @Test func windowsOffShowsTurnOnOnly() {
+        let fixture = windowsMenu(.off)
+        let (menu, calls) = (fixture.menu, fixture.calls)
+        #expect(ids(menu.root).contains("windows"))
+        #expect(menu.root.item(withTitle: "Windows")?.submenu === menu.windowsSubmenu.menu)
+        #expect(titles(menu.windowsSubmenu.menu) == ["Turn On…"])
+        #expect(calls.menuActionCalls == 0)
+    }
+
+    @Test func windowsOnShowsPrimaryActionsMoreAndSwitch() {
+        let menu = windowsMenu(.on).menu
+        let submenu = menu.windowsSubmenu.menu
+        #expect(titles(submenu) == ["Left Half", "Right Half", "Maximize", "Center", "Next Screen", "More Actions", "-", "Window Manager"])
+        #expect(submenu.items.compactMap { ($0.representedObject as? WindowMenuAction)?.shortcut } == ["⌃⌥←", "⌃⌥→", "⌃⌥↩"])
+        #expect(submenu.items.first { $0.title == "More Actions" }?.submenu === menu.windowsSubmenu.more)
+    }
+
+    @Test func moreActionsAreGroupedUnderDisabledHeaders() {
+        let menu = windowsMenu(.on).menu
+        let more = menu.windowsSubmenu.more
+        menu.windowsSubmenu.menuNeedsUpdate(more)
+        #expect(titles(more) == ["Halves", "Top Half", "Quarters", "Top Left Quarter"])
+        #expect(more.items.filter { !$0.isEnabled }.map(\.title) == ["Halves", "Quarters"])
+    }
+
+    @Test func windowManagerSwitchTurnsWindowsOffAndOn() async {
+        let fixture = windowsMenu(.on)
+        let (menu, windows) = (fixture.menu, fixture.windows)
+        menu.windowsSubmenu.setWindowManager(false)
+        #expect(windows.state == .off)
+        menu.windowsSubmenu.setWindowManager(true)
+        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+        #expect(windows.state == .on)
+    }
+
+    @Test func actionTargetsAppFrontmostBeforeOpen() {
+        var frontmost: pid_t? = 111
+        let fixture = windowsMenu(.on, pid: { frontmost })
+        let (menu, calls) = (fixture.menu, fixture.calls)
+        frontmost = 222  // Mooring or another app activated since the menu opened
+        menu.windowsSubmenu.perform("leftHalf")
+        #expect(calls.performed.count == 1)
+        #expect(calls.performed == [Performed(action: "leftHalf", pid: 111)])
+    }
+
+    @Test func hiddenCapabilityActionsAreAbsent() {
+        let menu = windowsMenu(.on, hidden: ["rightHalf", "topHalf"]).menu
+        #expect(titles(menu.windowsSubmenu.menu)
+            == ["Left Half", "Maximize", "Center", "Next Screen", "More Actions", "-", "Window Manager"])
+        menu.windowsSubmenu.menuNeedsUpdate(menu.windowsSubmenu.more)
+        #expect(titles(menu.windowsSubmenu.more) == ["Quarters", "Top Left Quarter"])
+    }
+
+    @Test func needsAccessibilityShowsReasonAndTurnOn() {
+        let fixture = windowsMenu(.needsAccessibility)
+        let (menu, calls) = (fixture.menu, fixture.calls)
+        let submenu = menu.windowsSubmenu.menu
+        #expect(titles(submenu) == ["Windows needs Accessibility", "Turn On…"])
+        #expect(submenu.items[0].isEnabled == false && submenu.items[1].isEnabled)
+        #expect(calls.menuActionCalls == 0)
+    }
+
+    @Test func submenuFollowsTheStateWhileOpen() async {
+        let fixture = windowsMenu(.on)
+        let (menu, windows) = (fixture.menu, fixture.windows)
+        windows.turnOff()
+        for _ in 0..<5 { await Task.yield() }
+        #expect(titles(menu.windowsSubmenu.menu) == ["Turn On…"])
     }
 }

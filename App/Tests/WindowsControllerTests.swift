@@ -5,7 +5,7 @@ import WindowKit
 @testable import Mooring
 
 @MainActor
-private final class FakeTrust: AccessibilityTrust {
+final class FakeTrust: AccessibilityTrust {
     var trusted: Bool
     var calls = 0
     var panesOpened = 0
@@ -25,7 +25,7 @@ private final class FakeTrust: AccessibilityTrust {
 }
 
 @MainActor
-private final class FakeRuntime: WindowsRuntime {
+final class FakeRuntime: WindowsRuntime {
     var starts = 0
     var stops = 0
     private(set) var isRunning = false
@@ -42,7 +42,7 @@ private final class FakeRuntime: WindowsRuntime {
 }
 
 @MainActor
-private final class FakeSettings: WindowsSettings {
+final class FakeSettings: WindowsSettings {
     var windowsEnabled: Bool
 
     init(enabled: Bool) {
@@ -52,7 +52,7 @@ private final class FakeSettings: WindowsSettings {
 
 /// A clock the test moves by hand; `advance` fires the scheduled tick at each interval it passes.
 @MainActor
-private final class FakeClock: WindowsClock {
+final class FakeClock: WindowsClock {
     private(set) var now = Date(timeIntervalSince1970: 0)
     private(set) var interval: TimeInterval?
     private var nextFire: Date?
