@@ -111,11 +111,18 @@ final class WindowsSubmenu: NSObject, NSMenuDelegate {
         menu.removeAllItems()
         switch state {
         case .on:
-            for action in actions.menuActions(true) { menu.addItem(row(action, prefix: "windows.action.")) }
-            let moreItem = NSMenuItem(title: "More Actions", action: nil, keyEquivalent: "")
-            moreItem.identifier = NSUserInterfaceItemIdentifier("windows.more")
-            moreItem.submenu = more
-            menu.addItem(moreItem)
+            let primary = actions.menuActions(true)
+            if primary.isEmpty && actions.menuActions(false).isEmpty {
+                // Window-id lookup failed, so every action is hidden: say why instead of an empty More Actions.
+                menu.addItem(caption(id: "windows.unavailable", "Window actions aren't available on this version of macOS",
+                                     font: .body))
+            } else {
+                for action in primary { menu.addItem(row(action, prefix: "windows.action.")) }
+                let moreItem = NSMenuItem(title: "More Actions", action: nil, keyEquivalent: "")
+                moreItem.identifier = NSUserInterfaceItemIdentifier("windows.more")
+                moreItem.submenu = more
+                menu.addItem(moreItem)
+            }
             menu.addItem(.separator())
             menu.addItem(DropdownMenu.hostedItem(id: "windows.manager", title: "Window Manager") {
                 SwitchRow(title: "Window Manager", isOn: Binding(

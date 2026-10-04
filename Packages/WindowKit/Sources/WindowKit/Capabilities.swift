@@ -20,6 +20,9 @@ public struct Capabilities: Sendable, Equatable {
     /// SkyLight window effects: background blur, window capture, and the icon appearance cache. Mooring
     /// shows nothing that needs them (wallpaper capture falls back to the public API).
     public let windowEffects: Bool
+    /// MultitouchSupport, which Subsurface loads at run time for trackpad gestures. Without it the
+    /// Gestures page and the gesture triggers are hidden.
+    public let multitouch: Bool
 
     static let windowIDSymbols = [
         "_AXUIElementGetWindow",
@@ -60,6 +63,9 @@ public struct Capabilities: Sendable, Equatable {
         "OBJC_CLASS_$_SLSIconAppearanceConfiguration"
     ]
 
+    /// One of the MultitouchSupport functions Subsurface binds; it lists the trackpads.
+    static let multitouchSymbols = ["MTDeviceCreateList"]
+
     public static let live = Capabilities(loadSymbol: Capabilities.liveSymbol)
 
     public init(loadSymbol: (String) -> UnsafeMutableRawPointer?) {
@@ -73,6 +79,7 @@ public struct Capabilities: Sendable, Equatable {
         windowFocus = all(Self.frontProcessSymbols)
         windowDetails = all(Self.windowDetailSymbols)
         windowEffects = all(Self.windowEffectSymbols)
+        multitouch = all(Self.multitouchSymbols)
     }
 
     /// Action ids whose feature failed. Without window id lookup no action can find its window.
@@ -105,7 +112,8 @@ public struct Capabilities: Sendable, Equatable {
             ("stash", stash),
             ("window focus", windowFocus),
             ("window details", windowDetails),
-            ("window effects", windowEffects)
+            ("window effects", windowEffects),
+            ("multitouch", multitouch)
         ]
         .filter { !$0.1 }
         .map(\.0)
@@ -116,15 +124,18 @@ public struct Capabilities: Sendable, Equatable {
 
 extension Capabilities {
     private static let skyLightHandle = SymbolHandle(dlopen("/System/Library/PrivateFrameworks/SkyLight.framework/SkyLight", RTLD_LAZY))
+    private static let multitouchHandle = SymbolHandle(
+        dlopen("/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport", RTLD_LAZY))
     private static let processHandle = SymbolHandle(dlopen(nil, RTLD_LAZY))
 
-    /// Looks a symbol up in SkyLight, then in everything already loaded.
+    /// Looks a symbol up in SkyLight, then in MultitouchSupport, then in everything already loaded.
     static func liveSymbol(_ name: String) -> UnsafeMutableRawPointer? {
-        if let pointer = skyLightHandle.pointer, let symbol = dlsym(pointer, name) {
-            return symbol
+        for handle in [skyLightHandle, multitouchHandle, processHandle] {
+            if let pointer = handle.pointer, let symbol = dlsym(pointer, name) {
+                return symbol
+            }
         }
-        guard let pointer = processHandle.pointer else { return nil }
-        return dlsym(pointer, name)
+        return nil
     }
 
     /// A `dlopen` handle, which stays valid for the life of the process.

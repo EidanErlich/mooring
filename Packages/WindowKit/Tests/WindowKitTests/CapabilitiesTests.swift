@@ -16,6 +16,7 @@ extension WindowKitGlobalStateTests {
             #expect(!failing.skyLightMoves)
             #expect(!failing.stash)
             #expect(!failing.windowFocus)
+            #expect(!failing.multitouch)
             #expect(failing.hidden.isSuperset(of: ["LeftHalf", "Maximize", "NextScreen", "NextSpace", "Stash", "FocusLeft"]))
 
             Capabilities.active = failing
@@ -88,6 +89,27 @@ extension WindowKitGlobalStateTests {
             #expect(SkyLightToolBelt.bestManagedDisplayID(forCGPoint: .zero) == nil)
         }
 
+        /// Without MultitouchSupport, gestures are logged once and reported unavailable; window actions stay.
+        @Test func failedMultitouchIsLoggedAndHidesGestures() {
+            let multitouchSymbols = Set(Capabilities.multitouchSymbols)
+            let caps = Capabilities(loadSymbol: { name in
+                multitouchSymbols.contains(name) ? nil : Capabilities.liveSymbol(name)
+            })
+            #expect(!caps.multitouch)
+            #expect(caps.windowIDLookup)
+            #expect(caps.hidden.isEmpty)
+            #expect(caps.failedFeatures == ["multitouch"])
+            Capabilities.forgetLoggedFailures()
+            #expect(caps.logFailures() == ["multitouch"])
+            #expect(caps.logFailures().isEmpty)
+
+            Capabilities.active = caps
+            defer { Capabilities.active = .live }
+            #expect(!WindowKit.gesturesAvailable)
+            Capabilities.active = .live
+            #expect(WindowKit.gesturesAvailable)
+        }
+
         @Test func everyLoaderSymbolIsChecked() {
             let checked = Set(Capabilities.windowIDSymbols + Capabilities.spaceMoveSymbols + Capabilities.frontProcessSymbols
                 + Capabilities.windowDetailSymbols + Capabilities.windowEffectSymbols)
@@ -110,6 +132,7 @@ extension WindowKitGlobalStateTests {
             #expect(Capabilities.live.windowFocus)
             #expect(Capabilities.live.windowDetails)
             #expect(Capabilities.live.windowEffects)
+            #expect(Capabilities.live.multitouch)
             #expect(Capabilities.live.hidden.isEmpty)
             #expect(Capabilities.live.hiddenSettings.isEmpty)
         }

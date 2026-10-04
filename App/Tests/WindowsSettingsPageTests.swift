@@ -47,6 +47,26 @@ extension WindowKitGlobalStateTests {
             #expect(WindowKit.instantiatedSingletons == before)
         }
 
+        /// Without MultitouchSupport the Gestures page lays out its banner and never builds Loop's page.
+        @Test func unavailableGesturesPageBuildsNoLoopPage() {
+            let builder = CountingBuilder()
+            let page = WindowsSettingsPage(page: .windowsGestures, windows: .fake(.on), loopPage: builder.build,
+                                           gesturesAvailable: { false })
+            let size = layOut(page)
+            #expect(size.width > 0 && size.height > 0)
+            #expect(builder.built.isEmpty)
+        }
+
+        /// Off means off: the multitouch check isn't even asked for until Windows is on.
+        @Test func offPagesNeverAskForGestures() {
+            var asked = 0
+            for state in [WindowsController.State.off, .waitingForTrust, .needsAccessibility] {
+                _ = layOut(WindowsSettingsPage(page: .windowsGestures, windows: .fake(state), loopPage: CountingBuilder().build,
+                                               gesturesAvailable: { asked += 1; return true }))
+            }
+            #expect(asked == 0)
+        }
+
         /// Loop's Luminare pages lay out in Mooring's detail area. Building them creates Loop's singletons.
         @Test func onPagesLayOutLoopsPages() {
             let builder = CountingBuilder()

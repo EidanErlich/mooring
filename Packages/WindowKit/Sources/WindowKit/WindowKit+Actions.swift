@@ -60,6 +60,11 @@ extension WindowKit {
 
     /// `primary: true` gives the dropdown's five actions; `false` gives the rest, in Loop's groups.
     /// Actions whose private-API feature failed are left out of both.
+    /// Whether this Mac can run Loop's trackpad gestures (MultitouchSupport loads). False hides the Gestures page.
+    public static var gesturesAvailable: Bool {
+        Capabilities.active.multitouch
+    }
+
     public static func menuActions(primary: Bool) -> [WindowMenuAction] {
         let hidden = Capabilities.active.hidden
         let shortcuts = shortcutsByDirection()

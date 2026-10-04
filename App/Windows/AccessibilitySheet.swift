@@ -40,11 +40,23 @@ final class AccessibilitySheetWindow: AccessibilitySheetPresenting {
         self.controller = controller
     }
 
+    /// Space between the sheet and the screen's top-left corner.
+    static let margin: CGFloat = 20
+
+    /// The sheet's top-left point: the top left of the main screen, clear of System Settings, which opens centred.
+    static func topLeft(in visibleFrame: NSRect) -> NSPoint {
+        NSPoint(x: visibleFrame.minX + margin, y: visibleFrame.maxY - margin)
+    }
+
     func show() {
         let window = window ?? makeWindow()
         self.window = window
         NSApp.activate()
-        window.center()
+        if let screen = NSScreen.main ?? NSScreen.screens.first {
+            window.setFrameTopLeftPoint(Self.topLeft(in: screen.visibleFrame))
+        } else {
+            window.center()
+        }
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -53,7 +65,7 @@ final class AccessibilitySheetWindow: AccessibilitySheetPresenting {
         window = nil
     }
 
-    private func makeWindow() -> NSWindow {
+    func makeWindow() -> NSWindow {
         let sheet = AccessibilitySheet(
             openSettingsPane: { [weak controller] in controller?.openSettingsPane() },
             cancel: { [weak controller] in controller?.cancelTurnOn() }
@@ -62,7 +74,7 @@ final class AccessibilitySheetWindow: AccessibilitySheetPresenting {
         window.styleMask = [.titled]
         window.titleVisibility = .hidden
         window.isReleasedWhenClosed = false
-        window.level = .floating
+        window.level = .normal
         return window
     }
 }

@@ -124,6 +124,14 @@ extension DropdownMenuTests {
         #expect(titles(menu.windowsSubmenu.more) == ["Quarters", "Top Left Quarter"])
     }
 
+    /// Without window-id lookup every action is hidden: a reason instead of an empty More Actions.
+    @Test func noWindowActionsShowsWhyInsteadOfMore() {
+        let all = Set((Self.primary + Self.others).map(\.id))
+        let submenu = windowsMenu(.on, hidden: all).menu.windowsSubmenu.menu
+        #expect(titles(submenu) == ["Window actions aren't available on this version of macOS", "-", "Window Manager"])
+        #expect(submenu.items.first?.isEnabled == false)
+    }
+
     @Test func needsAccessibilityShowsReasonTurnOnAndTurnOff() {
         let fixture = windowsMenu(.needsAccessibility)
         let (menu, calls) = (fixture.menu, fixture.calls)

@@ -5,6 +5,8 @@ import WindowKit
 enum WindowsPageContent: Equatable {
     /// Only the "Windows is off" banner: Loop's page isn't built, so nothing in WindowKit is created.
     case offBanner
+    /// Windows is on but this Mac can't run the page's feature: a banner with this title, and no Loop page.
+    case unavailableBanner(String)
     case loopPage(WindowSettingsPage)
 }
 
@@ -27,10 +29,16 @@ extension SettingsPage {
         self == .windowsBehavior
     }
 
-    /// Loop's page once Windows is on; the off banner alone otherwise.
-    func windowsContent(for state: WindowsController.State) -> WindowsPageContent? {
+    /// Loop's page once Windows is on; the off banner alone otherwise. Gestures needs MultitouchSupport,
+    /// which is only asked about once Windows is on.
+    func windowsContent(for state: WindowsController.State,
+                        gesturesAvailable: @autoclosure () -> Bool = true) -> WindowsPageContent? {
         guard let page = windowSettingsPage else { return nil }
-        return state == .on ? .loopPage(page) : .offBanner
+        guard state == .on else { return .offBanner }
+        if page == .gestures && !gesturesAvailable() {
+            return .unavailableBanner(WindowsPageBanner.gesturesUnavailableTitle)
+        }
+        return .loopPage(page)
     }
 }
 
@@ -41,6 +49,8 @@ struct WindowsSettingsPage: View {
     let windows: WindowsController
     /// Builds Loop's page; called only while Windows is on. Tests inject a counting builder.
     var loopPage: @MainActor (WindowSettingsPage) -> AnyView = WindowSettingsPage.view
+    /// Whether MultitouchSupport loaded; asked only while Windows is on. Tests inject an answer.
+    var gesturesAvailable: @MainActor () -> Bool = { WindowKit.gesturesAvailable }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,9 +58,11 @@ struct WindowsSettingsPage: View {
                 WindowManagerToggle(windows: windows)
                 Divider()
             }
-            switch page.windowsContent(for: windows.state) {
+            switch page.windowsContent(for: windows.state, gesturesAvailable: gesturesAvailable()) {
             case .offBanner:
                 WindowsPageBanner(turnOn: windows.turnOn)
+            case .unavailableBanner(let title):
+                WindowsPageBanner(title: title, turnOn: nil)
             case .loopPage(let page):
                 loopPage(page)
             case nil:
@@ -85,18 +97,23 @@ struct WindowManagerToggle: View {
     }
 }
 
-/// Shown in place of Loop's page while Windows isn't on.
+/// Shown in place of Loop's page while Windows isn't on, or when this Mac can't run the page's feature.
 struct WindowsPageBanner: View {
     static let title = "Windows is off"
     static let turnOnTitle = "Turn On…"
+    static let gesturesUnavailableTitle = "Gestures aren't available on this Mac"
 
-    let turnOn: () -> Void
+    var title = Self.title
+    /// Nil when there's nothing to turn on.
+    let turnOn: (() -> Void)?
 
     var body: some View {
         Form {
             Section {
-                LabeledContent(Self.title) {
-                    Button(Self.turnOnTitle, action: turnOn)
+                LabeledContent(title) {
+                    if let turnOn {
+                        Button(Self.turnOnTitle, action: turnOn)
+                    }
                 }
             }
         }

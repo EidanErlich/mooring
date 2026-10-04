@@ -34,6 +34,8 @@ final class LoopManager {
     private var shouldCancelOpening: Bool = false
     private var hideIndicatorOnNoSelection = false
     private var actionRevision: UInt64 = 0
+    /// Mooring: bumped by `shutdown()`, so an opening suspended across a stop can tell.
+    private(set) var shutdownCount: UInt64 = 0
 
     private(set) var isLoopActive: Bool = false {
         didSet {
@@ -168,7 +170,7 @@ final class LoopManager {
                 if status {
                     await keybindTrigger.start()
                     middleClickTrigger.start()
-                    if Defaults[.enableGestures] {
+                    if Defaults[.enableGestures], Capabilities.active.multitouch {
                         multitouchTrigger.start()
                     }
                 } else {
@@ -183,7 +185,7 @@ final class LoopManager {
             for await enabled in Defaults.updates(.enableGestures, initial: false) {
                 guard let self, !Task.isCancelled else { break }
 
-                if enabled, AccessibilityManager.shared.isGranted {
+                if enabled, AccessibilityManager.shared.isGranted, Capabilities.active.multitouch {
                     multitouchTrigger.start()
                 } else {
                     multitouchTrigger.stop()
@@ -192,8 +194,15 @@ final class LoopManager {
         }
     }
 
+    /// Mooring: whether an opening that began in `session` must give up: it was cancelled, or
+    /// Windows stopped since (even if it started again).
+    func openingWasAbandoned(since session: UInt64) -> Bool {
+        shouldCancelOpening || session != shutdownCount
+    }
+
     func shutdown() {
         actionRevision += 1
+        shutdownCount += 1
 
         accessibilityCheckerTask?.cancel()
         accessibilityCheckerTask = nil
@@ -210,7 +219,7 @@ final class LoopManager {
 
         isLoopOpening = false
         pendingOpeningAction = nil
-        shouldCancelOpening = false
+        shouldCancelOpening = true
         isLoopActive = false
         hasParentCycleActionMirror.withLock { $0 = false }
     }
@@ -289,6 +298,7 @@ extension LoopManager {
         }
 
         actionRevision += 1
+        let session = shutdownCount
         isLoopOpening = true
         self.hideIndicatorOnNoSelection = hideIndicatorOnNoSelection
         pendingOpeningAction = nil
@@ -324,7 +334,7 @@ extension LoopManager {
         )
         await resizeContext.refreshResolvedState()
 
-        guard !shouldCancelOpening else {
+        guard !openingWasAbandoned(since: session) else {
             return .cancelled
         }
 

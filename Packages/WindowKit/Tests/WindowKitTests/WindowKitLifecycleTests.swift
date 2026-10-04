@@ -53,6 +53,23 @@ extension WindowKitGlobalStateTests {
             #expect(visibleWindowKitPanels() == 0)
         }
 
+        /// A stop while the radial menu is still opening makes the opening give up after its waits, even
+        /// if Windows starts again meanwhile. `openLoop` itself needs real Accessibility trust, which tests
+        /// can't have, so this checks the condition it tests after its waits.
+        @Test func stopDuringOpeningShowsNothing() {
+            _ = NSApplication.shared
+            let kit = WindowKit()
+            kit.start()
+            let session = LoopManager.shared.shutdownCount
+            kit.stop()
+            #expect(LoopManager.shared.openingWasAbandoned(since: session))
+            kit.start()
+            #expect(LoopManager.shared.openingWasAbandoned(since: session))
+            kit.stop()
+            #expect(!LoopManager.shared.isLoopActive)
+            #expect(visibleWindowKitPanels() == 0)
+        }
+
         @Test func noSingletonsBeforeStart() async {
             await #expect(processExitsWith: .success) {
                 let created = await MainActor.run {

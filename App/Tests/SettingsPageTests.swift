@@ -41,6 +41,18 @@ struct SettingsPageTests {
         #expect(WindowsPageBanner.turnOnTitle == "Turn On…")
     }
 
+    /// Without MultitouchSupport the Gestures page is a banner while Windows is on; the other pages are unaffected.
+    @Test func gesturesPageShowsUnavailableBannerWithoutMultitouch() {
+        #expect(WindowsPageBanner.gesturesUnavailableTitle == "Gestures aren't available on this Mac")
+        #expect(SettingsPage.windowsGestures.windowsContent(for: .on, gesturesAvailable: false)
+            == .unavailableBanner(WindowsPageBanner.gesturesUnavailableTitle))
+        #expect(SettingsPage.windowsGestures.windowsContent(for: .on, gesturesAvailable: true) == .loopPage(.gestures))
+        #expect(SettingsPage.windowsGestures.windowsContent(for: .off, gesturesAvailable: false) == .offBanner)
+        for page in windowsPages where page != .windowsGestures {
+            #expect(page.windowsContent(for: .on, gesturesAvailable: false) == page.windowSettingsPage.map(WindowsPageContent.loopPage))
+        }
+    }
+
     @Test func behaviorPageHasWindowManagerToggle() {
         #expect(windowsPages.filter(\.hasWindowManagerToggle) == [.windowsBehavior])
         #expect(WindowManagerToggle.title == "Window Manager")
