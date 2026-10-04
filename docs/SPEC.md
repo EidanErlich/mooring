@@ -598,7 +598,7 @@ Maccy's paste action (level 4) needs the same permission, so granting it once co
 
 *As built in stage 3b.* An agent arranges windows from a plain request ("Chrome on the right half, iTerm bottom left, Slack top left") by reading the current windows, sending one plan, and reporting what landed. Mooring holds the Accessibility permission and does the matching and moving; the agent never needs Accessibility itself.
 
-**Where the work happens.** In the app, through four socket ops: `win.list`, `win.arrange`, `win.undo` (optional `client`) and `win.layout`. The CLI and the MCP server only relay them. `WindowSystem` (a protocol in WindowKit, with a live implementation over Loop's `Window` and the Accessibility API) and the `Arranger` (in the app, pure over `WindowSystem`) do the matching, resolving, applying, undo and layouts; `RequestHandler+Windows.swift` gates every request.
+**Where the work happens.** In the app, through four socket ops: `win.list` and `win.undo` (each with an optional `client`), `win.arrange` and `win.layout`. The CLI and the MCP server only relay them. `WindowSystem` (a protocol in WindowKit, with a live implementation over Loop's `Window` and the Accessibility API) and the `Arranger` (in the app, pure over `WindowSystem`) do the matching, resolving, applying, undo and layouts; `RequestHandler+Windows.swift` gates every request.
 
 **The flow for one request:**
 
@@ -659,7 +659,7 @@ Maccy's paste action (level 4) needs the same permission, so granting it once co
 **Gating.** Settings → Agents → "Window arrangement by agents" (`AwakeSettings.agentWindows`): **Automatic** (default) · Ask first · Off, with the caption "Agents can move and resize your windows with `mooring win` and MCP. Windows must be on."
 
 - **Windows off** (the `WindowsController` state isn't on): every `win` op, `list` included, is `denied` with "Windows is off. Turn it on in Mooring (Windows › Turn On…)." It never turns Windows on by itself.
-- **Off** (agents): an agent's mutating ops (`win.arrange`, `win.undo` and `win.layout` save, apply and delete) are `denied` with "Window arrangement by agents is off in Settings". Listing windows, listing layouts and `list-regions` are always allowed (while Windows is on).
+- **Off** (agents): every agent `win` op is `denied` with "Window arrangement by agents is off in Settings": `win.arrange`, `win.undo`, every `win.layout` action, and `win.list` too (so `list-regions` and the MCP `list_windows`), since window titles reach an agent only through Mooring's Accessibility. People are unaffected.
 - **Ask first** applies to `win.arrange` (including `win do`) and `win.layout apply`; undo, layout save and delete never ask. It posts a notification (category `mooring.window-approval`) "<Agent> wants to arrange N windows" with the actions **Allow** and **Deny**, and a body that lists at most 6 placements and then "and N more". It waits 60 s; Deny, no answer or unavailable notifications are `denied`, and the last says "Turn on notifications for Mooring in System Settings to approve window arrangement". The mode and the Windows state are checked again right before applying, so a change made while the ask was open takes effect. A layout apply applies exactly the placements that were approved.
 - **People are never asked.** The caller is an agent by the same detection as in Agent control and approvals (process ancestry, an MCP `client`, a link).
 

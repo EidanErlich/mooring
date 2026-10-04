@@ -117,7 +117,7 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
     case status
     case hook(HookArgs)
     case notify(NotifyArgs)
-    case winList
+    case winList(WinListArgs = WinListArgs())
     case winArrange(WinPlan)
     case winUndo(WinUndoArgs)
     case winLayout(WinLayoutArgs)
@@ -129,10 +129,11 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
         case .release(let args): try args.encode(to: encoder)
         case .hook(let args): try args.encode(to: encoder)
         case .notify(let args): try args.encode(to: encoder)
+        case .winList(let args): try args.encode(to: encoder)
         case .winArrange(let args): try args.encode(to: encoder)
         case .winLayout(let args): try args.encode(to: encoder)
         case .winUndo(let args): try args.encode(to: encoder)
-        case .status, .winList:
+        case .status:
             _ = encoder.container(keyedBy: EmptyKeys.self)
         }
     }
@@ -169,7 +170,8 @@ public struct Request: Codable, Sendable, Equatable {
         case .status: args = .status
         case .hook: args = .hook(try container.decode(HookArgs.self, forKey: .args))
         case .notify: args = .notify(try container.decode(NotifyArgs.self, forKey: .args))
-        case .winList: args = .winList
+        // The CLI sends no args (older ones none at all); the MCP server sends its client.
+        case .winList: args = .winList(try container.decodeIfPresent(WinListArgs.self, forKey: .args) ?? WinListArgs())
         case .winArrange: args = .winArrange(try container.decode(WinPlan.self, forKey: .args))
         // The CLI sends no args; the MCP server sends its client.
         case .winUndo: args = .winUndo(try container.decodeIfPresent(WinUndoArgs.self, forKey: .args) ?? WinUndoArgs())

@@ -98,7 +98,7 @@ struct WinList: ParsableCommand, CLICommand {
     @OptionGroup var output: OutputOptions
 
     func execute(_ env: CLIEnvironment) async -> Int32 {
-        await CommandRunner(env: env, options: output).run { .winList }
+        await CommandRunner(env: env, options: output).run { .winList() }
     }
 }
 
@@ -108,7 +108,7 @@ struct WinListRegions: ParsableCommand, CLICommand {
     @OptionGroup var output: OutputOptions
 
     func execute(_ env: CLIEnvironment) async -> Int32 {
-        await CommandRunner(env: env, options: output).run({ .winList }, render: { result in
+        await CommandRunner(env: env, options: output).run({ .winList() }, render: { result in
             guard case .winList(let list) = result else { return "" }
             return list.regions.joined(separator: "\n")
         })

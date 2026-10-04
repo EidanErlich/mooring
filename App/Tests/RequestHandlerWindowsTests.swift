@@ -107,7 +107,7 @@ struct RequestHandlerWindowsTests {
     @Test func windowsOffDeniesEveryOp() async {
         let off = denied("Windows is off. Turn it on in Mooring (Windows › Turn On…).")
         let ops: [RequestArgs] = [
-            .winList, .winArrange(WinPlan(placements: [Self.chromeRight])), .winUndo(WinUndoArgs()),
+            .winList(), .winArrange(WinPlan(placements: [Self.chromeRight])), .winUndo(WinUndoArgs()),
             .winLayout(WinLayoutArgs(action: "list")), .winLayout(WinLayoutArgs(action: "save", name: "coding")),
             .winLayout(WinLayoutArgs(action: "apply", name: "coding"))
         ]
@@ -138,11 +138,15 @@ struct RequestHandlerWindowsTests {
         // An MCP client is an agent too, whatever its ancestry.
         let mcp = WinPlan(placements: [Self.chromeRight], client: "claude-ai")
         #expect(wireFailure(await send(.winArrange(mcp), from: Self.person)) == off)
+        #expect(wireFailure(await send(.winList(WinListArgs(client: "claude-ai")), from: Self.person)) == off)
+        // Listing windows or layouts is refused too: an agent gets nothing.
+        #expect(wireFailure(await send(.winList())) == off)
+        #expect(wireFailure(await send(.winLayout(WinLayoutArgs(action: "list")))) == off)
         #expect(fake.calls.isEmpty)
         #expect(approver.calls.isEmpty)
-        // Reading is still allowed.
-        #expect(await send(.winList).ok)
-        #expect(await send(.winLayout(WinLayoutArgs(action: "list"))).ok)
+        // People still list.
+        #expect(await send(.winList(), from: Self.person).ok)
+        #expect(await send(.winLayout(WinLayoutArgs(action: "list")), from: Self.person).ok)
     }
 
     /// An undo naming an MCP client comes from an agent, whatever the ancestry.
@@ -262,7 +266,7 @@ struct RequestHandlerWindowsTests {
 
     @Test func listNeverAsks() async {
         mode(.askFirst)
-        let response = await send(.winList)
+        let response = await send(.winList())
         guard case .winList(let list)? = response.result else {
             Issue.record("expected a list, got \(response)")
             return

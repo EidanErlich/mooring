@@ -29,7 +29,7 @@ extension RequestHandler {
     /// The reply to a `win.*` request. A request naming an MCP client comes from that client, an agent.
     func windowsResult(_ args: RequestArgs, from caller: Caller) async throws -> ResponseResult {
         switch args {
-        case .winList: .winList(try winList())
+        case .winList(let args): .winList(try winList(from: identified(caller, client: args.client)))
         case .winArrange(let plan): .winArrange(try await winArrange(plan, from: identified(caller, client: plan.client)))
         case .winUndo(let args): .winUndo(try await winUndo(from: identified(caller, client: args.client)))
         case .winLayout(let args): .winLayout(try await winLayout(args, from: identified(caller, client: args.client)))
@@ -37,9 +37,12 @@ extension RequestHandler {
         }
     }
 
-    /// `win.list`: read-only, so it never asks.
-    func winList() throws -> WinListResult {
-        try runningArranger().list()
+    /// `win.list`: read-only, so it never asks; an agent set to Off is refused, as window titles are its to read only
+    /// through Mooring.
+    func winList(from caller: Caller) throws -> WinListResult {
+        let arranger = try runningArranger()
+        try refuseAgentsOff(caller)
+        return arranger.list()
     }
 
     /// `win.arrange`, which `win do` also sends as a one-placement plan.
@@ -68,7 +71,10 @@ extension RequestHandler {
     func winLayout(_ args: WinLayoutArgs, from caller: Caller) async throws -> WinLayoutResult {
         let arranger = try runningArranger()
         let action = args.action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if action == "list" { return try await arranger.layout(args) }
+        if action == "list" {
+            try refuseAgentsOff(caller)
+            return try await arranger.layout(args)
+        }
         let agent = try agentToAsk(caller)
         let name = args.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard action == "apply", !name.isEmpty, let placements = try arranger.layouts.load()[name] else {
@@ -89,9 +95,7 @@ extension RequestHandler {
     private func onItsTurn<T>(for caller: Caller, _ work: (Arranger) async throws -> T) async throws -> T {
         try await windowLock.run {
             let arranger = try runningArranger()
-            if agentProcess(of: caller) != nil && settings().agentWindows == .off {
-                throw WireError(code: .denied, message: WindowApproval.agentsOff)
-            }
+            try refuseAgentsOff(caller)
             return try await work(arranger)
         }
     }
@@ -102,6 +106,13 @@ extension RequestHandler {
             throw WireError(code: .denied, message: WindowApproval.windowsOff)
         }
         return arranger
+    }
+
+    /// `denied` for an agent while agents are set to Off.
+    private func refuseAgentsOff(_ caller: Caller) throws {
+        if agentProcess(of: caller) != nil && settings().agentWindows == .off {
+            throw WireError(code: .denied, message: WindowApproval.agentsOff)
+        }
     }
 
     /// The agent to ask on behalf of, or nil when nobody needs asking: a person, or agents set to Automatic.

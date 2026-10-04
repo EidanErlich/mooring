@@ -88,7 +88,7 @@ extension MCPSession {
     /// the app may ask the user, wait its turn and launch apps.
     func perform(window call: MCPTools.Call) async -> JSONValue {
         switch call {
-        case .listWindows: return await relay(.winList, through: environment.client)
+        case .listWindows: return await relay(.winList(WinListArgs(client: wireClient)), through: environment.client)
         case .arrangeWindows(var plan):
             plan.client = wireClient
             return await relay(.winArrange(plan), through: environment.windowClient)

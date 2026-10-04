@@ -82,7 +82,8 @@ private func winArrangeReply(_ results: [WinPlacementResult], to request: Reques
     var harness = MCPHarness()
     harness.client = ScriptedClient { .success(.failure(id: $0.id, .denied, "Windows is off. Turn it on from the menu bar.")) }
     _ = await harness.run([initialize(), call(2, "list_windows")])
-    #expect(harness.client.requests.first?.args == .winList)
+    // Named as the client, so the app counts it as an agent's (and refuses it when agents are Off).
+    #expect(harness.client.requests.first?.args == .winList(WinListArgs(client: "claude-ai")))
     #expect(harness.windowClient.requests.isEmpty)
     #expect(harness.isError(2) == true)
     #expect(harness.text(2) == "Windows is off. Turn it on from the menu bar.")

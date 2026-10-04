@@ -231,6 +231,15 @@ public struct WinLayoutArgs: Codable, Sendable, Equatable {
     }
 }
 
+/// `win.list`: no args from the CLI; `client` is set only by the MCP server.
+public struct WinListArgs: Codable, Sendable, Equatable {
+    public var client: String?
+
+    public init(client: String? = nil) {
+        self.client = client
+    }
+}
+
 /// `win.undo`: no args from the CLI; `client` is set only by the MCP server.
 public struct WinUndoArgs: Codable, Sendable, Equatable {
     public var client: String?
