@@ -49,7 +49,8 @@ class Storage {
       container = try ModelContainer(for: HistoryItem.self, configurations: config)
     } catch let error {
       // A store that won't open must not take Mooring down; this session's history stays in memory.
-      ClipKitLog.logger.error("Cannot load the clipboard store: \(error.localizedDescription)")
+      // The error's type and code only: its description can carry the store's path.
+      ClipKitLog.logger.error("Cannot load the clipboard store: \(type(of: error)) \((error as NSError).code)")
       // swiftlint:disable:next force_try
       container = try! ModelContainer(for: HistoryItem.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     }

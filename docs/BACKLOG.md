@@ -120,17 +120,18 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **ClipKit code:**
   - `History.load`'s task isn't cancelled on stop;
   - `ModifierFlags`' `deinit` and statics aren't main-actor isolated (theoretical);
-  - the Storage fallback log may include its own path.
+  - after **Delete Clipboard History…** in a session where Clipboard already ran, the SwiftData store stays open on the deleted file (it can't reopen in-process), so if Clipboard is turned back on before Mooring restarts, that session's copies aren't saved to disk and an empty `Clipboard/` folder is recreated.
 - **Settings pages:**
   - `ClipboardOnPage` builds a model on every parent re-render, and the model caches values;
   - `@_exported import KeyboardShortcuts` in ClipKit stands in for linking it from the app;
   - the ignored-app picker removes ".app" with `replacingOccurrences` and silently does nothing for a bundle with no id;
-  - "Ignore all apps except listed" and the preview delay aren't exposed.
+  - the preview delay isn't exposed ("Ignore all apps except listed" is hidden on purpose, SPEC 4.8).
 - **Agent wall:**
   - the parenthesis matcher ignores parentheses inside strings and comments, and trailing closures;
   - there is no `OSAScriptingDefinition` key check in `Info.plist`;
-  - the scan reads Swift source text only, not non-Swift files or linked symbols.
-- **Owner checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint.
+  - the scan reads Swift source text only, not non-Swift files or linked symbols; the `Metadata.appintents` check reads the test host's build and skips if there is none;
+  - hardening idea: also assert the app declares no `NSServices` in `Info.plist` and donates nothing to Core Spotlight (`CSSearchableIndex`), two more routes by which history could leave the app.
+- **Owner checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint (now refreshed when the popup becomes key); holding ⌥ in the open Clipboard submenu swaps Clear for Clear All (the rows are hosted SwiftUI views, and only the `isAlternate` setup is unit-tested); Delete Clipboard History… removes the folder.
 
 ## CLI and IPC (stage 2a leftovers)
 

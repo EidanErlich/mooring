@@ -124,8 +124,8 @@ The dropdown is an `NSMenu` opened from the status item. Native items are used w
  ● On · lid mode · 1h 12m left          hosted, live
  ─────────────────────────────────
  Awake                            ›     submenu
- Windows                          ›     submenu (stage 3)
- Clipboard                        ›     submenu (stage 4)
+ Windows                          ›     submenu
+ Clipboard                        ›     submenu
  ─────────────────────────────────
  Settings…                       ⌘,
  Quit Mooring                    ⌘Q
@@ -135,7 +135,7 @@ The dropdown is an `NSMenu` opened from the status item. Native items are used w
 | --- | --- |
 | **Awake** | On toggle; durations (30 min, 1 h, 2 h, 4 h, 8 h, until turned off); until I open the lid; while an app is running…; keep screen on; allow lid close (on battery: confirmation the first time); **Anchored** list of every lease with owner, reason, time left and ✕ |
 | **Windows** | The most-used actions with their shortcuts (halves, maximize, centre, next screen), More Actions, saved layouts (later), Window Manager on/off |
-| **Clipboard** | While off, **Turn On…**. While on, a submenu with the 10 most recent unpinned items, Pause Recording, Ignore Next Copy, Clear (Clear All with ⌥), and "Search… ⇧⌘C", which opens the Clipboard popup |
+| **Clipboard** | While off, **Turn On…**. While on, a submenu with the 10 most recent unpinned items, Pause Recording, Ignore Next Copy, Clear (Clear All with ⌥), and "Search… ⇧⌘C", which opens the Clipboard popup (4.8) |
 
 A module that's off shows a single **Turn On…** item that walks through its permission (Accessibility), so the dropdown keeps the same shape.
 
@@ -696,7 +696,7 @@ A single **Shortcuts** page (General › Shortcuts) lists every global hotkey ac
 
 ## Part 4: Clipboard history (from Maccy, never exposed to agents)
 
-**Status:** stage 4 (ClipKit, version 0.0.6) is built and reviewed. Maccy@c376789 runs inside Mooring, off by default, with the Clipboard submenu and popup, Settings → Clipboard, the Shortcuts row and the agent wall (4.3, as built). Two criteria in 4.7 are left for the owner check.
+**Status:** stage 4 (ClipKit, version 0.0.6) is built and reviewed. Maccy@c376789 runs inside Mooring, off by default, with the Clipboard submenu and popup, Settings → Clipboard, the Shortcuts row and the agent wall (4.3, as built). The final review's fixes are in: the App Intents wall covers the whole app (4.3), turning Clipboard off honours "Clear history on quit" and Settings can delete saved history (4.4), and the edges in 4.8. Two criteria in 4.7 are left for the owner check.
 
 Level 4 vendors Maccy as a `ClipKit` package, off by default, with the same storage and privacy behaviour as Maccy (no added encryption, decided 2026-09-29). Agents get no clipboard API: no CLI command, MCP tool, App Intent, URL route or AppleScript returns history.
 
@@ -730,7 +730,7 @@ Maccy's SwiftData models (`HistoryItem`, `HistoryItemContent`) are kept; that's 
 | --- | --- |
 | `mooring` CLI and socket | No clipboard operations exist in the IPC protocol; unknown ops are rejected |
 | MCP server | No clipboard tools; the server's tool list is fixed at build time |
-| Shortcuts / App Intents | Maccy's intents deleted (4.2) |
+| Shortcuts / App Intents | Maccy's intents deleted (4.2); only `App/Intents/` may declare an intent, and none names the clipboard |
 | URL scheme | `mooring://` has no clipboard routes |
 | AppleScript | No scripting dictionary, and `NSAppleScriptEnabled` is `false` in `App/Info.plist` |
 | Reading the database file | File permissions only; see the known limitation in 4.4 |
@@ -738,12 +738,14 @@ Maccy's SwiftData models (`HistoryItem`, `HistoryItemContent`) are kept; that's 
 
 The last row is worth saying plainly in the README: Mooring protects the history, not whatever you most recently copied.
 
-**As built, the wall is tests, not convention.** `AgentWallTests` (9 tests, in `App/Tests/`) and `AgentWallMCPTests` (1 test, in `MooringCLICoreTests`, because the MCP tool table is internal to that target) fail the build when:
+**As built, the wall is tests, not convention.** `AgentWallTests` (11 tests, in `App/Tests/`) and `noClipboardMCPTools` (in `Packages/MooringIPC/Tests/MooringCLICoreTests/AgentWallMCPTests.swift`, because the MCP tool table is internal to that target) fail the build when:
 - a file under `App/IPC/`, `App/Links/`, `App/Intents/` or `Packages/MooringIPC/Sources/` mentions `ClipKit`, `HistoryItem`, `Clipboard.shared`, `Storage.shared`, `ClipboardController` or `NSPasteboard`, or names a clipboard, pasteboard or history concept at all (case-insensitive), so a neutrally named closure can't smuggle one in; each folder must exist and contain Swift files, so the scan can't pass vacuously;
 - `Packages/MooringIPC/Package.swift` mentions ClipKit;
 - every subfolder of `App/` isn't classified as an agent path or not (a new folder fails until someone decides), or the `RequestHandler(` arguments in `AppDelegate.swift` mention the clipboard;
 - an `Op` (`Op` is `CaseIterable`), an MCP tool or a `mooring://` route matches clipboard, paste or history;
 - ClipKit declares an `AppIntent`, `AppEntity` or `AppShortcutsProvider`;
+- any file under `App/` outside `App/Intents/` and `App/Tests/` imports `AppIntents` or names `AppIntent`, `AppEntity`, `TransientAppEntity`, `AppShortcutsProvider`, `EntityQuery`, `EntityStringQuery` or `EnumerableEntityQuery` (App Intents are extracted from the whole app target, so an intent beside `ClipboardController` would otherwise reach Shortcuts); `App/Intents/` itself gets the clipboard name scans above;
+- the built app's `Metadata.appintents` (what Shortcuts reads) matches clip, paste or history, case-insensitive (skipped if the test host has none);
 - `NSAppleScriptEnabled` isn't `false`, or an `.sdef` file exists under `App/` or in the bundle.
 
 Known gaps are in `docs/BACKLOG.md`: the scan reads Swift source text, not linked symbols, and its parenthesis matcher ignores parentheses inside strings and comments.
@@ -752,16 +754,17 @@ Known gaps are in `docs/BACKLOG.md`: the scan reads Swift source text, not linke
 
 - The store is its own SwiftData container, `~/Library/Application Support/Mooring/Clipboard/Storage.sqlite`, separate from settings and leases, directory mode `0700`. Contents are stored as Maccy stores them, unencrypted.
 - The store is excluded from Time Machine and iCloud backups (`isExcludedFromBackup`).
-- The folder and store are created only when Clipboard starts. If the folder can't be created, set to `0700` and excluded from backup, ClipKit logs the error code (never a path) and falls back to an in-memory store, so nothing is written unprotected.
-- Maccy's settings live in the `dev.mooring.clipboard` `UserDefaults` suite (`dev.mooring.clipboard.tests` under a test host), never in Mooring's own defaults.
-- Retention matches Maccy: keep the last 200 items by default. "Clear history on quit" is an optional setting.
+- The folder and store are created only when Clipboard starts. If the folder can't be created, set to `0700` and excluded from backup, ClipKit falls back to an in-memory store, so nothing is written unprotected; the store keeps the location it first opened at for the rest of the process. If the store itself won't open, it also falls back to memory. Both logs carry only the error's code (and, for the store, its type), never a path.
+- Maccy's settings live in the `dev.mooring.clipboard` `UserDefaults` suite (`dev.mooring.clipboard.tests` under a test host), never in Mooring's own defaults, except the popup hotkey: KeyboardShortcuts keeps it as `KeyboardShortcuts_clipboardPopup` in the standard defaults, as it does every shortcut.
+- Retention matches Maccy: keep the last 200 items by default. "Clear history on quit" is an optional setting; it also applies when Clipboard is turned off while running, so the session's unpinned items aren't left on disk.
+- Turning Clipboard off stops recording but keeps what's saved. While it's off and the folder exists, Settings → Clipboard → History offers **Delete Clipboard History…**, which asks "Delete all saved clipboard history?" ("This can't be undone.", Delete / Cancel) and removes the whole `Clipboard/` folder, pins included, without starting ClipKit (it drops history loaded earlier in the session too).
 
 **Known limitation.** Maccy runs sandboxed, so macOS guards its history file with an "access data from other apps" prompt. Mooring ships unsandboxed, like Loop and Awayke, so any process running as you, including an agent with shell access, can read the history file without a prompt. Closing that gap would take either encryption or moving ClipKit into a separate sandboxed helper app; revisit if it matters.
 
 ### 4.5 What's never recorded
 
 - Pasteboard types marked confidential or temporary: `org.nspasteboard.ConcealedType`, `TransientType`, `AutoGeneratedType` (always, as in Maccy).
-- Maccy's default ignore list: 1Password, KeeWeb, TypeIt4Me and similar types, editable.
+- Maccy's default ignored pasteboard *types* (not apps): the private types 1Password, KeeWeb, TypeIt4Me and similar tools put on their copies, editable in Settings → Clipboard → Ignore Rules → Ignored types. The default ignored *apps* are listed below.
 - Copies made while Secure Keyboard Entry is active (`IsSecureEventInputEnabled()`), which covers most password fields. This is new code, not in Maccy.
 - Copies from apps on the ignore list. The defaults are 1Password 7 and 8, Bitwarden, Dashlane, LastPass, KeePassXC, Keychain Access and Passwords; the list is editable in Settings → Clipboard → Ignore Rules.
 - Universal Clipboard copies from other devices (`com.apple.is-remote-clipboard`), unless the user turns them on (off by default).
@@ -770,7 +773,7 @@ Known gaps are in `docs/BACKLOG.md`: the scan reads Swift source text, not linke
 
 ### 4.6 Permissions
 
-Recording history needs no permission. Auto-paste needs **Accessibility**, the same grant level 3 uses. Without it, selecting an item copies it and the user pastes with ⌘V; the popup's footer then reads "Paste with ⌘V. Allow Accessibility in Windows to paste automatically." Clipboard never prompts for Accessibility itself: that prompt belongs to Windows' Turn On.
+Recording history needs no permission. Auto-paste needs **Accessibility**, the same grant level 3 uses. Without it, selecting an item copies it and the user pastes with ⌘V; the popup's footer then reads "Paste with ⌘V. Allow Accessibility in Windows to paste automatically." The hint is read again whenever the popup becomes key, so it goes once Accessibility is granted. Clipboard never prompts for Accessibility itself: that prompt belongs to Windows' Turn On.
 
 ### 4.7 Level 4 acceptance criteria
 
@@ -784,8 +787,8 @@ Recording history needs no permission. Auto-paste needs **Accessibility**, the s
 
 ### 4.8 Settings and popup, as built
 
-- **Dropdown, Clipboard ›.** While off, **Turn On…** only (it needs no permission). While on: the 10 most recent **unpinned** items, one line cut to 50 characters, numbered ⌘1–⌘9 as the popup numbers its unpinned items (pins stay in the popup); a separator; **Pause Recording**; **Ignore Next Copy**; **Clear** (**Clear All** while ⌥ is held), both confirmed unless "don't ask again" is set; a separator; **Search… ⇧⌘C**, showing the live chord. The submenu is rebuilt each time it opens.
-- **Settings → Clipboard**, three pages, each with a "Clipboard is off" banner and **Turn On…** while off: **History** (the on/off switch, history size 10–999 with a default of 200, "Clear history on quit", "Paste automatically", "Paste without formatting", and the popup hotkey recorder), **Ignore Rules** (ignored apps with an Add App… picker, ignored pasteboard types, ignore regexes, and "Record copies from your other devices (Universal Clipboard)", off) and **Appearance** (popup position, pinned items position, search field, preview, image height). Only keys ClipKit reads are shown.
+- **Dropdown, Clipboard ›.** While off, **Turn On…** only (it needs no permission). While on: the 10 most recent **unpinned** items, one line cut to 50 characters (an untitled image reads "Image", any other untitled copy "Item"), numbered ⌘1–⌘9 as the popup numbers its unpinned items (pins stay in the popup); a separator; **Pause Recording**; **Ignore Next Copy**; **Clear**, with **Clear All** as its ⌥ alternate (`NSMenuItem.isAlternate`, so it swaps while the submenu is open), both confirmed unless "don't ask again" is set; a separator; **Search… ⇧⌘C**, showing the live chord. The submenu is rebuilt each time it opens.
+- **Settings → Clipboard**, three pages, each with a "Clipboard is off" banner and **Turn On…** while off (History adds **Delete Clipboard History…** when history is saved, 4.4): **History** (the on/off switch, history size 10–999 with a default of 200, "Clear history on quit", "Paste automatically", "Paste without formatting", and the popup hotkey recorder), **Ignore Rules** (ignored apps with an Add App… picker, ignored pasteboard types, ignore regexes, and "Record copies from your other devices (Universal Clipboard)", off) and **Appearance** (popup position, pinned items position, search field, preview, image height). Only keys ClipKit reads are shown. Maccy's "Ignore all apps except listed" stays hidden on purpose: with the password-manager default list it would flip into recording only password-manager copies. A test checks no Settings source names it and no page edit sets it.
 - **General → Shortcuts** gains a "Clipboard popup" row (or a note while Clipboard is off), included in the conflict checks.
 
 ## Appendix
@@ -1006,7 +1009,7 @@ struct AwakeSettings: Codable, Equatable {
 - **Dropdown menu:** an `NSMenu` with hosted SwiftUI rows, 300 pt wide. The status item's `menu` is set only for the click that opens the dropdown and cleared when the menu closes, so a left click still reaches the click handler. Clicks on hosted rows run their action without closing the menu. Disabled items can't be highlighted, so only the pure-text rows are disabled.
 - **"While an app runs…"** lists `NSWorkspace.shared.runningApplications` with `activationPolicy == .regular`, with icons.
 - **Settings window:** plain SwiftUI `NavigationSplitView` with the sidebar from the UX section. Items from 1.9 map to: helper, AC requirement, thresholds, thermal → Awake › Lid & Battery; notifications → General; logs, diagnostics, uninstall → Mooring › Advanced. Luminare is used only for the Windows pages in stage 3.
-- **Defaults:** global On/Off hotkey none; ⇧⌘C not registered until stage 4. Notification permission is requested the first time lid mode or a guardrail notification is needed.
+- **Defaults:** global On/Off hotkey none; ⇧⌘C is registered only while Clipboard is on (4.8). Notification permission is requested the first time lid mode or a guardrail notification is needed.
 - **Icon:** SF Symbols on macOS 26 has no anchor symbol (checked 2026-09-30: `anchor`, `anchor.fill` and `anchor.circle` don't resolve), so stage 0 ships custom template assets. The badge symbols and the 5 pt dot described for stages 1b/1c are superseded by the menu-bar icon redesign (2026-10-01).
 - **Stage 1b scope** (decided 2026-09-30):
   - The lid rows ("Until I open the lid", "Allow lid close"), the Lid & Battery and Advanced settings pages ship in stage 1c (icon states were later redesigned, 2026-10-01) with the lid level.

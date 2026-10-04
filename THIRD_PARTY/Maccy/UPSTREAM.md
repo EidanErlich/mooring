@@ -232,7 +232,7 @@ Mooring-written:
 
 Vendored edits:
 
-- `Maccy/Storage.swift`: new read-only `isOpen` (whether `shared` has opened). `ClipKit.start()` now sets `location` only while it's false, so a later start, such as one after an earlier start fell back to memory, can't move the store or trip the debug assertion.
+- `Maccy/Storage.swift`: a store that won't open logs the error's type and code instead of its `localizedDescription`, which can carry the store's path. New read-only `isOpen` (whether `shared` has opened). `ClipKit.start()` now sets `location` only while it's false, so a later start, such as one after an earlier start fell back to memory, can't move the store or trip the debug assertion.
 - `Maccy/Observables/AppState.swift`: new `shownPasteHint`, the hint as of the last `refreshPasteHint()`, which reads `pasteHint` again.
 - `Maccy/Views/FooterView.swift`: shows `appState.shownPasteHint` instead of its own `@State`; it still refreshes on appearing and on scene-phase changes, and `ClipKitPopup.panelDidBecomeKey()` refreshes it whenever the panel becomes key (an `NSHostingView` in an `NSPanel` may never change scene phase).
 
