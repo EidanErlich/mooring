@@ -1,4 +1,5 @@
 import Foundation
+import MachO
 import os
 
 /// Mooring's handle on the vendored Loop window manager. Nothing in Loop runs until `start()`.
@@ -13,9 +14,9 @@ public final class WindowKit {
         Self.runningOwner == ObjectIdentifier(self)
     }
 
+    /// Creates nothing and changes nothing; the capabilities take effect at `start()`.
     public init(capabilities: Capabilities = .live) {
         self.capabilities = capabilities
-        Capabilities.active = capabilities
     }
 
     /// Starts Loop's triggers, event taps and drag observers. Calling it again while running does nothing.
@@ -58,6 +59,29 @@ extension WindowKit {
 }
 
 extension UserDefaults {
+    static let windowKitProductionSuiteName = "dev.mooring.windows"
+
+    /// Under a test host, a scratch suite, so tests never touch the user's real Windows settings.
+    static let windowKitSuiteName = TestHost.isActive ? "dev.mooring.windows.tests" : windowKitProductionSuiteName
+
     /// Loop's settings live here, apart from Mooring's own `UserDefaults.standard`, and never sync to iCloud.
-    static let windowKit = UserDefaults(suiteName: "dev.mooring.windows")!
+    static let windowKit = UserDefaults(suiteName: windowKitSuiteName)!
+}
+
+/// Whether this process is running tests: an XCTest host, or Swift Testing / XCTest loaded into it.
+enum TestHost {
+    static let isActive: Bool = {
+        if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil {
+            return true
+        }
+
+        let testFrameworks = ["/Testing.framework/", "/XCTest.framework/"]
+        for index in 0..<_dyld_image_count() {
+            guard let name = _dyld_get_image_name(index).map({ String(cString: $0) }) else { continue }
+            if testFrameworks.contains(where: name.contains) {
+                return true
+            }
+        }
+        return false
+    }()
 }

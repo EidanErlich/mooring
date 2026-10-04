@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Settings Window/Settings/Behavior/BehaviorConfiguration.swift
 //
 //  BehaviorConfiguration.swift
 //  Loop
@@ -40,7 +41,7 @@ struct BehaviorConfigurationView: View {
             cursorSection
             windowSnappingSection
             stageManagerSection
-            stashSection
+            // Mooring: Stash stays hidden in 3a.
         }
         .animation(
             luminareAnimation,

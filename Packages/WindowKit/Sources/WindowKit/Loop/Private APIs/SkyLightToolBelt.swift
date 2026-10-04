@@ -183,6 +183,10 @@ enum SkyLightToolBelt {
     ///   - radius: The desired blur radius.
     /// - Returns: Whether this operation was successful.
     static func setBackgroundBlur(windowID: CGWindowID, radius: Int) {
+        guard Capabilities.active.windowEffects else {
+            return
+        }
+
         guard let SLSDefaultConnectionForThread = SkyLightSymbolLoader.SLSDefaultConnectionForThread,
               let SLSSetWindowBackgroundBlurRadius = SkyLightSymbolLoader.SLSSetWindowBackgroundBlurRadius
         else {
@@ -207,6 +211,10 @@ enum SkyLightToolBelt {
     /// - Parameter cgPoint: The point in the CoreGraphics coordinate system.
     /// - Returns: The matching `CGDirectDisplayID`, or `nil` if the point isn't on any managed display.
     static func bestManagedDisplayID(forCGPoint cgPoint: CGPoint) -> CGDirectDisplayID? {
+        guard Capabilities.active.windowDetails else {
+            return nil
+        }
+
         guard let SLSMainConnectionID = SkyLightSymbolLoader.SLSMainConnectionID,
               let SLSCopyBestManagedDisplayForPoint = SkyLightSymbolLoader.SLSCopyBestManagedDisplayForPoint
         else {
@@ -227,6 +235,10 @@ enum SkyLightToolBelt {
     /// - Parameter position: The screen position to check.
     /// - Returns: The `CGWindowID` of the window at the position, or `nil` if none found.
     static func windowIDAtPosition(_ position: CGPoint) -> CGWindowID? {
+        guard Capabilities.active.windowDetails else {
+            return nil
+        }
+
         guard let SLSMainConnectionID = SkyLightSymbolLoader.SLSMainConnectionID,
               let SLSFindWindowByGeometry = SkyLightSymbolLoader.SLSFindWindowByGeometry
         else {
@@ -272,6 +284,10 @@ enum SkyLightToolBelt {
     /// - Parameter windowIDs: The `CGWindowID`s for each of the windows to capture.
     /// - Returns: An array of `CGImage`s for each window, in the same order as the windows that were passed in.
     static func captureWindowList(windowIDs: [CGWindowID]) -> [CGImage] {
+        guard Capabilities.active.windowEffects else {
+            return []
+        }
+
         guard let SLSMainConnectionID = SkyLightSymbolLoader.SLSMainConnectionID,
               let SLSHWCaptureWindowList = SkyLightSymbolLoader.SLSHWCaptureWindowList
         else {
@@ -297,6 +313,10 @@ enum SkyLightToolBelt {
     /// - Parameter windowID: The `CGWindowID` of the window to query.
     /// - Returns: The window's level, or `nil` if the lookup failed.
     static func getWindowLevel(windowID: CGWindowID) -> CGWindowLevel? {
+        guard Capabilities.active.windowDetails else {
+            return nil
+        }
+
         guard let SLSMainConnectionID = SkyLightSymbolLoader.SLSMainConnectionID,
               let SLSGetWindowLevel = SkyLightSymbolLoader.SLSGetWindowLevel
         else {
@@ -430,6 +450,10 @@ enum SkyLightToolBelt {
     /// - Returns: The corner radii of the window if the operation was successful, or `nil` otherwise.
     @available(macOS 26.0, *)
     static func getCornerRadii(windowID: CGWindowID) -> RectangleCornerRadii? {
+        guard Capabilities.active.windowDetails else {
+            return nil
+        }
+
         guard let SLSMainConnectionID = SkyLightSymbolLoader.SLSMainConnectionID,
               let SLSWindowQueryWindows = SkyLightSymbolLoader.SLSWindowQueryWindows,
               let SLSWindowQueryResultCopyWindows = SkyLightSymbolLoader.SLSWindowQueryResultCopyWindows,
@@ -474,6 +498,10 @@ enum SkyLightToolBelt {
     /// bundle's `.icon` file (which supports light/dark/clear variants).
     /// https://www.granola.ai/blog/so-you-think-its-easy-to-change-an-app-icon
     static func refreshIconAppearanceCache() {
+        guard Capabilities.active.windowEffects else {
+            return
+        }
+
         guard let cls = NSClassFromString("SLSIconAppearanceConfiguration") as? NSObject.Type else {
             log.error("SLSIconAppearanceConfiguration class not found")
             return

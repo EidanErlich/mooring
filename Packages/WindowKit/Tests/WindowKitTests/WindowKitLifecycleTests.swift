@@ -38,7 +38,8 @@ extension WindowKitGlobalStateTests {
         @Test func stopClosesIndicators() async throws {
             _ = NSApplication.shared
             let screen = try #require(NSScreen.screens.first)
-            let saved = UserDefaults.standard.persistentDomain(forName: Self.suiteName)
+            resetScratchWindowsSuite()
+            defer { resetScratchWindowsSuite() }
             Defaults[.radialMenuVisibility] = true
             Defaults[.previewVisibility] = true
 
@@ -50,14 +51,6 @@ extension WindowKitGlobalStateTests {
 
             kit.stop()
             #expect(visibleWindowKitPanels() == 0)
-
-            // Showing the indicators also caches accent colours; put the suite back as it was.
-            try? await Task.sleep(for: .milliseconds(300))
-            if let saved {
-                UserDefaults.standard.setPersistentDomain(saved, forName: Self.suiteName)
-            } else {
-                UserDefaults.standard.removePersistentDomain(forName: Self.suiteName)
-            }
         }
 
         @Test func noSingletonsBeforeStart() async {
@@ -71,8 +64,6 @@ extension WindowKitGlobalStateTests {
                 exit(created == 0 ? EXIT_SUCCESS : EXIT_FAILURE)
             }
         }
-
-        private static let suiteName = "dev.mooring.windows"
 
         private func visibleWindowKitPanels() -> Int {
             NSApplication.shared.windows.filter { $0 is ActivePanel && $0.isVisible }.count

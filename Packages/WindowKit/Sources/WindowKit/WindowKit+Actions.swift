@@ -20,6 +20,11 @@ extension WindowDirection {
     var isMenuAction: Bool {
         ![.noAction, .noSelection, .custom, .cycle].contains(self)
     }
+
+    /// Stash and focus switching stay hidden in 3a: never offered, and inert if a binding asks for them.
+    var isHiddenInStage3a: Bool {
+        willFocusWindow || self == .stash || self == .unstash
+    }
 }
 
 // MARK: - Menu actions and keybinds (static data and Defaults only; no managers)

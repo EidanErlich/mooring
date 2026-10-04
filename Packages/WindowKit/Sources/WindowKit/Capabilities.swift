@@ -2,8 +2,9 @@ import Darwin
 import Foundation
 import os
 
-/// Which private-API features this macOS still provides. Every private symbol Loop uses is looked up
-/// here; a missing symbol turns its feature off and hides the actions that depend on it.
+/// Which private-API features this macOS still provides. Every private symbol Loop resolves is checked
+/// here when Windows starts; a missing one turns its feature off, hides the actions and settings that
+/// depend on it, and is logged once.
 public struct Capabilities: Sendable, Equatable {
     /// `_AXUIElementGetWindow` plus SkyLight's window query, without which no window can be resolved.
     public let windowIDLookup: Bool
@@ -13,6 +14,12 @@ public struct Capabilities: Sendable, Equatable {
     public let stash: Bool
     /// Focusing another window (the focus actions).
     public let windowFocus: Bool
+    /// SkyLight lookups with public fallbacks: display under the cursor, window at a point, window level,
+    /// and (macOS 26) window corner radii. Only the "use window corner radius" preview setting needs them.
+    public let windowDetails: Bool
+    /// SkyLight window effects: background blur, window capture, and the icon appearance cache. Mooring
+    /// shows nothing that needs them (wallpaper capture falls back to the public API).
+    public let windowEffects: Bool
 
     static let windowIDSymbols = [
         "_AXUIElementGetWindow",
@@ -38,6 +45,21 @@ public struct Capabilities: Sendable, Equatable {
         "SLPSPostEventRecordTo"
     ]
 
+    static var windowDetailSymbols: [String] {
+        var symbols = ["SLSCopyBestManagedDisplayForPoint", "SLSFindWindowByGeometry", "SLSGetWindowLevel"]
+        if #available(macOS 26.0, *) {
+            symbols.append("SLSWindowIteratorGetResolvedCornerRadii")
+        }
+        return symbols
+    }
+
+    static let windowEffectSymbols = [
+        "SLSDefaultConnectionForThread",
+        "SLSSetWindowBackgroundBlurRadius",
+        "SLSHWCaptureWindowList",
+        "OBJC_CLASS_$_SLSIconAppearanceConfiguration"
+    ]
+
     public static let live = Capabilities(loadSymbol: Capabilities.liveSymbol)
 
     public init(loadSymbol: (String) -> UnsafeMutableRawPointer?) {
@@ -49,6 +71,8 @@ public struct Capabilities: Sendable, Equatable {
         skyLightMoves = all(Self.spaceMoveSymbols)
         stash = all(Self.frontProcessSymbols)
         windowFocus = all(Self.frontProcessSymbols)
+        windowDetails = all(Self.windowDetailSymbols)
+        windowEffects = all(Self.windowEffectSymbols)
     }
 
     /// Action ids whose feature failed. Without window id lookup no action can find its window.
@@ -69,12 +93,19 @@ public struct Capabilities: Sendable, Equatable {
         return Set(directions.filter(\.isMenuAction).map(\.rawValue))
     }
 
+    /// Settings (Loop `Defaults` key names) whose feature failed; their controls are hidden.
+    public var hiddenSettings: Set<String> {
+        windowDetails ? [] : ["previewUseWindowCornerRadius"]
+    }
+
     var failedFeatures: [String] {
         [
             ("window id lookup", windowIDLookup),
             ("SkyLight moves", skyLightMoves),
             ("stash", stash),
-            ("window focus", windowFocus)
+            ("window focus", windowFocus),
+            ("window details", windowDetails),
+            ("window effects", windowEffects)
         ]
         .filter { !$0.1 }
         .map(\.0)
@@ -119,13 +150,20 @@ extension Capabilities {
         set { activeState.withLock { $0 = newValue } }
     }
 
-    /// Logs each failed feature once per process.
-    func logFailures() {
-        for feature in failedFeatures {
+    /// Tests only: forget which failures were logged.
+    static func forgetLoggedFailures() {
+        loggedFailures.withLock { $0.removeAll() }
+    }
+
+    /// Logs each failed feature once per process, and returns the ones logged by this call.
+    @discardableResult
+    func logFailures() -> [String] {
+        failedFeatures.filter { feature in
             let isNew = Self.loggedFailures.withLock { $0.insert(feature).inserted }
             if isNew {
-                Self.logger.error("Windows: \(feature, privacy: .public) is unavailable on this macOS; its actions are hidden")
+                Self.logger.error("Windows: \(feature, privacy: .public) is unavailable on this macOS; what needs it is hidden")
             }
+            return isNew
         }
     }
 }

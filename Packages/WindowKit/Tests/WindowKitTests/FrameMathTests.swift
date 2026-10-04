@@ -3,7 +3,9 @@ import Defaults
 import Testing
 @testable import WindowKit
 
+extension WindowKitGlobalStateTests {
 /// Target frames from Loop's resolver, with injected screen bounds (CoreGraphics coordinates, no padding).
+@Suite
 @MainActor
 struct FrameMathTests {
     private let main = CGRect(x: 0, y: 0, width: 1512, height: 982)
@@ -59,19 +61,20 @@ struct FrameMathTests {
     }
 
     @Test func growShrinkLargerSmaller() {
+        resetScratchWindowsSuite()
+        defer { resetScratchWindowsSuite() }
+        Defaults[.sizeIncrement] = 20
+        Defaults[.previewPadding] = 10
         let window = CGRect(x: 300, y: 200, width: 600, height: 400)
-        let step = Defaults[.sizeIncrement]
 
-        #expect(frame(.growRight, from: window, in: main) == CGRect(x: 300, y: 200, width: 600 + step, height: 400))
-        #expect(frame(.growLeft, from: window, in: main) == CGRect(x: 300 - step, y: 200, width: 600 + step, height: 400))
-        #expect(frame(.growTop, from: window, in: main) == CGRect(x: 300, y: 200 - step, width: 600, height: 400 + step))
-        #expect(frame(.growBottom, from: window, in: main) == CGRect(x: 300, y: 200, width: 600, height: 400 + step))
-        #expect(frame(.shrinkRight, from: window, in: main) == CGRect(x: 300, y: 200, width: 600 - step, height: 400))
-        #expect(frame(.shrinkLeft, from: window, in: main) == CGRect(x: 300 + step, y: 200, width: 600 - step, height: 400))
-        #expect(frame(.larger, from: window, in: main)
-            == CGRect(x: 300 - step, y: 200 - step, width: 600 + 2 * step, height: 400 + 2 * step))
-        #expect(frame(.smaller, from: window, in: main)
-            == CGRect(x: 300 + step, y: 200 + step, width: 600 - 2 * step, height: 400 - 2 * step))
+        #expect(frame(.growRight, from: window, in: main) == CGRect(x: 300, y: 200, width: 620, height: 400))
+        #expect(frame(.growLeft, from: window, in: main) == CGRect(x: 280, y: 200, width: 620, height: 400))
+        #expect(frame(.growTop, from: window, in: main) == CGRect(x: 300, y: 180, width: 600, height: 420))
+        #expect(frame(.growBottom, from: window, in: main) == CGRect(x: 300, y: 200, width: 600, height: 420))
+        #expect(frame(.shrinkRight, from: window, in: main) == CGRect(x: 300, y: 200, width: 580, height: 400))
+        #expect(frame(.shrinkLeft, from: window, in: main) == CGRect(x: 320, y: 200, width: 580, height: 400))
+        #expect(frame(.larger, from: window, in: main) == CGRect(x: 280, y: 180, width: 640, height: 440))
+        #expect(frame(.smaller, from: window, in: main) == CGRect(x: 320, y: 220, width: 560, height: 360))
     }
 
     @Test func growStopsAtTheScreenEdge() {
@@ -136,4 +139,5 @@ struct FrameMathTests {
             CGRect(x: 0, y: 0, width: 756, height: 982)
         ])
     }
+}
 }

@@ -1,3 +1,4 @@
+// Adapted from Loop@0ac6d83: Loop/Settings Window/Theming/PreviewConfiguration.swift
 //
 //  PreviewConfiguration.swift
 //  Loop
@@ -85,13 +86,16 @@ struct PreviewConfigurationView: View {
             // So display it in a separate section, with the option to configure this functionality.
             if #available(macOS 26, *) {
                 LuminareSection("Corner Radius") {
-                    LuminareToggle(
-                        "Prioritize selected window’s corner radius",
-                        isOn: $previewUseWindowCornerRadius
-                    )
+                    // Mooring: reading a window's corner radius is a SkyLight capability; hide it if that failed.
+                    if Capabilities.active.windowDetails {
+                        LuminareToggle(
+                            "Prioritize selected window’s corner radius",
+                            isOn: $previewUseWindowCornerRadius
+                        )
+                    }
 
                     LuminareSlider(
-                        previewUseWindowCornerRadius ? "Default corner radius" : "Corner radius",
+                        previewUseWindowCornerRadius && Capabilities.active.windowDetails ? "Default corner radius" : "Corner radius",
                         value: $previewCornerRadius.doubleBinding,
                         in: 0...25,
                         format: .number.precision(.fractionLength(0...0)),

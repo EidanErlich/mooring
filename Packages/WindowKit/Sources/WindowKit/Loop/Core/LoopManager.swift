@@ -353,7 +353,7 @@ extension LoopManager {
         guard isLoopActive == true else { return }
         log.info("Closing Loop (force closed: \(forceClose))")
 
-        indicatorService.closeAllImmediately()
+        indicatorService.closeAll()
         isLoopActive = false
         hasParentCycleActionMirror.withLock { $0 = false }
 

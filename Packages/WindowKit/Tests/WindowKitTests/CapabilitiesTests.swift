@@ -1,3 +1,4 @@
+import CoreGraphics
 import Defaults
 import Foundation
 import Testing
@@ -17,8 +18,9 @@ extension WindowKitGlobalStateTests {
             #expect(!failing.windowFocus)
             #expect(failing.hidden.isSuperset(of: ["LeftHalf", "Maximize", "NextScreen", "NextSpace", "Stash", "FocusLeft"]))
 
-            let kit = WindowKit(capabilities: failing)
+            Capabilities.active = failing
             defer { Capabilities.active = .live }
+            let kit = WindowKit(capabilities: failing)
             let offered = WindowKit.menuActions(primary: false).map(\.id)
             #expect(failing.hidden.isDisjoint(with: offered))
 
@@ -38,7 +40,7 @@ extension WindowKitGlobalStateTests {
             #expect(!caps.skyLightMoves)
             #expect(caps.hidden == spaceIDs)
 
-            _ = WindowKit(capabilities: caps)
+            Capabilities.active = caps
             defer { Capabilities.active = .live }
             let offered = Set(WindowKit.menuActions(primary: false).map(\.id))
             #expect(offered.isDisjoint(with: spaceIDs))
@@ -47,12 +49,69 @@ extension WindowKitGlobalStateTests {
             #expect(WindowKit.performableDirection("LeftHalf") == .leftHalf)
         }
 
+        @Test func initDoesNotChangeTheActiveCapabilities() {
+            Capabilities.active = .live
+            let kit = WindowKit(capabilities: Capabilities(loadSymbol: { _ in nil }))
+            #expect(Capabilities.active == .live)
+            kit.start()
+            #expect(Capabilities.active == kit.capabilities)
+            kit.stop()
+            Capabilities.active = .live
+        }
+
+        @Test func failedWindowDetailsCapabilityIsLoggedAndHidden() {
+            let detailSymbols = Set(Capabilities.windowDetailSymbols)
+            let caps = Capabilities(loadSymbol: { name in
+                detailSymbols.contains(name) ? nil : Capabilities.liveSymbol(name)
+            })
+            #expect(!caps.windowDetails)
+            #expect(caps.windowEffects)
+            #expect(caps.windowIDLookup)
+            #expect(caps.hidden.isEmpty)
+            #expect(caps.hiddenSettings == [Defaults.Keys.previewUseWindowCornerRadius.name])
+            Capabilities.forgetLoggedFailures()
+            #expect(caps.logFailures() == ["window details"])
+            #expect(caps.logFailures().isEmpty)
+
+            let effects = Set(Capabilities.windowEffectSymbols)
+            let noEffects = Capabilities(loadSymbol: { name in
+                effects.contains(name) ? nil : Capabilities.liveSymbol(name)
+            })
+            #expect(!noEffects.windowEffects)
+            #expect(noEffects.windowDetails)
+            #expect(noEffects.failedFeatures == ["window effects"])
+
+            Capabilities.active = caps
+            defer { Capabilities.active = .live }
+            #expect(SkyLightToolBelt.getWindowLevel(windowID: 1) == nil)
+            #expect(SkyLightToolBelt.windowIDAtPosition(.zero) == nil)
+            #expect(SkyLightToolBelt.bestManagedDisplayID(forCGPoint: .zero) == nil)
+        }
+
+        @Test func everyLoaderSymbolIsChecked() {
+            let checked = Set(Capabilities.windowIDSymbols + Capabilities.spaceMoveSymbols + Capabilities.frontProcessSymbols
+                + Capabilities.windowDetailSymbols + Capabilities.windowEffectSymbols)
+            for symbol in [
+                "SLSCopyBestManagedDisplayForPoint", "SLSDefaultConnectionForThread", "SLSFindWindowByGeometry",
+                "SLSGetWindowLevel", "SLSHWCaptureWindowList", "SLSSetWindowBackgroundBlurRadius",
+                "OBJC_CLASS_$_SLSIconAppearanceConfiguration"
+            ] {
+                #expect(checked.contains(symbol))
+            }
+            if #available(macOS 26.0, *) {
+                #expect(checked.contains("SLSWindowIteratorGetResolvedCornerRadii"))
+            }
+        }
+
         @Test func liveCapabilitiesHideNothing() {
             #expect(Capabilities.live.windowIDLookup)
             #expect(Capabilities.live.skyLightMoves)
             #expect(Capabilities.live.stash)
             #expect(Capabilities.live.windowFocus)
+            #expect(Capabilities.live.windowDetails)
+            #expect(Capabilities.live.windowEffects)
             #expect(Capabilities.live.hidden.isEmpty)
+            #expect(Capabilities.live.hiddenSettings.isEmpty)
         }
 
         @Test func primaryActionsAreTheFiveInOrder() {

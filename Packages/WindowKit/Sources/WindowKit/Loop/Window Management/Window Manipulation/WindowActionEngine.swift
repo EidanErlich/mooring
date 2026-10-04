@@ -107,6 +107,11 @@ final class WindowActionEngine {
             return .noOp
         }
 
+        // Mooring: stash and focus switching stay hidden in 3a, so a leftover binding does nothing.
+        if direction.isHiddenInStage3a {
+            return .noOp
+        }
+
         // Focus actions: find and focus the target window
         if direction.willFocusWindow {
             return await handleFocusAction(context.action, currentWindow: context.window)
@@ -137,7 +142,12 @@ final class WindowActionEngine {
 
     @concurrent
     func resolveFocusTarget(_ action: WindowAction, currentWindow: Window?) async -> Window? {
-        if action.direction == .focusNextInStack {
+        // Mooring: focus switching stays hidden in 3a (LoopManager focuses whatever this returns).
+        guard !action.direction.isHiddenInStage3a else {
+            return nil
+        }
+
+        return if action.direction == .focusNextInStack {
             WindowUtility.nextStackedWindow(from: currentWindow)
         } else if let focusDirection = action.direction.focusDirection {
             WindowUtility.directionalWindow(from: currentWindow, direction: focusDirection)
