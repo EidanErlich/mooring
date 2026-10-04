@@ -220,7 +220,7 @@ struct CommandRunner {
         return 1
     }
 
-    /// Reports that the app can't be used (`error` is `.unreachable`, `.noAnswer` or `.blocked`), as text or `--json`,
+    /// Reports that the app can't be used (`error` is `.unreachable`, `.noAnswer`, `.busy` or `.blocked`), as text or `--json`,
     /// and returns exit code 3.
     func unavailable(_ error: CLIError) -> Int32 {
         let message = error.unavailableMessage ?? CLIError.unreachable.unavailableMessage ?? ""

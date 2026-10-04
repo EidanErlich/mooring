@@ -69,7 +69,7 @@ public enum Doctor {
                 return Check(name: "App", state: "fail", detail: "answered with an error: \(appError)", fix: "Quit and reopen Mooring")
             }
             let detail = switch unavailable {
-            case .noAnswer: "didn't answer"
+            case .noAnswer, .busy: "didn't answer"
             case .blocked: "permission denied"
             case .unreachable, .usage: "not running"
             }

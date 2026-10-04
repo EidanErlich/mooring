@@ -1,6 +1,4 @@
-#if canImport(AppKit)
 import AppKit
-#endif
 import Darwin
 import Foundation
 import MooringIPC
@@ -47,21 +45,10 @@ public struct SocketClient: RequestSending, Sendable {
 
     /// Whether a Mooring app (bundle id `dev.mooring.app`) is running.
     public static func isMooringRunning() -> Bool {
-        #if canImport(AppKit)
-        return !NSRunningApplication.runningApplications(withBundleIdentifier: "dev.mooring.app").isEmpty
-        #else
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        process.arguments = ["-x", "Mooring"]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return false }
-        process.waitUntilExit()
-        return process.terminationStatus == 0
-        #endif
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "dev.mooring.app").isEmpty
     }
 
-    /// After launching, a socket that still isn't answering when the wait runs out is `noAnswer` if the app is running
+    /// After launching, a socket that still isn't answering when the wait runs out is `busy` if the app is running
     /// (busy, or still starting) and `unreachable` if it isn't.
     public func send(_ request: Request, launch: Bool) async throws -> Response {
         guard let line = try? WireCoding.encodeLine(request) else { throw CLIError.unreachable }
@@ -77,7 +64,7 @@ public struct SocketClient: RequestSending, Sendable {
         }
         let isAppRunning = isAppRunning
         let running = try await onGlobalQueue { isAppRunning() }
-        throw running ? CLIError.noAnswer : CLIError.unreachable
+        throw running ? CLIError.busy : CLIError.unreachable
     }
 
     /// One exchange on a fresh socket: the reply, or nil when nothing listens at `path` yet.
@@ -124,12 +111,12 @@ enum SocketExchange {
     }
 
     /// The error for a connect that failed with `code`, or nil when nothing is listening yet (so the app may be
-    /// launched): `EAGAIN` (the app's queue of waiting connections is full) is `noAnswer`, a permission refusal is
+    /// launched): `EAGAIN` (the app's queue of waiting connections is full) is `busy`, a permission refusal is
     /// `blocked` and anything else is `unreachable`.
     static func connectError(for code: Int32) -> CLIError? {
         switch code {
         case ENOENT, ECONNREFUSED, ENOTSOCK: nil
-        case EAGAIN: .noAnswer
+        case EAGAIN: .busy
         case EPERM, EACCES: .blocked
         default: .unreachable
         }

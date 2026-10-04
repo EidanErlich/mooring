@@ -176,6 +176,17 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
     #expect(json.capture.stderr.isEmpty)
 }
 
+@Test func busyPrintsTryAgain() async {
+    let message = "Mooring is running but didn't answer. Try again in a moment."
+    let human = Harness(client: RecordingClient(reply: .failure(.busy)))
+    #expect(await human.run(["status"]) == 3)
+    #expect(human.capture.stderr == "mooring: \(message)\n")
+
+    let json = Harness(client: RecordingClient(reply: .failure(.busy)))
+    #expect(await json.run(["status", "--json"]) == 3)
+    #expect(json.capture.stdout == #"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+}
+
 @Test func blockedPrintsPermissionDenied() async {
     let message = "Can't reach Mooring's socket (permission denied). "
         + "If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock"

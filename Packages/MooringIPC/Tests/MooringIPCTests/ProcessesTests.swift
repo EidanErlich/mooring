@@ -26,14 +26,11 @@ private func procargs(argc: Int32, executable: String, padding: Int = 3, _ argum
     let noNUL = withUnsafeBytes(of: Int32(1).littleEndian) { Array($0) } + Array("/bin/node".utf8)
     #expect(SystemProcessTable.parseArguments(noNUL) == nil)
     // Only padding after the path.
-    let onlyPadding = SystemProcessTable.parseArguments(procargs(argc: 2, executable: "/bin/node", padding: 8, []))
-    #expect(onlyPadding == nil || onlyPadding == [])
+    #expect(SystemProcessTable.parseArguments(procargs(argc: 2, executable: "/bin/node", padding: 8, [])) == [])
     // argc claims more strings than there are, and the last one is cut off before its NUL.
     let truncated = procargs(argc: 3, executable: "/bin/node", ["node"]) + Array("/usr/local/bi".utf8)
-    let parsed = SystemProcessTable.parseArguments(truncated)
-    #expect(parsed == nil || parsed == ["node"])
+    #expect(SystemProcessTable.parseArguments(truncated) == ["node"])
     // A huge argc can't read past the end.
     let huge = procargs(argc: .max, executable: "/bin/node", ["node", "a"])
-    let hugeParsed = SystemProcessTable.parseArguments(huge)
-    #expect(hugeParsed == nil || hugeParsed == ["node", "a"])
+    #expect(SystemProcessTable.parseArguments(huge) == ["node", "a"])
 }

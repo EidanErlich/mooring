@@ -62,6 +62,18 @@ private struct FakeTable: ProcessTable {
     #expect(AgentDetection.agent(for: 100, in: python) == nil)
 }
 
+@Test func npmClaudeBehindNodeOptionsIsAnAgent() {
+    // Options to node itself come before the script.
+    let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]
+    let options = ["node", "--max-old-space-size=4096", "--no-warnings", "/opt/homebrew/bin/claude", "-p", "hi"]
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: options])) == "Claude Code")
+    // Only options, no script: a person.
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node", "--no-warnings"]])) == nil)
+    // A script after the options that isn't Claude's: a person, even with a Claude path later on its command line.
+    let other = ["node", "--no-warnings", "/usr/local/bin/vite", "/usr/local/bin/claude"]
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: other])) == nil)
+}
+
 @Test func codexDesktopIsAPerson() {
     let table = FakeTable([proc(100, 90, "zsh"), proc(90, 80, "Codex Helper"), proc(80, 1, "Codex")])
     #expect(AgentDetection.agent(for: 100, in: table) == nil)

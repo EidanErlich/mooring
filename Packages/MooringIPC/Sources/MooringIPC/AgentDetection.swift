@@ -41,13 +41,13 @@ public enum AgentDetection {
         return false
     }
 
-    /// The program `entry` runs: its process name, or `claude` for a `node` whose script (the first argument) ends in
-    /// `/claude` or lies in the `@anthropic-ai/claude-code` package.
+    /// The program `entry` runs: its process name, or `claude` for a `node` whose script (the first argument after
+    /// node's own `-` options) ends in `/claude` or lies in the `@anthropic-ai/claude-code` package.
     public static func programName(of entry: ProcessEntry, in table: some ProcessTable) -> String {
-        guard normalized(entry.name) == "node", let arguments = table.arguments(entry.pid), arguments.count > 1 else {
+        guard normalized(entry.name) == "node",
+              let script = table.arguments(entry.pid)?.dropFirst().first(where: { !$0.hasPrefix("-") }) else {
             return entry.name
         }
-        let script = arguments[1]
         return script.hasSuffix("/claude") || script.contains("/@anthropic-ai/claude-code/") ? "claude" : entry.name
     }
 

@@ -306,7 +306,7 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
 @Test func doctorNamesWhyTheAppIsDown() async throws {
     let bin = try BinFolder()
     let cases: [(CLIError, String)] = [
-        (.unreachable, "not running"), (.noAnswer, "didn't answer"), (.blocked, "permission denied")
+        (.unreachable, "not running"), (.noAnswer, "didn't answer"), (.busy, "didn't answer"), (.blocked, "permission denied")
     ]
     for (error, detail) in cases {
         let harness = Harness(client: RecordingClient(reply: .failure(error)), ownBinaryPath: bin.binary, pathEnv: bin.path)

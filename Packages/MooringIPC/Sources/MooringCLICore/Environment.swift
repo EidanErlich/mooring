@@ -4,8 +4,8 @@ import MooringIPC
 /// Sends one request to the running app and returns its reply.
 public protocol RequestSending: Sendable {
     /// Throws `CLIError.unreachable` when the app isn't there (after trying to launch it, if `launch`),
-    /// `.noAnswer` when it was reached but didn't reply or is running but not answering, and `.blocked` when the socket
-    /// may not be opened.
+    /// `.noAnswer` when it was reached but didn't reply, `.busy` when it is running but didn't take the connection, and
+    /// `.blocked` when the socket may not be opened.
     func send(_ request: Request, launch: Bool) async throws -> Response
 }
 
@@ -14,21 +14,23 @@ public enum CLIError: Error, Equatable {
     case usage(String)
     /// Nothing listens on the socket and the app isn't running, even after trying to start it.
     case unreachable
-    /// The app accepted the connection but didn't give a usable reply (the request may have gone through), or it is
-    /// running but busy: its socket wasn't taking connections.
+    /// The app accepted the connection but didn't give a usable reply; the request may have gone through.
     case noAnswer
+    /// The app is running but didn't take the connection in time, so the request was never sent.
+    case busy
     /// The system refused access to the socket, as a sandbox does.
     case blocked
 }
 
 extension CLIError {
     /// What is printed (and sent as the `--json` error message) when the app can't be used; nil for `.usage`.
-    /// All three are exit code 3 and the `unreachable` error code.
+    /// All four are exit code 3 and the `unreachable` error code.
     var unavailableMessage: String? {
         switch self {
         case .usage: nil
         case .unreachable: "Mooring isn't running and couldn't be started"
         case .noAnswer: "Mooring didn't answer. It may be busy; the request may have gone through, so check `mooring status`."
+        case .busy: "Mooring is running but didn't answer. Try again in a moment."
         case .blocked:
             "Can't reach Mooring's socket (permission denied). "
                 + "If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock"

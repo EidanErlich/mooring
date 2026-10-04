@@ -68,7 +68,7 @@ import Testing
     @Test func anchorCommandDoesNotStartWhenTheAppIsNotAnswering() async throws {
         let folder = try makeTempFolder()
         defer { try? FileManager.default.removeItem(atPath: folder) }
-        for error in [CLIError.noAnswer, .blocked] {
+        for error in [CLIError.noAnswer, .busy, .blocked] {
             let marker = folder + "/marker-\(error)"
             let harness = Harness(client: RecordingClient(reply: .failure(error)))
             #expect(await harness.run(["anchor", "--", "touch", marker]) == 3)
