@@ -112,6 +112,10 @@ struct RequestFixture {
         case .status: .status
         case .hook: .hook
         case .notify: .notify
+        case .winList: .winList
+        case .winArrange: .winArrange
+        case .winUndo: .winUndo
+        case .winLayout: .winLayout
         }
         return await handler.handle(Request(v: 1, id: "r1", op: operation, args: args), from: caller)
     }

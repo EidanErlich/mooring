@@ -3,6 +3,7 @@ import Foundation
 /// The operations a request can name.
 public enum Op: String, Codable, Sendable, Equatable { // swiftlint:disable:this type_name
     case acquire, renew, release, status, hook, notify
+    case winList = "win.list", winArrange = "win.arrange", winUndo = "win.undo", winLayout = "win.layout"
 }
 
 /// What an `acquire` asks for: the plain keep-awake toggle, an anchor lease or a named lease.
@@ -116,6 +117,10 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
     case status
     case hook(HookArgs)
     case notify(NotifyArgs)
+    case winList
+    case winArrange(WinPlan)
+    case winUndo
+    case winLayout(WinLayoutArgs)
 
     public func encode(to encoder: any Encoder) throws {
         switch self {
@@ -124,7 +129,9 @@ public enum RequestArgs: Encodable, Sendable, Equatable {
         case .release(let args): try args.encode(to: encoder)
         case .hook(let args): try args.encode(to: encoder)
         case .notify(let args): try args.encode(to: encoder)
-        case .status:
+        case .winArrange(let args): try args.encode(to: encoder)
+        case .winLayout(let args): try args.encode(to: encoder)
+        case .status, .winList, .winUndo:
             _ = encoder.container(keyedBy: EmptyKeys.self)
         }
     }
@@ -161,6 +168,10 @@ public struct Request: Codable, Sendable, Equatable {
         case .status: args = .status
         case .hook: args = .hook(try container.decode(HookArgs.self, forKey: .args))
         case .notify: args = .notify(try container.decode(NotifyArgs.self, forKey: .args))
+        case .winList: args = .winList
+        case .winArrange: args = .winArrange(try container.decode(WinPlan.self, forKey: .args))
+        case .winUndo: args = .winUndo
+        case .winLayout: args = .winLayout(try container.decode(WinLayoutArgs.self, forKey: .args))
         }
     }
 

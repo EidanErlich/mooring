@@ -228,6 +228,10 @@ struct CommandRunner {
         case .status: .status
         case .hook: .hook
         case .notify: .notify
+        case .winList: .winList
+        case .winArrange: .winArrange
+        case .winUndo: .winUndo
+        case .winLayout: .winLayout
         }
     }
 }

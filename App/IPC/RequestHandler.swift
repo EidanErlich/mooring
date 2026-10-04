@@ -99,6 +99,8 @@ final class RequestHandler {
             case .hook(let args): return .success(id: request.id, .hook(try hook(args, from: caller)))
             case .notify(let args):
                 return .success(id: request.id, .notify(try await notify(args, from: identified(caller, client: args.client))))
+            case .winList, .winArrange, .winUndo, .winLayout:
+                throw WireError(code: .badRequest, message: "\(request.op.rawValue) is not supported yet")
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")

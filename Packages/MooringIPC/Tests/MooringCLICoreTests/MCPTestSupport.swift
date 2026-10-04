@@ -36,6 +36,12 @@ func plausibleReply(to request: Request) -> Response {
     case .status: return .success(id: request.id, .status(statusResult(leases: [])))
     case .renew(let args): return .success(id: request.id, .renew(leaseInfo(id: args.id)))
     case .hook: return .success(id: request.id, .hook(HookResult(action: "ignore")))
+    case .winList: return .success(id: request.id, .winList(WinListResult(apps: [], screens: [], regions: [])))
+    case .winArrange(let plan):
+        let results = plan.placements.map { WinPlacementResult(app: $0.app, status: .ok) }
+        return .success(id: request.id, .winArrange(WinArrangeResult(results: results, undoAvailable: true)))
+    case .winUndo: return .success(id: request.id, .winUndo(WinArrangeResult(results: [], undoAvailable: false)))
+    case .winLayout: return .success(id: request.id, .winLayout(WinLayoutResult(names: [], arrange: nil)))
     }
 }
 

@@ -149,7 +149,7 @@ extension WindowKit {
 }
 
 @MainActor
-private enum ActionRunner {
+enum ActionRunner {
     static func run(_ direction: WindowDirection, pid: pid_t) async {
         guard let window = try? Window(pid: pid),
               let screen = ScreenUtility.screenContaining(window)
@@ -157,13 +157,22 @@ private enum ActionRunner {
             return
         }
 
+        await apply(direction, to: window, on: screen)
+    }
+
+    /// Runs `direction` on `window` through Loop's `WindowActionEngine`, on `screen`, or for a screen switch, from it.
+    /// Returns whether Loop reports success.
+    @discardableResult
+    static func apply(_ direction: WindowDirection, to window: Window, on screen: NSScreen) async -> Bool {
+        let result: WindowActionEngine.Result?
         if direction.willChangeScreen {
-            guard let target = targetScreen(for: direction, from: screen) else { return }
+            guard let target = targetScreen(for: direction, from: screen) else { return false }
             let action = await screenSwitchAction(for: window, on: screen)
-            _ = try? await WindowActionEngine.shared.apply(action, window: window, screen: target)
+            result = try? await WindowActionEngine.shared.apply(action, window: window, screen: target)
         } else {
-            _ = try? await WindowActionEngine.shared.apply(WindowAction(direction), window: window, screen: screen)
+            result = try? await WindowActionEngine.shared.apply(WindowAction(direction), window: window, screen: screen)
         }
+        return result?.success ?? false
     }
 
     private static func targetScreen(for direction: WindowDirection, from screen: NSScreen) -> NSScreen? {
