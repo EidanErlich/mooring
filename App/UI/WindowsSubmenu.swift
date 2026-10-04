@@ -29,16 +29,20 @@ final class WindowsSubmenu: NSObject, NSMenuDelegate {
     private let actions: WindowActions
     private let model: DropdownModel
     private let dismiss: () -> Void
+    /// Closes the menu, then runs the action once it has fully closed.
+    private let afterClose: (_ action: @escaping () -> Void) -> Void
     /// The app that was frontmost when the dropdown opened, before Mooring could activate.
     private var targetPID: pid_t?
     private var builtFor: WindowsController.State?
     private var observing = false
 
-    init(windows: WindowsController, actions: WindowActions, model: DropdownModel, dismiss: @escaping () -> Void) {
+    init(windows: WindowsController, actions: WindowActions, model: DropdownModel, dismiss: @escaping () -> Void,
+         afterClose: @escaping (_ action: @escaping () -> Void) -> Void) {
         self.windows = windows
         self.actions = actions
         self.model = model
         self.dismiss = dismiss
+        self.afterClose = afterClose
         super.init()
         for submenu in [menu, more] {
             submenu.delegate = self
@@ -55,9 +59,9 @@ final class WindowsSubmenu: NSObject, NSMenuDelegate {
     }
 
     func turnOn() {
-        dismiss()
-        // The Accessibility sheet is a window, so it waits for the menu to finish closing.
-        DispatchQueue.main.async { [windows] in windows.turnOn() }
+        // Turning on can show the Accessibility sheet or open System Settings, so it runs from the
+        // menu's close callback, never while the menu is still tracking.
+        afterClose { [windows] in windows.turnOn() }
     }
 
     func setWindowManager(_ isOn: Bool) {

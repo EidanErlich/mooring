@@ -13,7 +13,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     let root: NSMenu
     let awake = NSMenu()
     let apps = NSMenu()
-    let windowsSubmenu: WindowsSubmenu
+    private(set) var windowsSubmenu: WindowsSubmenu!
     /// Called once when the root menu closes.
     var onClose: (() -> Void)?
 
@@ -28,8 +28,8 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private let appsItem = NSMenuItem()
     private var observing = false
     private var headerItem: NSMenuItem?
-    /// A lid action waiting for the menu to close so its confirmation can run.
-    private var pendingLidAction: (() -> Void)?
+    /// An action waiting for the menu to close: a lid confirmation or Windows' Turn On.
+    private var pendingAfterClose: (() -> Void)?
 
     init(engine: AwakeEngine, model: DropdownModel, helperEnabled: @escaping () -> Bool,
          runningApps: @escaping () -> [NSRunningApplication], openSettings: @escaping () -> Void,
@@ -45,11 +45,12 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         self.pendingApproval = pendingApproval
         self.needsLidConfirmation = needsLidConfirmation
         self.confirmLidOnBattery = confirmLidOnBattery
-        let root = NSMenu()
-        self.root = root
-        windowsSubmenu = WindowsSubmenu(windows: windows, actions: windowActions, model: model,
-                                        dismiss: { [weak root] in root?.cancelTracking() })
+        self.root = NSMenu()
         super.init()
+        windowsSubmenu = WindowsSubmenu(
+            windows: windows, actions: windowActions, model: model,
+            dismiss: { [weak self] in self?.root.cancelTracking() },
+            afterClose: { [weak self] action in self?.runAfterClose(action) })
         for menu in [root, awake, apps] {
             menu.delegate = self
             menu.autoenablesItems = false
@@ -83,7 +84,17 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
             action()
             return
         }
-        pendingLidAction = action
+        runAfterClose { [confirmLidOnBattery] in
+            // "Only on AC" still turns lid mode on; the lidNeedsAC guardrail holds it until AC.
+            confirmLidOnBattery()
+            action()
+        }
+    }
+
+    /// Cancels the menu and runs `action` from its close callback, since alerts and sheets
+    /// can't run inside menu tracking.
+    func runAfterClose(_ action: @escaping () -> Void) {
+        pendingAfterClose = action
         root.cancelTracking()
     }
 
@@ -101,13 +112,9 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         guard menu === root else { return }
         model.menuDidClose()
         onClose?()
-        guard let action = pendingLidAction else { return }
-        pendingLidAction = nil
-        // "Only on AC" still turns lid mode on; the lidNeedsAC guardrail holds it until AC.
-        DispatchQueue.main.async { [confirmLidOnBattery] in
-            confirmLidOnBattery()
-            action()
-        }
+        guard let action = pendingAfterClose else { return }
+        pendingAfterClose = nil
+        DispatchQueue.main.async(execute: action)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {

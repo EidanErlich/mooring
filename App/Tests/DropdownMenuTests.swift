@@ -219,7 +219,6 @@ struct DropdownMenuTests {
 }
 
 // MARK: Windows ›
-
 extension DropdownMenuTests {
     private static let primary = [
         WindowMenuAction(id: "leftHalf", title: "Left Half", shortcut: "⌃⌥←", group: "Halves"),
@@ -310,6 +309,8 @@ extension DropdownMenuTests {
         menu.windowsSubmenu.setWindowManager(false)
         #expect(windows.state == .off)
         menu.windowsSubmenu.setWindowManager(true)
+        #expect(windows.state == .off)
+        menu.menuDidClose(menu.root)
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
         #expect(windows.state == .on)
     }
@@ -347,5 +348,53 @@ extension DropdownMenuTests {
         windows.turnOff()
         for _ in 0..<5 { await Task.yield() }
         #expect(titles(menu.windowsSubmenu.menu) == ["Turn On…"])
+    }
+
+    private func standaloneSubmenu(
+        _ state: WindowsController.State, calls: Calls = Calls(),
+        dismiss: @escaping () -> Void = {}, afterClose: @escaping (@escaping () -> Void) -> Void = { $0() }
+    ) -> (WindowsSubmenu, WindowsController) {
+        let actions = WindowActions(menuActions: { _ in [] },
+                                    perform: { calls.performed.append(Performed(action: $0, pid: $1)) }, frontmostPID: { 7 })
+        let windows = makeWindows(state)
+        let submenu = WindowsSubmenu(windows: windows, actions: actions, model: DropdownModel(), dismiss: dismiss, afterClose: afterClose)
+        defer { submenu.dropdownDidOpen() }
+        return (submenu, windows)
+    }
+
+    @Test func turnOnRunsAfterMenuCloses() {
+        var pending: (() -> Void)?
+        let (submenu, windows) = standaloneSubmenu(.off, afterClose: { pending = $0 })
+        submenu.turnOn()
+        #expect(windows.state == .off && pending != nil)  // the menu is still up
+        pending?()  // the close callback fires; untrusted, so it waits for Accessibility
+        #expect(windows.state == .waitingForTrust)
+    }
+
+    @Test func windowManagerSwitchOnWaitsForTheMenuToClose() {
+        var pending: (() -> Void)?
+        let (submenu, windows) = standaloneSubmenu(.off, afterClose: { pending = $0 })
+        submenu.setWindowManager(true)
+        #expect(windows.state == .off)
+        pending?()
+        #expect(windows.state == .waitingForTrust)
+    }
+
+    @Test func performDismissesThenActs() {
+        let calls = Calls()
+        var performedAtDismiss: Int?
+        let (submenu, _) = standaloneSubmenu(.on, calls: calls, dismiss: { performedAtDismiss = calls.performed.count })
+        submenu.perform("maximize")
+        #expect(performedAtDismiss == 0)
+        #expect(calls.performed == [Performed(action: "maximize", pid: 7)])
+    }
+
+    @Test func performIsNoOpWhenNotOn() {
+        for state in [WindowsController.State.off, .needsAccessibility] {
+            let calls = Calls()
+            let (submenu, _) = standaloneSubmenu(state, calls: calls)
+            submenu.perform("maximize")
+            #expect(calls.performed.isEmpty && calls.menuActionCalls == 0)
+        }
     }
 }
