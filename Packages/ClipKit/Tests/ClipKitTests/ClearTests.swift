@@ -19,6 +19,23 @@ extension ClipKitGlobalStateTests {
             return kit
         }
 
+        /// After Clipboard is turned off its history can be deleted; what this process loaded goes with it.
+        @Test func discardLoadedHistoryOnlyWhileStopped() {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            let kit = recordedKit(scratch)
+            defer { kit.stop(); Fixture.resetSettings() }
+
+            ClipKit.discardLoadedHistory()
+            #expect(Set(Fixture.recordedTitles()) == ["one", "two", "three"])
+
+            kit.stop()
+            let singletons = ClipKit.instantiatedSingletons
+            ClipKit.discardLoadedHistory()
+            #expect(Fixture.recordedTitles().isEmpty)  // pins too
+            #expect(ClipKit.instantiatedSingletons == singletons)
+        }
+
         @Test func clearAsksFirstAndCancelKeepsHistory() {
             let scratch = TestPasteboard()
             defer { scratch.release() }

@@ -133,6 +133,20 @@ extension ClipKitGlobalStateTests {
             #expect(!harness.storeFolderExists)
             #expect(ClipKit.instantiatedSingletons == before)
         }
+
+        @Test func deleteHistoryCreatesNoSingletons() throws {
+            let before = ClipKit.instantiatedSingletons
+            let harness = ClipboardHarness(enabled: false)
+            let folder = harness.storeURL.deletingLastPathComponent()
+            defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            harness.controller.launch()
+            #expect(harness.controller.hasSavedHistory)
+            harness.controller.deleteHistory()
+            #expect(!harness.storeFolderExists)
+            #expect(harness.kits.isEmpty)
+            #expect(ClipKit.instantiatedSingletons == before)
+        }
     }
 }
 
@@ -200,7 +214,54 @@ struct ClipboardControllerTests {
         let stopped = ClipboardHarness(enabled: false, clearOnQuit: true)
         stopped.controller.turnOn()
         stopped.controller.turnOff()
+        let clears = stopped.kit?.clears
         stopped.controller.willTerminate()
-        #expect(stopped.kit?.clears == [])
+        #expect(stopped.kit?.clears == clears)
+    }
+
+    /// Turning off with "Clear history on quit" set clears as quitting would, so the session isn't left on disk.
+    @Test func turnOffClearsWhenClearOnQuitSet() {
+        let harness = ClipboardHarness(enabled: true, clearOnQuit: true)
+        harness.controller.launch()
+        let kit = harness.kit
+        harness.controller.turnOff()
+        #expect(kit?.clears == [false])
+        #expect(kit?.stops == 1)
+        harness.controller.turnOff()
+        #expect(kit?.clears == [false])
+    }
+
+    @Test func turnOffKeepsHistoryOtherwise() {
+        let harness = ClipboardHarness(enabled: true, clearOnQuit: false)
+        harness.controller.launch()
+        harness.controller.turnOff()
+        #expect(harness.kit?.clears == [])
+        #expect(harness.kit?.stops == 1)
+    }
+
+    @Test func deleteHistoryRemovesStoreFolder() throws {
+        let harness = ClipboardHarness(enabled: false)
+        let folder = harness.storeURL.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("fixture".utf8).write(to: harness.storeURL)
+        #expect(harness.controller.hasSavedHistory)
+
+        harness.controller.deleteHistory()
+        #expect(!harness.storeFolderExists)
+        #expect(!harness.controller.hasSavedHistory)
+        #expect(FileManager.default.fileExists(atPath: folder.deletingLastPathComponent().path(percentEncoded: false)))
+        #expect(harness.kits.isEmpty)
+    }
+
+    /// While on, the store is in use: deleting does nothing.
+    @Test func deleteHistoryOnlyWhileOff() throws {
+        let harness = ClipboardHarness(enabled: true)
+        let folder = harness.storeURL.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        harness.controller.launch()
+        harness.controller.deleteHistory()
+        #expect(harness.storeFolderExists)
     }
 }

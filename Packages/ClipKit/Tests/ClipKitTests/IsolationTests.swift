@@ -36,6 +36,7 @@ extension ClipKitGlobalStateTests {
                     _ = ClipKit.settingsValues()
                     _ = ClipKit.popupShortcutName
                     _ = kit.popupView()
+                    ClipKit.discardLoadedHistory()
                     let before = ClipKit.instantiatedSingletons
                     KeyboardShortcutsFixture.parkPopupShortcut()
                     kit.start()

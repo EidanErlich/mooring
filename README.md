@@ -52,7 +52,7 @@ Mooring never records concealed or temporary copies (what password managers mark
 
 ### Agents can't read it
 
-No `mooring` command, MCP tool, Shortcuts action, `mooring://` link or AppleScript call returns clipboard history, and tests fail the build if one appears. Mooring protects your clipboard *history*; any app can still read what you copied most recently, because that is how macOS pasteboards work. The history file (`~/Library/Application Support/Mooring/Clipboard/`) is kept in a folder only you can open and left out of backups, but it isn't encrypted, so any process running as you, including an agent with shell access, can read it. If that matters to you, leave Clipboard off.
+No `mooring` command, MCP tool, Shortcuts action, `mooring://` link or AppleScript call returns clipboard history, and tests fail the build if one appears. Mooring protects your clipboard *history*; any app can still read what you copied most recently, because that is how macOS pasteboards work. The history file (`~/Library/Application Support/Mooring/Clipboard/`) is kept in a folder only you can open and left out of backups, but it isn't encrypted, so any process running as you, including an agent with shell access, can read it. If that matters to you, leave Clipboard off. Turning Clipboard off stops recording but keeps what's saved; use Delete Clipboard History… in Settings → Clipboard to remove it.
 
 ## License
 

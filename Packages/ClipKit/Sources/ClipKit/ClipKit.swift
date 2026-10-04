@@ -240,6 +240,14 @@ extension ClipKit {
         }
     }
 
+    /// Drops the history a ClipKit loaded earlier in this process, pins included, so deleting the
+    /// store's folder doesn't leave it in memory to come back on the next start. Does nothing while
+    /// one runs, or if none ever started (it creates nothing).
+    public static func discardLoadedHistory() {
+        guard hasStarted, runningOwner == nil else { return }
+        History.shared.clearAll()
+    }
+
     /// Opens the popup where the popup-position setting says, unless it's open. Does nothing while
     /// not running.
     public func openPopup() {

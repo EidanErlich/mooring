@@ -46,6 +46,8 @@ final class ClipboardController {
     @ObservationIgnored private let makeKit: (URL) -> any ClipKitRuntime
     @ObservationIgnored private let confirmClear: @MainActor () -> ClearConfirmation
     @ObservationIgnored private var kit: (any ClipKitRuntime)?
+    /// Bumped whenever the history folder may have appeared or gone, so `hasSavedHistory` is re-read.
+    private var storeChanges = 0
 
     /// `makeKit` runs only when Clipboard starts, and is given where the history is kept.
     /// `confirmClear` asks before clearing (Maccy's alert; tests answer for it).
@@ -69,12 +71,32 @@ final class ClipboardController {
         start()
     }
 
-    /// Stops polling and unregisters the hotkey. Saved history stays on disk.
+    /// Stops polling and unregisters the hotkey. Saved history stays on disk, except that with "Clear
+    /// history on quit" set the unpinned items are cleared first, as quitting would.
     func turnOff() {
+        if let kit, kit.isRunning, settings.clearHistoryOnQuit {
+            kit.clear(all: false)
+        }
         kit?.stop()
         kit = nil
         isOn = false
         settings.clipboardEnabled = false
+        storeChanges += 1
+    }
+
+    /// Whether history is saved on disk (its folder exists). Checked without starting ClipKit.
+    var hasSavedHistory: Bool {
+        _ = storeChanges
+        return FileManager.default.fileExists(atPath: storeURL.deletingLastPathComponent().path(percentEncoded: false))
+    }
+
+    /// While off: removes the history folder and everything in it, pins included. It never starts
+    /// ClipKit; history a run earlier in this session loaded is dropped too.
+    func deleteHistory() {
+        guard !isOn else { return }
+        ClipKit.discardLoadedHistory()
+        try? FileManager.default.removeItem(at: storeURL.deletingLastPathComponent())
+        storeChanges += 1
     }
 
     /// At quit: with "Clear history on quit" on, drops every unpinned item.
@@ -133,6 +155,7 @@ final class ClipboardController {
         self.kit = kit
         kit.start()
         isOn = true
+        storeChanges += 1
     }
 }
 

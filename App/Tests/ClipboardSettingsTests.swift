@@ -109,6 +109,35 @@ extension ClipKitGlobalStateTests {
             #expect(reads > 0)
         }
 
+        /// "Delete Clipboard History…" shows on the History page while off, and only when history is saved.
+        @Test func deleteHistoryHiddenWhenNoStore() throws {
+            let home = FileManager.default.temporaryDirectory.appending(path: "mooring-clipboard-tests-\(UUID().uuidString)")
+            defer { try? FileManager.default.removeItem(at: home) }
+            let storeURL = home.appending(path: "Clipboard/Storage.sqlite")
+            let clipboard = ClipboardController(
+                settings: FakeClipboardSettings(enabled: false), storeURL: storeURL, makeKit: { _ in FakeClipKit() })
+            #expect(!ClipboardSettingsPage.offersHistoryDeletion(page: .clipboardHistory, clipboard: clipboard))
+            let size = layOut(ClipboardSettingsPage(page: .clipboardHistory, clipboard: clipboard, chooseApp: { nil }))
+            #expect(size.width > 0 && size.height > 0)
+
+            try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            #expect(ClipboardSettingsPage.offersHistoryDeletion(page: .clipboardHistory, clipboard: clipboard))
+            #expect(!ClipboardSettingsPage.offersHistoryDeletion(page: .clipboardAppearance, clipboard: clipboard))
+            let withDelete = layOut(ClipboardSettingsPage(page: .clipboardHistory, clipboard: clipboard, chooseApp: { nil }))
+            #expect(withDelete.height > size.height)
+
+            clipboard.turnOn()
+            #expect(!ClipboardSettingsPage.offersHistoryDeletion(page: .clipboardHistory, clipboard: clipboard))
+            clipboard.turnOff()
+            clipboard.deleteHistory()
+            #expect(!ClipboardSettingsPage.offersHistoryDeletion(page: .clipboardHistory, clipboard: clipboard))
+
+            #expect(ClipboardSettingsPage.deleteHistoryTitle == "Delete Clipboard History…")
+            #expect(ClipboardSettingsPage.deleteHistoryQuestion == "Delete all saved clipboard history?")
+            #expect(ClipboardSettingsPage.deleteHistoryWarning == "This can't be undone.")
+            #expect(ClipboardSettingsPage.deleteTitle == "Delete")
+        }
+
         @Test func clipboardToggleTurnsClipboardOnAndOff() {
             let clipboard = controller(isOn: false)
             let isOn = ClipboardToggle.isOn(clipboard)

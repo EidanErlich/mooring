@@ -227,3 +227,9 @@ Mooring-written:
 - `Sources/ClipKit/PopupPanel.swift`: `PopupPanel` is public; `open(height:at:)` takes the public `ClipSettings.PopupPosition` (an internal overload maps Maccy's `PopupPosition`). It stays non-isolated because Maccy's `Popup` calls it from non-isolated code.
 - `Sources/ClipKit/ClipKit.swift`: `makePopupPanel` (called in `start()`; `stop()` closes the panel and drops it), `openSettings`, `openPopup()` (opens where the popup-position setting says; nothing while not running or already open), `popupShortcutDescription` ("⇧⌘C"), and the internal `hasStarted`. `recent(limit:includingPinned:)` can leave pinned items out (the dropdown lists only unpinned ones, numbered as the popup numbers them). `confirmAndClear(all:confirm:)`, for the dropdown's Clear and Clear All, keeps the popup's confirmation: it honours `suppressClearAlert`, otherwise asks with `askToClear()`, an `NSAlert` built from Maccy's `clear_alert_*` strings (`Bundle.module`) with a suppression checkbox that sets `suppressClearAlert` when the user confirms; `shouldClear(alertSuppressed:confirm:)` is that rule on its own; `ClearConfirmation` is the answer.
 - `Tests/ClipKitTests/PopupTests.swift`, `Tests/ClipKitTests/ClearTests.swift`.
+
+#### Stage 4 final fixes
+
+Mooring-written:
+
+- `Sources/ClipKit/ClipKit.swift`: `discardLoadedHistory()` drops the history a stopped ClipKit loaded earlier in the process (Maccy's `History.clearAll()`), for Settings' "Delete Clipboard History…"; it does nothing while one runs or if none ever started, so it creates no singleton. Tested in `ClearTests` and `IsolationTests.noSingletonsBeforeStart`.

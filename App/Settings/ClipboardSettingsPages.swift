@@ -95,6 +95,15 @@ struct ClipboardToggle: View {
 /// One page of Settings → Clipboard. While Clipboard is off it is the banner alone.
 struct ClipboardSettingsPage: View {
     static let offTitle = "Clipboard is off"
+    static let deleteHistoryTitle = "Delete Clipboard History…"
+    static let deleteHistoryQuestion = "Delete all saved clipboard history?"
+    static let deleteHistoryWarning = "This can't be undone."
+    static let deleteTitle = "Delete"
+
+    /// Off, the History page offers to delete what's saved, if anything is.
+    static func offersHistoryDeletion(page: SettingsPage, clipboard: ClipboardController) -> Bool {
+        page == .clipboardHistory && !clipboard.isOn && clipboard.hasSavedHistory
+    }
 
     let page: SettingsPage
     let clipboard: ClipboardController
@@ -112,7 +121,7 @@ struct ClipboardSettingsPage: View {
             }
             switch page.clipboardContent(isOn: clipboard.isOn) {
             case .offBanner:
-                WindowsPageBanner(title: Self.offTitle, turnOn: clipboard.turnOn)
+                ClipboardOffForm(clipboard: clipboard, offersDeletion: Self.offersHistoryDeletion(page: page, clipboard: clipboard))
             case .page(let page):
                 ClipboardOnPage(page: page, access: access, chooseApp: chooseApp, recorder: recorder)
             case nil:
@@ -120,6 +129,36 @@ struct ClipboardSettingsPage: View {
             }
         }
         .navigationTitle(page.title)
+    }
+}
+
+/// The "Clipboard is off" banner, as the Windows pages show it, and, when offered, "Delete Clipboard
+/// History…", which asks first. Neither starts ClipKit.
+private struct ClipboardOffForm: View {
+    let clipboard: ClipboardController
+    let offersDeletion: Bool
+    @State private var asking = false
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent(ClipboardSettingsPage.offTitle) {
+                    Button(WindowsPageBanner.turnOnTitle, action: clipboard.turnOn)
+                }
+            }
+            if offersDeletion {
+                Section {
+                    Button(ClipboardSettingsPage.deleteHistoryTitle) { asking = true }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .alert(ClipboardSettingsPage.deleteHistoryQuestion, isPresented: $asking) {
+            Button(ClipboardSettingsPage.deleteTitle, role: .destructive) { clipboard.deleteHistory() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ClipboardSettingsPage.deleteHistoryWarning)
+        }
     }
 }
 
