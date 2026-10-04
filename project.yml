@@ -15,7 +15,7 @@ packages:
   WindowKit:
     path: Packages/WindowKit   # vendored Loop
   ClipKit:
-    path: Packages/ClipKit   # vendored Maccy; not linked yet
+    path: Packages/ClipKit   # vendored Maccy
 configFiles:
   Debug: Config/Shared.xcconfig
   Release: Config/Shared.xcconfig
@@ -34,6 +34,7 @@ targets:
       - App/Links
       - App/Intents
       - App/Windows
+      - App/Clipboard
       - path: Helper/dev.mooring.helper.plist
         buildPhase:
           copyFiles:
@@ -57,6 +58,7 @@ targets:
         product: AwaykeMonitors
       - package: MooringIPC
       - package: WindowKit
+      - package: ClipKit
     postCompileScripts:
       - name: Bundle Claude Code plugin
         script: '"$SRCROOT/scripts/bundle-claude-plugin.sh" "$SRCROOT/Integrations/claude-code-plugin" "$SRCROOT/Integrations/app-marketplace.json" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources/ClaudePlugin"'

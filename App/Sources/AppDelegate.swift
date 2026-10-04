@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var dropdown: DropdownController?
     private var windows: WindowsController?
+    private var clipboard: ClipboardController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
@@ -99,6 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.windows = windows
         SettingsWindowController.shared.windows = windows
         observeWindowsForArranger()
+
+        // Off by default; ClipKit isn't even created until Clipboard is turned on.
+        let clipboard = ClipboardController.live()
+        clipboard.launch()
+        self.clipboard = clipboard
 
         let statusItem = StatusItemController(engine: engine, windows: windows)
         let dropdown = DropdownController(
@@ -214,6 +220,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
+        clipboard?.willTerminate()
     }
 
     /// Never quit with lid sleep disabled (docs/SPEC.md 1.6, layer 4). The
