@@ -76,6 +76,7 @@ struct MCPHarness {
     var ownPID = defaultPID
     var client = ScriptedClient()
     var lidClient = ScriptedClient()
+    var windowClient = ScriptedClient()
     let capture = Capture()
 
     func run(_ lines: [String]) async -> Int32 {
@@ -86,7 +87,7 @@ struct MCPHarness {
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
             home: URL(fileURLWithPath: "/nowhere/home"),
-            readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, windowClient: ScriptedClient(), claude: { nil },
+            readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, windowClient: windowClient, claude: { nil },
             readLine: { feed.next() }, appVersion: Self.appVersion
         )
         return await MCPServer(environment: environment).run()
@@ -124,7 +125,7 @@ struct MCPHarness {
         toolResult(id)?["structuredContent"] as? [String: Any]
     }
 
-    var allRequests: [Request] { client.requests + lidClient.requests }
+    var allRequests: [Request] { client.requests + lidClient.requests + windowClient.requests }
 }
 
 /// A JSON-RPC request line.

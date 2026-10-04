@@ -28,6 +28,16 @@ To keep the Mac awake with the lid closed, prefer a hold, `mooring lease acquire
 
 When a long job finishes and the user may be away, `mooring notify "Done" "<what finished>"` tells them (rate-limited to one every 30 s).
 
+## Arranging windows
+
+When the user asks you to move, resize or lay out windows:
+
+1. Run `mooring win list --json` first.
+2. Then send one `mooring win arrange …` for the whole request.
+3. Tell the user every placement that isn't `ok`, and ask about `ambiguous` ones.
+4. Offer `mooring win undo`.
+5. If the reply says Windows is off, ask the user to turn it on from the menu bar.
+
 ## Rules
 
 - Call `mooring` directly. Never run it through `timeout`, `xargs`, `npx` or a wrapper script: the wrapper would become the process Mooring watches and the hold would end with it.

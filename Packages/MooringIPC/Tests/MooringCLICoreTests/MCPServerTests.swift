@@ -101,11 +101,14 @@ import Testing
     #expect(harness.client.requests.last?.op == .status)
 }
 
-@Test func toolsListIsExactlyFourTools() async throws {
+@Test func toolsListIsExactlyNineTools() async throws {
     let harness = MCPHarness()
     _ = await harness.run([initialize(), rpc(2, "tools/list")])
     let tools = try #require((harness.reply(2)?["result"] as? [String: Any])?["tools"] as? [[String: Any]])
-    #expect(tools.compactMap { $0["name"] as? String } == ["keep_awake", "release_awake", "awake_status", "notify"])
+    #expect(tools.compactMap { $0["name"] as? String } == [
+        "keep_awake", "release_awake", "awake_status", "notify",
+        "list_windows", "arrange_windows", "undo_arrangement", "save_layout", "apply_layout"
+    ])
     for tool in tools {
         let name = tool["name"] as? String ?? ""
         let description = tool["description"] as? String ?? ""

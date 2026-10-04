@@ -74,3 +74,37 @@ private func arguments(_ json: String) throws -> JSONValue {
     #expect(MCPMessage.parse(#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#) == .failure(.invalidRequest))
     #expect(MCPMessage.parse("nope") == .failure(.parseError))
 }
+
+@Test func arrangeWindowsSchemaDescribesAPlacement() throws {
+    let tool = try #require(MCPTools.definitions.first { $0.name == "arrange_windows" })
+    guard case .object(let schema) = tool.inputSchema, case .object(let properties)? = schema["properties"],
+          case .object(let placements)? = properties["placements"], case .object(let item)? = placements["items"],
+          case .object(let itemProperties)? = item["properties"], case .object(let frame)? = itemProperties["frame"],
+          case .object(let frameProperties)? = frame["properties"], case .object(let xBound)? = frameProperties["x"] else {
+        Issue.record("arrange_windows has no placement schema")
+        return
+    }
+    #expect(schema["required"] == .array([.string("placements")]))
+    #expect(placements["type"] == .string("array"))
+    #expect(placements["minItems"] == .int(1))
+    #expect(placements["maxItems"] == .int(32))
+    #expect(item["required"] == .array([.string("app")]))
+    #expect(itemProperties.keys.sorted() == ["app", "frame", "region", "screen", "title"])
+    #expect(frameProperties.keys.sorted() == ["h", "w", "x", "y"])
+    #expect(xBound["minimum"] == .int(0))
+    #expect(xBound["maximum"] == .int(1))
+    #expect(properties.keys.sorted() == ["launch", "placements", "preview"])
+}
+
+@Test func windowToolsParseTheirArguments() throws {
+    #expect(MCPTools.parse(name: "list_windows", arguments: nil) == .call(.listWindows))
+    #expect(MCPTools.parse(name: "undo_arrangement", arguments: nil) == .call(.undoArrangement))
+    #expect(MCPTools.parse(name: "save_layout", arguments: try arguments(#"{"name":" a "}"#)) == .call(.saveLayout(name: "a")))
+    #expect(MCPTools.parse(name: "apply_layout", arguments: try arguments(#"{"name":"a"}"#)) == .call(.applyLayout(name: "a")))
+    #expect(MCPTools.parse(name: "apply_layout", arguments: nil) == .invalid("name is required"))
+    let json = #"{"placements":[{"app":" Safari ","region":"maximize"}]}"#
+    let plan = MCPTools.parse(name: "arrange_windows", arguments: try arguments(json))
+    #expect(plan == .call(.arrangeWindows(WinPlan(placements: [WinPlacement(app: "Safari", region: "maximize")]))))
+    #expect(MCPTools.parse(name: "arrange_windows", arguments: nil) == .invalid("placements is required"))
+    #expect(MCPTools.parse(name: "arrange_windows", arguments: try arguments("{}")) == .invalid("placements is required"))
+}

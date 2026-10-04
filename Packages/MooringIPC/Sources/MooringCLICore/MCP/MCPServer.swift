@@ -108,6 +108,7 @@ struct MCPSession {
         case .release(let leaseID): await release(leaseID)
         case .status: await status()
         case .notify(let title, let body): await notify(title: title, body: body)
+        case .listWindows, .arrangeWindows, .undoArrangement, .saveLayout, .applyLayout: await perform(window: call)
         }
     }
 }
@@ -236,9 +237,9 @@ extension MCPSession {
 // MARK: - Talking to the app
 
 extension MCPSession {
-    fileprivate static let unexpectedReply = "Unexpected reply from Mooring"
+    static let unexpectedReply = "Unexpected reply from Mooring"
 
-    fileprivate enum Outcome {
+    enum Outcome {
         case done(ResponseResult, Request)
         /// A guardrail holds back what was asked for, but the app keeps it.
         case held(String)
@@ -247,7 +248,7 @@ extension MCPSession {
     }
 
     /// Sends one request, starting the app if it isn't running, and puts any failure into the CLI's words.
-    fileprivate func send(_ args: RequestArgs, through client: any RequestSending) async -> Outcome {
+    func send(_ args: RequestArgs, through client: any RequestSending) async -> Outcome {
         let request = Request(v: WireProtocol.version, id: environment.newID(), op: CommandRunner.op(of: args), args: args)
         do {
             let response = try await client.send(request, launch: true)
@@ -264,7 +265,7 @@ extension MCPSession {
         }
     }
 
-    fileprivate func humanText(_ result: ResponseResult, for request: Request) -> String {
+    func humanText(_ result: ResponseResult, for request: Request) -> String {
         CLIText.human(result, for: request.args, now: environment.now(), processes: environment.processes)
     }
 }

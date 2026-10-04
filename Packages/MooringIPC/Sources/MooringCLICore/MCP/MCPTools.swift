@@ -15,6 +15,12 @@ enum MCPTools {
         case release(leaseID: String?)
         case status
         case notify(title: String, body: String?)
+        case listWindows
+        /// A plan that passed `WinPlan.validated()`, without a `client`: the session adds its own.
+        case arrangeWindows(WinPlan)
+        case undoArrangement
+        case saveLayout(name: String)
+        case applyLayout(name: String)
     }
 
     enum Parsed: Equatable {
@@ -72,7 +78,7 @@ enum MCPTools {
                 "body": .object(["type": .string("string"), "maxLength": .int(300), "description": .string("More detail.")])
             ])
         )
-    ]
+    ] + windowDefinitions
 
     /// The `tools/list` result.
     static var listResult: JSONValue {
@@ -97,7 +103,7 @@ enum MCPTools {
                 guard let title = try string("title", in: args) else { return .invalid("title is required") }
                 return .call(.notify(title: title, body: try string("body", in: args)))
             default:
-                return .unknownTool
+                return try parseWindowTool(name, arguments: arguments, args: args)
             }
         } catch let error as ArgumentError {
             return .invalid(error.message)
@@ -128,6 +134,52 @@ enum MCPTools {
                                 leaseID: try string("lease_id", in: args)))
     }
 
+    private static func parseWindowTool(_ name: String, arguments: JSONValue?, args: [String: JSONValue]) throws -> Parsed {
+        switch name {
+        case "list_windows":
+            return .call(.listWindows)
+        case "arrange_windows":
+            return try arrangeWindows(arguments)
+        case "undo_arrangement":
+            return .call(.undoArrangement)
+        case "save_layout", "apply_layout":
+            guard let layout = try string("name", in: args)?.trimmingCharacters(in: .whitespacesAndNewlines), !layout.isEmpty else {
+                return .invalid("name is required")
+            }
+            return .call(name == "save_layout" ? .saveLayout(name: layout) : .applyLayout(name: layout))
+        default:
+            return .unknownTool
+        }
+    }
+
+    /// Decodes the arguments as a plan and checks it as the app will, so a bad plan is a tool error without a round trip.
+    private static func arrangeWindows(_ arguments: JSONValue?) throws -> Parsed {
+        guard case .object? = arguments else { return .invalid("placements is required") }
+        do {
+            let data = try JSONEncoder().encode(arguments)
+            var plan = try JSONDecoder().decode(WinPlan.self, from: data)
+            plan.client = nil
+            return .call(.arrangeWindows(try plan.validated()))
+        } catch let error as WireError {
+            return .invalid(error.message)
+        } catch let error as DecodingError {
+            return .invalid(describe(error))
+        }
+    }
+
+    private static func describe(_ error: DecodingError) -> String {
+        func path(_ context: DecodingError.Context) -> String {
+            context.codingPath.map { $0.intValue.map { "[\($0)]" } ?? ".\($0.stringValue)" }.joined().drop { $0 == "." }.description
+        }
+        switch error {
+        case .keyNotFound(let key, let context):
+            let place = path(context)
+            return place.isEmpty ? "\(key.stringValue) is required" : "missing \"\(key.stringValue)\" at \(place)"
+        case .typeMismatch(_, let context), .valueNotFound(_, let context): return "wrong value at \(path(context))"
+        default: return "it isn't a window plan"
+        }
+    }
+
     private struct ArgumentError: Error {
         let message: String
     }
@@ -149,7 +201,7 @@ enum MCPTools {
         }
     }
 
-    private static func schema(required: [String], properties: [String: JSONValue]) -> JSONValue {
+    static func schema(required: [String], properties: [String: JSONValue]) -> JSONValue {
         var members: [String: JSONValue] = ["type": .string("object"), "properties": .object(properties)]
         if !required.isEmpty { members["required"] = .array(required.map(JSONValue.string)) }
         return .object(members)
