@@ -77,14 +77,24 @@ public protocol WindowSystem {
     func preview(_ frame: CGRect, on screen: WSScreen) async
 }
 
+/// How long `LiveWindowSystem` waits on the system.
+enum WindowSystemTiming {
+    /// The longest one Accessibility call to another app may block, in seconds. Every call runs on the main actor, so
+    /// without this a hung app would stall Mooring's menu, IPC and lease renewals for the system default (about 6 s)
+    /// per call, and `apps()` makes several per app.
+    static let axTimeout: Float = 1.5
+    /// How long Loop's preview overlay shows each target.
+    static let previewDuration: Duration = .milliseconds(600)
+    /// How long an app gets to unhide before its window is moved.
+    static let unhideDelay: Duration = .milliseconds(150)
+    /// How long the Dock's restore animation gets before the window is moved.
+    static let restoreDelay: Duration = .milliseconds(350)
+}
+
 /// The real windows, through Loop's own window code. Every call does nothing (empty, nil or false) unless WindowKit
 /// is running, so Windows being off means no Accessibility calls at all.
 @MainActor
 public final class LiveWindowSystem: WindowSystem {
-    static let previewDuration: Duration = .milliseconds(600)
-    /// How long the Dock's restore animation gets before the window is moved.
-    static let restoreDelay: Duration = .milliseconds(350)
-
     public init() {}
 
     private var isRunning: Bool {
@@ -163,10 +173,11 @@ public final class LiveWindowSystem: WindowSystem {
         guard isRunning, let target = loopWindow(for: window) else { return false }
         if target.isApplicationHidden {
             target.setHidden(false)
+            try? await Task.sleep(for: WindowSystemTiming.unhideDelay)
         }
         if target.minimized {
             target.minimized = false
-            try? await Task.sleep(for: Self.restoreDelay)
+            try? await Task.sleep(for: WindowSystemTiming.restoreDelay)
         }
         return !target.minimized
     }
@@ -191,17 +202,23 @@ public final class LiveWindowSystem: WindowSystem {
                                     action: ScreenSwitchFrames.proportionalAction(window: frame, bounds: bounds))
         let controller = PreviewController()
         controller.open(context: context)
-        try? await Task.sleep(for: Self.previewDuration)
+        try? await Task.sleep(for: WindowSystemTiming.previewDuration)
         controller.close()
     }
 
     // MARK: - Lookups
 
-    /// The app's AX window elements (`kAXWindowsAttribute`), or none.
+    /// The app's AX window elements (`kAXWindowsAttribute`), or none. The app element and each window element get
+    /// `WindowSystemTiming.axTimeout`, so every later read or write through them (Loop's `Window` included) is bounded.
     private static func windowElements(pid: pid_t) -> [AXUIElement] {
-        let app = AXUIElementCreateApplication(pid)
+        let app = bounded(AXUIElementCreateApplication(pid))
         let elements: [AXUIElement]? = try? app.getValue(.windows)
-        return elements ?? []
+        return (elements ?? []).map(bounded)
+    }
+
+    private static func bounded(_ element: AXUIElement) -> AXUIElement {
+        AXUIElementSetMessagingTimeout(element, WindowSystemTiming.axTimeout)
+        return element
     }
 
     /// A fresh Loop `Window` for a listed window: its app's AX window whose `_AXUIElementGetWindow` id matches.
