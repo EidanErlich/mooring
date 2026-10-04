@@ -88,6 +88,6 @@ final class LinkHandler {
         // Recorded before the first suspension, so two links at once can't both post.
         lastError = current
         guard await poster.authorize() else { return }
-        await poster.post(id: "link-error-\(UUID().uuidString)", title: Self.errorTitle, body: message, userInfo: [:], category: nil)
+        _ = await poster.post(id: "link-error-\(UUID().uuidString)", title: Self.errorTitle, body: message, userInfo: [:], category: nil)
     }
 }

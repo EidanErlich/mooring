@@ -15,6 +15,8 @@ final class FakeNotificationPoster: NotificationPosting {
     }
 
     var authorized = true
+    /// What `post` reports: false when the system refused the notification.
+    var postSucceeds = true
     var status: String? = "allowed"
     var posts: [Post] = []
     var withdrawn: [String] = []
@@ -29,8 +31,9 @@ final class FakeNotificationPoster: NotificationPosting {
 
     func notificationStatus() async -> String? { status }
 
-    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async {
+    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async -> Bool {
         posts.append(Post(id: id, title: title, body: body, userInfo: userInfo, category: category))
+        return postSucceeds
     }
 
     func withdraw(id: String) {
@@ -110,6 +113,23 @@ struct LidApprovalCenterTests {
         #expect(ContinuousClock.now - start < .seconds(1))
         #expect(poster.posts.isEmpty)
         #expect(center.pending.isEmpty)
+    }
+
+    @Test func failedPostAnswersUnavailableAtOnce() async {
+        poster.postSucceeds = false
+        let center = LidApprovalCenter(poster: poster, timeout: .seconds(60))
+        let start = ContinuousClock.now
+        #expect(await center.ask(leaseID: "anchor-1", agent: "Claude Code", body: "tests") == .unavailable)
+        #expect(ContinuousClock.now - start < .seconds(1))
+        #expect(center.pending.isEmpty)
+    }
+
+    @Test func failedWindowPostAnswersUnavailableAtOnce() async {
+        poster.postSucceeds = false
+        let center = WindowApprovalCenter(poster: poster, timeout: .seconds(60))
+        let start = ContinuousClock.now
+        #expect(await center.ask(title: "Claude Code wants to arrange windows", body: "tidy") == .unavailable)
+        #expect(ContinuousClock.now - start < .seconds(1))
     }
 
     @Test func pendingTracksTheLeaseUntilResolved() async {

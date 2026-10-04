@@ -181,8 +181,8 @@ final class UpdateReminder {
         let poster = poster
         return Task {
             guard await poster.authorize() else { return }
-            await poster.post(id: Self.notificationID, title: Self.title(version: version), body: Self.body,
-                              userInfo: [:], category: nil)
+            _ = await poster.post(id: Self.notificationID, title: Self.title(version: version), body: Self.body,
+                                  userInfo: [:], category: nil)
         }
     }
 

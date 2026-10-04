@@ -120,7 +120,9 @@ final class WindowApprovalCenter: WindowApproving {
             }
             waiting[id] = Waiting(continuation: continuation, timer: timer)
             Task {
-                await poster.post(id: id, title: title, body: body, userInfo: [:], category: Self.categoryID)
+                let posted = await poster.post(id: id, title: title, body: body, userInfo: [:], category: Self.categoryID)
+                // Nothing was shown, so nobody can answer: don't wait out the timeout.
+                guard posted else { return resolve(id, with: .unavailable) }
                 // Resolved while posting: don't leave buttons that do nothing.
                 if waiting[id] == nil { poster.withdraw(id: id) }
             }
