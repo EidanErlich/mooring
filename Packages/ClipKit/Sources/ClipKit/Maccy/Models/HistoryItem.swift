@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Models/HistoryItem.swift
 import AppKit
 import Defaults
 import Sauce
@@ -243,7 +244,7 @@ class HistoryItem {
     do {
       try requestHandler.perform([request])
     } catch {
-      print("Unable to perform the request: \(error).")
+      ClipKitLog.logger.error("Unable to recognise text in an image: \(type(of: error))")
     }
   }
 

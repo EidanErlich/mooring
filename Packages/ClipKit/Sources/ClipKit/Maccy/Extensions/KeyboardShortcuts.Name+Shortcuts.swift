@@ -3,7 +3,7 @@ import KeyboardShortcuts
 
 extension KeyboardShortcuts.Name {
   static let popup = ClipKitShortcuts.guarded(
-    Self("clipboardPopup", default: Shortcut(.c, modifiers: [.command, .shift])),
+    Self(ClipKitShortcuts.popupRawValue, default: Shortcut(.c, modifiers: [.command, .shift])),
     registeredWhile: { ClipKitShortcuts.popupActive }
   )
   static let pin = ClipKitShortcuts.guarded(Self("clipboardPin", default: Shortcut(.p, modifiers: [.option])))

@@ -12,8 +12,13 @@ enum ClipKitShortcuts {
     /// True while a ClipKit runs; the popup hotkey may be registered only then.
     static var popupActive = false
 
+    static let popupRawValue = "clipboardPopup"
+
     /// The names this enum last registered and hasn't unregistered since.
     private(set) static var registered: Set<KeyboardShortcuts.Name> = []
+
+    /// Unregisters a name's shortcut system-wide. Tests swap it to watch the calls.
+    static var unregister: (KeyboardShortcuts.Name) -> Void = { KeyboardShortcuts.disable($0) }
 
     /// Registers `name` if it may be registered now; otherwise makes sure it isn't.
     static func enable(_ name: KeyboardShortcuts.Name) {
@@ -26,8 +31,18 @@ enum ClipKitShortcuts {
     }
 
     static func disable(_ name: KeyboardShortcuts.Name) {
-        KeyboardShortcuts.disable(name)
         registered.remove(name)
+        // Unregistering is by key combination, so it would also take down a running popup hotkey
+        // the user gave the same keys.
+        if name.rawValue != popupRawValue, sharesTheRegisteredPopupKeys(name) {
+            return
+        }
+        unregister(name)
+    }
+
+    private static func sharesTheRegisteredPopupKeys(_ name: KeyboardShortcuts.Name) -> Bool {
+        guard registered.contains(.popup), let keys = KeyboardShortcuts.getShortcut(for: name) else { return false }
+        return keys == KeyboardShortcuts.getShortcut(for: .popup)
     }
 
     /// Unregisters `name` now and after every change while `isActive` is false.
@@ -36,7 +51,7 @@ enum ClipKitShortcuts {
         registeredWhile isActive: @escaping () -> Bool = { false }
     ) -> KeyboardShortcuts.Name {
         if !isActive() {
-            KeyboardShortcuts.disable(name)
+            disable(name)
         }
         NotificationCenter.default.addObserver(
             forName: Notification.Name("KeyboardShortcuts_shortcutByNameDidChange"),

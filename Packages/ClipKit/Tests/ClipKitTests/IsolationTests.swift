@@ -1,6 +1,8 @@
 import AppKit
 import Defaults
 import Foundation
+import KeyboardShortcuts
+import Logging
 import Testing
 @testable import ClipKit
 
@@ -33,6 +35,7 @@ extension ClipKitGlobalStateTests {
                     kit.clear(all: true)
                     _ = ClipKit.settingsValues()
                     _ = ClipKit.popupShortcutName
+                    _ = kit.popupView()
                     let before = ClipKit.instantiatedSingletons
                     KeyboardShortcutsFixture.parkPopupShortcut()
                     kit.start()
@@ -62,6 +65,120 @@ extension ClipKitGlobalStateTests {
             AppState.shared.popup.reset()
             ClipKitShortcuts.enable(.popup)
             #expect(!ClipKitShortcuts.registered.contains(.popup))
+        }
+
+        @Test func popupViewIsEmptyWhileOff() {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            let kit = Fixture.kit(pasteboard: scratch)
+            let monitorsBefore = ModifierFlags.monitoringCount
+            _ = kit.popupView()
+            #expect(ModifierFlags.monitoringCount == monitorsBefore)
+        }
+
+        /// The popup view's modifier-flags monitor runs only while ClipKit runs, and goes with the view.
+        @Test func modifierFlagsMonitorOnlyWhileRunning() {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            let kit = Fixture.kit(pasteboard: scratch)
+            let idle = ModifierFlags()
+            #expect(!idle.isMonitoring)
+
+            Fixture.start(kit)
+            var flags: ModifierFlags? = ModifierFlags()
+            #expect(flags?.isMonitoring == true)
+            #expect(idle.isMonitoring)
+
+            kit.stop()
+            #expect(flags?.isMonitoring == false)
+            #expect(!idle.isMonitoring)
+
+            Fixture.start(kit)
+            #expect(flags?.isMonitoring == true)
+            weak var released = flags
+            flags = nil
+            #expect(released == nil)
+            #expect(ModifierFlags.monitoringCount == 1) // only `idle`
+            kit.stop()
+            #expect(ModifierFlags.monitoringCount == 0)
+        }
+
+        /// Opening the store records where it opened; asking for another place afterwards is a bug.
+        @Test func storeLocationChangeAfterOpenTraps() async {
+            await #expect(processExitsWith: .failure) {
+                await MainActor.run {
+                    Storage.location = .memory
+                    _ = Storage.shared
+                    Storage.location = .file(URL(filePath: "/tmp/dev.mooring.clipkit.tests.never/Storage.sqlite"))
+                }
+            }
+        }
+
+        @Test func releasedKitStopsEverything() {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            var kit: ClipKit? = Fixture.kit(pasteboard: scratch)
+            Fixture.start(kit!)
+            #expect(Clipboard.shared.pollingTimer != nil)
+            weak var released = kit
+            kit = nil
+            #expect(released == nil)
+            #expect(Clipboard.shared.pollingTimer == nil)
+            #expect(!AppState.shared.popup.isStarted)
+            #expect(!ClipKitShortcuts.registered.contains(.popup))
+
+            let next = Fixture.kit(pasteboard: scratch)
+            next.start()
+            #expect(next.isRunning)
+            next.stop()
+        }
+
+        /// Pin, delete and preview are never registered, but unregistering one must not take down the
+        /// popup hotkey when the user gave it the same keys.
+        @Test func unusedShortcutSharingThePopupKeysKeepsThePopup() {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            let kit = Fixture.kit(pasteboard: scratch)
+            Fixture.start(kit)
+            defer {
+                kit.stop()
+                ClipKitShortcuts.unregister = { KeyboardShortcuts.disable($0) }
+                Fixture.resetSettings()
+            }
+            let pinKeys = KeyboardShortcuts.getShortcut(for: .pin) // creates .pin before the swap
+            var unregistered: [KeyboardShortcuts.Name] = []
+            ClipKitShortcuts.unregister = { unregistered.append($0) }
+
+            KeyboardShortcuts.setShortcut(pinKeys, for: .popup)
+            ClipKitShortcuts.disable(.pin)
+            #expect(!unregistered.contains(.pin))
+            #expect(kit.isPopupShortcutRegistered)
+
+            KeyboardShortcuts.setShortcut(KeyboardShortcuts.Shortcut(.f18, modifiers: [.command, .option]), for: .popup)
+            ClipKitShortcuts.disable(.pin)
+            #expect(unregistered.contains(.pin))
+        }
+
+        @Test func logsOnlyWarningsUnderTests() {
+            #expect(ClipKitLog.logger.logLevel == .warning)
+        }
+
+        /// Maccy's `print` calls wrote app paths and errors to stdout; everything goes through ClipKitLog.
+        @Test func noPrintsInVendoredSources() throws {
+            let sources = URL(filePath: #filePath)
+                .deletingLastPathComponent()
+                .appending(path: "../../Sources/ClipKit")
+                .standardizedFileURL
+            var offenders: [String] = []
+            let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
+            for case let file as URL in files where file.pathExtension == "swift" {
+                let lines = try String(contentsOf: file, encoding: .utf8).components(separatedBy: .newlines)
+                for (index, line) in lines.enumerated()
+                where ["print(", "NSLog(", "debugPrint("].contains(where: line.contains) {
+                    offenders.append("\(file.lastPathComponent):\(index + 1)")
+                }
+            }
+            #expect(offenders.isEmpty, "Direct output: \(offenders)")
         }
 
         @Test func popupInitRegistersNothing() {

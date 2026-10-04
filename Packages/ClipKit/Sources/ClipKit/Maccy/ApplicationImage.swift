@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/ApplicationImage.swift
 import Defaults
 import SwiftUI
 
@@ -43,9 +44,8 @@ class ApplicationImage {
 
       let descriptor = open(appURL.path, O_EVTONLY)
       if descriptor == -1 {
-        let errorCode = errno
-        print("Error code: \(errorCode)")
-        print("Error message: \(String(cString: strerror(errorCode)))")
+        // Logged without the app's path: it would tell which app a copy came from.
+        ClipKitLog.logger.debug("Couldn't watch an app's icon: errno \(errno)")
       } else if descriptor > 0 {
         let source = DispatchSource.makeFileSystemObjectSource(
           fileDescriptor: descriptor,
@@ -58,13 +58,13 @@ class ApplicationImage {
             let event = source.data
             if event.contains(.delete) {
               // File was deleted.
-              print("Deleted", appURL.path)
+              ClipKitLog.logger.debug("A watched app was deleted")
               source.cancel()
               self.image = nil
               self.lastChecked = nil
             } else if event.contains(.write) {
               // File was modified. Fetch new icon
-              print("Modified", appURL.path)
+              ClipKitLog.logger.debug("A watched app was modified")
               self.image = NSWorkspace.shared.icon(forFile: appURL.path)
             }
           }

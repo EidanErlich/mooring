@@ -17,15 +17,18 @@ public final class ClipKit {
     public nonisolated static let popupShortcutName: KeyboardShortcuts.Name = .popup
 
     /// The instance whose `start()` is in effect. Maccy's singletons are process-wide, so only one runs.
-    private(set) static var runningOwner: ObjectIdentifier?
+    /// Weak, so a released instance neither keeps running nor blocks a later start.
+    private(set) static weak var runningOwner: ClipKit?
 
     private let storeURL: URL?
     private let inMemory: Bool
     private let environment: ClipboardEnvironment
     private var checkIntervalObserver: Task<Void, Never>?
+    /// Whether this instance started and hasn't stopped; `deinit` can't use the zeroed weak owner.
+    private var ownsRunning = false
 
     public var isRunning: Bool {
-        Self.runningOwner == ObjectIdentifier(self)
+        Self.runningOwner === self
     }
 
     /// Whether the popup hotkey is registered, which is only while running.
@@ -45,11 +48,31 @@ public final class ClipKit {
         self.environment = environment
     }
 
+    /// Releasing a running instance stops everything it started.
+    deinit {
+        checkIntervalObserver?.cancel()
+        guard ownsRunning else { return }
+        let tearDown = {
+            MainActor.assumeIsolated {
+                // Another instance may have started meanwhile; then it owns Maccy's singletons.
+                if ClipKit.runningOwner == nil {
+                    ClipKit.tearDown()
+                }
+            }
+        }
+        if Thread.isMainThread {
+            tearDown()
+        } else {
+            DispatchQueue.main.async(execute: tearDown)
+        }
+    }
+
     /// Opens the store, starts polling the clipboard and registers the popup hotkey.
     /// Calling it again while running does nothing.
     public func start() {
         guard Self.runningOwner == nil else { return }
-        Self.runningOwner = ObjectIdentifier(self)
+        Self.runningOwner = self
+        ownsRunning = true
 
         Storage.location = prepareStoreLocation()
         let clipboard = Clipboard.shared
@@ -64,6 +87,7 @@ public final class ClipKit {
 
         ClipKitShortcuts.popupActive = true
         AppState.shared.popup.start()
+        ModifierFlags.setMonitoring(true)
         Task { try? await History.shared.load() }
     }
 
@@ -72,30 +96,45 @@ public final class ClipKit {
     public func stop() {
         guard isRunning else { return }
         Self.runningOwner = nil
+        ownsRunning = false
 
         checkIntervalObserver?.cancel()
         checkIntervalObserver = nil
+        Self.tearDown()
+    }
+
+    private static func tearDown() {
         Clipboard.shared.stop()
         ClipKitShortcuts.popupActive = false
         AppState.shared.popup.stop()
+        ModifierFlags.setMonitoring(false)
     }
 
     private func prepareStoreLocation() -> Storage.Location {
         if inMemory { return .memory }
         guard let url = storeURL ?? (TestHost.isActive ? nil : Self.defaultStoreURL) else { return .memory }
+        let location = Self.storeLocation(for: url, fileManager: .default)
+        // Under a test host the store is always in memory; the folder is still created and secured.
+        return TestHost.isActive ? .memory : location
+    }
+
+    /// The store on disk if its folder could be created and secured; otherwise in memory, so history
+    /// is never written to a folder others can read or that's backed up.
+    static func storeLocation(for storeURL: URL, fileManager: FileManager) -> Storage.Location {
         do {
-            try Self.prepareStoreFolder(for: url)
+            try prepareStoreFolder(for: storeURL, fileManager: fileManager)
+            return .file(storeURL)
         } catch {
-            ClipKitLog.logger.error("Could not prepare the clipboard store folder: \(error.localizedDescription)")
+            let code = (error as NSError).code
+            ClipKitLog.logger.error("Couldn't secure the clipboard store folder (error \(code)); keeping history in memory")
+            return .memory
         }
-        return .file(url)
     }
 
     /// Creates the store's folder owner-only (`0700`), tightens it if it already existed, and keeps it
     /// out of backups.
-    static func prepareStoreFolder(for storeURL: URL) throws {
+    static func prepareStoreFolder(for storeURL: URL, fileManager: FileManager) throws {
         var folder = storeURL.deletingLastPathComponent()
-        let fileManager = FileManager.default
         try fileManager.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path(percentEncoded: false))
         var values = URLResourceValues()
@@ -169,9 +208,11 @@ extension ClipKit {
         }
     }
 
-    /// Maccy's popup content. Build it only while running: it reads the history.
+    /// Maccy's popup content, or an empty view while not running: building it creates Maccy's
+    /// singletons and opens the store.
     public func popupView() -> AnyView {
-        AnyView(ContentView())
+        guard isRunning else { return AnyView(EmptyView()) }
+        return AnyView(ContentView())
     }
 
     private func item(_ id: ClipItem.ID) -> HistoryItem? {

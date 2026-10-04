@@ -4,13 +4,21 @@ import SwiftData
 
 @MainActor
 class Storage {
-  enum Location {
+  enum Location: Equatable {
     case file(URL)
     case memory
   }
 
-  /// Where `shared` opens the store; `ClipKit.start()` sets it before the first use.
-  static var location = Location.memory
+  /// Where `shared` opens the store; `ClipKit.start()` sets it before the first use. Changing it
+  /// once the store is open is a bug: the store stays where it opened.
+  static var location = Location.memory {
+    didSet {
+      guard let openedLocation, openedLocation != location else { return }
+      ClipKitLog.logger.error("The clipboard store's location changed after it opened; it stays where it opened")
+      assertionFailure("Storage.location changed after Storage.shared opened")
+    }
+  }
+  private static var openedLocation: Location?
 
   static let shared = ClipKit.track(Storage())
 
@@ -29,9 +37,9 @@ class Storage {
   init() {
     var config = ModelConfiguration(isStoredInMemoryOnly: true)
     url = if case .file(let url) = Storage.location { url } else { URL(filePath: "/dev/null") }
+    Storage.openedLocation = Storage.location
 
-    // Under a test host the store is always in memory.
-    if case .file(let url) = Storage.location, !TestHost.isActive {
+    if case .file(let url) = Storage.location {
       config = ModelConfiguration(url: url)
     }
 

@@ -56,6 +56,26 @@ extension ClipKitGlobalStateTests {
             #expect(try fresh.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
         }
 
+        /// If the folder can't be created or secured, the store stays in memory rather than open unsecured.
+        @Test func unsecurableFolderFallsBackToMemory() throws {
+            let home = Fixture.temporaryFolder()
+            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: home.path(percentEncoded: false))
+                try? FileManager.default.removeItem(at: home)
+            }
+
+            let securable = home.appending(path: "ok/Clipboard/Storage.sqlite")
+            #expect(ClipKit.storeLocation(for: securable, fileManager: .default) == .file(securable))
+
+            let refusesChmod = home.appending(path: "chmod/Clipboard/Storage.sqlite")
+            #expect(ClipKit.storeLocation(for: refusesChmod, fileManager: RefusingChmodFileManager()) == .memory)
+
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: home.path(percentEncoded: false))
+            let readOnly = home.appending(path: "readonly/Clipboard/Storage.sqlite")
+            #expect(ClipKit.storeLocation(for: readOnly, fileManager: .default) == .memory)
+        }
+
         @Test func inMemoryCreatesNoFolder() {
             let home = Fixture.temporaryFolder()
             defer { try? FileManager.default.removeItem(at: home) }
@@ -69,5 +89,11 @@ extension ClipKitGlobalStateTests {
             kit.stop()
             #expect(!FileManager.default.fileExists(atPath: home.path(percentEncoded: false)))
         }
+    }
+}
+
+private final class RefusingChmodFileManager: FileManager {
+    override func setAttributes(_ attributes: [FileAttributeKey: Any], ofItemAtPath path: String) throws {
+        throw CocoaError(.fileWriteNoPermission)
     }
 }
