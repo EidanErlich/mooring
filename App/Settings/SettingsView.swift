@@ -97,6 +97,7 @@ struct SettingsView: View {
     let engine: AwakeEngine?
     let windows: WindowsController?
     let clipboard: ClipboardController?
+    let updates: UpdatesController?
     @Bindable var navigation: SettingsNavigation
 
     private var groups: [String] {
@@ -132,7 +133,7 @@ struct SettingsView: View {
                 if let clipboard {
                     ClipboardSettingsPage(page: page, clipboard: clipboard)
                 }
-            case .advanced: AdvancedSettingsPage(engine: engine)
+            case .advanced: AdvancedSettingsPage(engine: engine, updates: updates)
             }
         }
     }

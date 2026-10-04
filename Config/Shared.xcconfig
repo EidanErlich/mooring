@@ -12,4 +12,8 @@ CURRENT_PROJECT_VERSION = 1
 MOORING_SIGN_IDENTITY = -
 MOORING_TEAM =
 
+// Sparkle's public EdDSA key (Info.plist SUPublicEDKey). Empty means the updater is off: no Sparkle
+// updater is created, the Updates settings are hidden and Mooring never checks the network.
+MOORING_SPARKLE_PUBLIC_KEY =
+
 #include? "Local.xcconfig"

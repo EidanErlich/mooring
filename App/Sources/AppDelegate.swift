@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dropdown: DropdownController?
     private var windows: WindowsController?
     private var clipboard: ClipboardController?
+    private var updates: UpdatesController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
@@ -119,6 +120,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItem.map(dropdown.open(from:))
         }
         self.dropdown = dropdown
+        startUpdates()
+    }
+
+    /// Off without a Sparkle key: no updater, no alert, no network. With one, the consent alert is asked
+    /// once, after launching finishes.
+    private func startUpdates() {
+        let updates = UpdatesController.live()
+        self.updates = updates
+        SettingsWindowController.shared.updates = updates
+        DispatchQueue.main.async { updates.launch() }
     }
 
     /// Battery, lid and thermal state feed the guardrails (docs/SPEC.md 1.7).

@@ -39,5 +39,11 @@
 	<string>alert</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://eidanerlich.github.io/mooring/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>$(MOORING_SPARKLE_PUBLIC_KEY)</string>
 </dict>
 </plist>

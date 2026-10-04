@@ -14,10 +14,13 @@ XCODEBUILD_FLAGS ?=
 
 # -skipMacroValidation: WindowKit's Scribe dependency uses Swift macros, which need it non-interactively.
 # -disableAutomaticPackageResolution: builds use exactly the pins in Config/Package.resolved.
+# -packageAuthorizationProvider netrc: every package is public, so downloading Sparkle's binary never
+# looks for GitHub credentials in the Keychain (which stops at an access prompt).
 XCODEBUILD = xcodebuild -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(DERIVED) \
-	-destination 'platform=macOS,arch=$(shell uname -m)' -skipMacroValidation -disableAutomaticPackageResolution
+	-destination 'platform=macOS,arch=$(shell uname -m)' -skipMacroValidation -disableAutomaticPackageResolution \
+	-packageAuthorizationProvider netrc
 
-# Pins for the gitignored project. Refresh: rm $(RESOLVED); xcodebuild -project $(PROJECT) -resolvePackageDependencies; cp $(RESOLVED) Config/
+# Pins for the gitignored project. Refresh: rm $(RESOLVED); xcodebuild -project $(PROJECT) -packageAuthorizationProvider netrc -resolvePackageDependencies; cp $(RESOLVED) Config/
 RESOLVED    := $(PROJECT)/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 .PHONY: bootstrap generate build run test lint install reset-sleep uninstall clean

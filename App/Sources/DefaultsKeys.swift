@@ -16,4 +16,8 @@ extension Defaults.Keys {
     static let notifyGuardrails = Key<Bool>("notifyGuardrails", default: true)
     /// Settings → General: show the countdown ("1:12", "42m") in the menu-bar pill.
     static let showTimeLeftInMenuBar = Key<Bool>("showTimeLeftInMenuBar", default: true)
+    /// Settings → Advanced: Sparkle checks for updates on its own. Off until the user agrees.
+    static let checkForUpdates = Key<Bool>("checkForUpdates", default: false)
+    /// The update consent alert has been answered, so it isn't shown again.
+    static let didAskForUpdates = Key<Bool>("didAskForUpdates", default: false)
 }

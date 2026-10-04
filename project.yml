@@ -8,6 +8,9 @@ packages:
   Defaults:
     url: https://github.com/sindresorhus/Defaults
     exactVersion: 9.0.9
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.0   # off unless MOORING_SPARKLE_PUBLIC_KEY is set (Config/Shared.xcconfig)
   AwakeKit:
     path: Packages/AwakeKit
   MooringIPC:
@@ -35,6 +38,7 @@ targets:
       - App/Intents
       - App/Windows
       - App/Clipboard
+      - App/Updates
       - path: Helper/dev.mooring.helper.plist
         buildPhase:
           copyFiles:
@@ -59,6 +63,7 @@ targets:
       - package: MooringIPC
       - package: WindowKit
       - package: ClipKit
+      - package: Sparkle
     postCompileScripts:
       - name: Bundle Claude Code plugin
         script: '"$SRCROOT/scripts/bundle-claude-plugin.sh" "$SRCROOT/Integrations/claude-code-plugin" "$SRCROOT/Integrations/app-marketplace.json" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources/ClaudePlugin"'
