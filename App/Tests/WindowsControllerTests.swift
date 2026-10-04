@@ -1,3 +1,4 @@
+import AwakeKit
 import Defaults
 import Foundation
 import Testing
@@ -276,6 +277,27 @@ struct WindowsControllerTests {
         #expect(harness.runtimes[0].starts == 1)
         #expect(harness.runtimes[1].starts == 1)
         #expect(harness.running)
+    }
+
+    /// Turning off while Accessibility is missing gives the menu-bar icon back to the awake state.
+    @Test func turnOffFromNeedsAccessibilityClearsPill() {
+        let harness = Harness(enabled: true, trusted: false)
+        harness.controller.launch()
+        func pill() -> MenuBarState {
+            MenuBarState.from(leases: [], state: .off, wantsLid: false, helperEnabled: true,
+                              windowsNeedAccessibility: harness.controller.wantsAttention, showTimeLeft: true, now: Date())
+        }
+        #expect(pill() == .attention(.windowsNeedAccessibility))
+
+        harness.controller.turnOff()
+        #expect(harness.controller.state == .off)
+        #expect(!harness.settings.windowsEnabled)
+        #expect(pill() == .off)
+        #expect(harness.clock.interval == nil)
+
+        harness.controller.launch()
+        #expect(harness.controller.state == .off)
+        #expect(pill() == .off)
     }
 
     @Test func windowsAreOffByDefault() {

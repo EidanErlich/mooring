@@ -74,7 +74,7 @@ final class StatusItemController: NSObject {
     func redraw() {
         let menuState = MenuBarState.from(leases: engine.leases, state: engine.state, wantsLid: engine.wantsLid,
                                           helperEnabled: HelperClient.shared.status == .enabled,
-                                          windowsNeedAccessibility: windows?.state == .needsAccessibility,
+                                          windowsNeedAccessibility: windows?.wantsAttention == true,
                                           showTimeLeft: Defaults[.showTimeLeftInMenuBar], now: Date())
         // The spoken sentence names everything the image shows, down to the visible minute.
         let sentence = MenuBarText.accessibilityLabel(for: menuState)

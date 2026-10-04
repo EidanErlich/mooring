@@ -62,13 +62,14 @@ struct WindowsSettingsPage: View {
 }
 
 /// "Window Manager": on turns Windows on (asking for Accessibility if needed), off turns it off.
+/// It shows whether Windows is wanted, so it reads on (and can be turned off) while Windows waits for Accessibility.
 struct WindowManagerToggle: View {
     static let title = "Window Manager"
 
     let windows: WindowsController
 
     static func isOn(_ windows: WindowsController) -> Binding<Bool> {
-        Binding(get: { windows.state == .on }, set: { $0 ? windows.turnOn() : windows.turnOff() })
+        Binding(get: { windows.state != .off }, set: { $0 ? windows.turnOn() : windows.turnOff() })
     }
 
     var body: some View {

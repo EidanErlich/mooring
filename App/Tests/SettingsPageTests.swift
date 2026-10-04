@@ -57,6 +57,20 @@ struct SettingsPageTests {
         #expect(windows.state == .off)
     }
 
+    /// The switch shows whether Windows is wanted, so it can turn Windows off while it waits for Accessibility.
+    @Test func windowManagerToggleReflectsWanted() {
+        for state in [WindowsController.State.waitingForTrust, .needsAccessibility] {
+            let windows = WindowsController.fake(state)
+            let isOn = WindowManagerToggle.isOn(windows)
+            #expect(isOn.wrappedValue, "\(state)")
+            isOn.wrappedValue = false
+            #expect(windows.state == .off, "\(state)")
+            #expect(!isOn.wrappedValue, "\(state)")
+        }
+        #expect(WindowManagerToggle.isOn(.fake(.on)).wrappedValue)
+        #expect(!WindowManagerToggle.isOn(.fake(.off)).wrappedValue)
+    }
+
     @Test func agentsPageUsesSparkles() {
         #expect(SettingsPage.agents.systemImage == "sparkles")
     }

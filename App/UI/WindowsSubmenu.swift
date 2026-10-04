@@ -17,9 +17,10 @@ struct WindowActions {
 }
 
 /// The dropdown's Windows submenu. While Windows isn't on it holds only "Turn On…" (plus the reason
-/// when Accessibility is missing) and never asks WindowKit for anything. Rows are hosted, like the
-/// Awake submenu's, so each shortcut is shown as the row's trailing text rather than as a key
-/// equivalent: a menu key equivalent is a single key and would be a live shortcut.
+/// when Accessibility is missing, and "Turn Off Windows" while it's wanted) and never asks WindowKit
+/// for anything. Rows are hosted, like the Awake submenu's, so each shortcut is shown as the row's
+/// trailing text rather than as a key equivalent: a menu key equivalent is a single key and would be
+/// a live shortcut.
 @MainActor
 final class WindowsSubmenu: NSObject, NSMenuDelegate {
     let menu = NSMenu()
@@ -62,6 +63,11 @@ final class WindowsSubmenu: NSObject, NSMenuDelegate {
         // Turning on can show the Accessibility sheet or open System Settings, so it runs from the
         // menu's close callback, never while the menu is still tracking.
         afterClose { [windows] in windows.turnOn() }
+    }
+
+    /// Turn Off Windows, offered while Windows waits for Accessibility; runs once the menu has closed.
+    func turnOff() {
+        afterClose { [windows] in windows.turnOff() }
     }
 
     func setWindowManager(_ isOn: Bool) {
@@ -118,7 +124,11 @@ final class WindowsSubmenu: NSObject, NSMenuDelegate {
         case .needsAccessibility:
             menu.addItem(caption(id: "windows.reason", "Windows needs Accessibility", font: .body))
             menu.addItem(turnOnRow())
-        case .off, .waitingForTrust:
+            menu.addItem(turnOffRow())
+        case .waitingForTrust:
+            menu.addItem(turnOnRow())
+            menu.addItem(turnOffRow())
+        case .off:
             menu.addItem(turnOnRow())
         }
     }
@@ -126,6 +136,12 @@ final class WindowsSubmenu: NSObject, NSMenuDelegate {
     private func turnOnRow() -> NSMenuItem {
         DropdownMenu.hostedItem(id: "windows.turnOn", title: "Turn On…") {
             MenuRow(title: "Turn On…", highlighted: self.model.highlightedID == "windows.turnOn") { self.turnOn() }
+        }
+    }
+
+    private func turnOffRow() -> NSMenuItem {
+        DropdownMenu.hostedItem(id: "windows.turnOff", title: "Turn Off Windows") {
+            MenuRow(title: "Turn Off Windows", highlighted: self.model.highlightedID == "windows.turnOff") { self.turnOff() }
         }
     }
 

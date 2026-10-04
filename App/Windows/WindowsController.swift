@@ -52,6 +52,9 @@ final class WindowsController {
 
     private(set) var state = State.off
 
+    /// The menu-bar icon flags Windows only while it's wanted and Accessibility is missing.
+    var wantsAttention: Bool { state == .needsAccessibility }
+
     /// Shown while waiting for trust after Turn On.
     @ObservationIgnored var sheet: (any AccessibilitySheetPresenting)?
 
