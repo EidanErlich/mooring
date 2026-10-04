@@ -4,16 +4,18 @@ import MooringIPC
 /// Sends one request to the running app and returns its reply.
 public protocol RequestSending: Sendable {
     /// Throws `CLIError.unreachable` when the app isn't there (after trying to launch it, if `launch`),
-    /// `.noAnswer` when it was reached but didn't reply, and `.blocked` when the socket may not be opened.
+    /// `.noAnswer` when it was reached but didn't reply or is running but not answering, and `.blocked` when the socket
+    /// may not be opened.
     func send(_ request: Request, launch: Bool) async throws -> Response
 }
 
 public enum CLIError: Error, Equatable {
     /// The command line was wrong; the message says how.
     case usage(String)
-    /// Nothing listens on the socket and the app couldn't be started.
+    /// Nothing listens on the socket and the app isn't running, even after trying to start it.
     case unreachable
-    /// The app accepted the connection but didn't give a usable reply; the request may have gone through.
+    /// The app accepted the connection but didn't give a usable reply (the request may have gone through), or it is
+    /// running but busy: its socket wasn't taking connections.
     case noAnswer
     /// The system refused access to the socket, as a sandbox does.
     case blocked
@@ -79,7 +81,8 @@ public struct CLIEnvironment: Sendable {
     public var claude: @Sendable () -> ClaudeSnapshot?
     /// Reads one line from stdin without its newline, blocking until it arrives; nil at end of input. For `mooring mcp`.
     public var readLine: @Sendable () -> String?
-    /// This build's version, which `mooring mcp` reports to its client.
+    /// The version of the app this binary ships in (`AppVersion.current`), which `--version` prints and `mooring mcp`
+    /// reports to its client.
     public var appVersion: String
 
     /// The client for an acquire of `kind` at `level` (a canonical level name, or nil for the app's default): the long-wait

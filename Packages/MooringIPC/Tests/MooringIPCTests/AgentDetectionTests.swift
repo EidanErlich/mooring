@@ -7,12 +7,15 @@ private func proc(_ pid: Int32, _ parent: Int32, _ name: String) -> ProcessEntry
 
 private struct FakeTable: ProcessTable {
     let entries: [Int32: ProcessEntry]
+    let commandLines: [Int32: [String]]
 
-    init(_ rows: [ProcessEntry]) {
+    init(_ rows: [ProcessEntry], arguments: [Int32: [String]] = [:]) {
         entries = Dictionary(uniqueKeysWithValues: rows.map { ($0.pid, $0) })
+        commandLines = arguments
     }
 
     func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
+    func arguments(_ pid: Int32) -> [String]? { commandLines[pid] }
 }
 
 @Test func zshThenClaudeIsClaudeCode() {
@@ -39,6 +42,24 @@ private struct FakeTable: ProcessTable {
 @Test func claudeCodeCLIIsAnAgent() {
     let table = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "claude")])
     #expect(AgentDetection.agent(for: 100, in: table) == "Claude Code")
+}
+
+@Test func npmClaudeIsAnAgent() {
+    // Claude Code installed with npm runs as `node` with its script as the first argument.
+    let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]
+    let npmLink = FakeTable(rows, arguments: [90: ["node", "/opt/homebrew/bin/claude", "--resume"]])
+    #expect(AgentDetection.agentProcess(for: 100, in: npmLink)?.name == "Claude Code")
+    #expect(AgentDetection.agentProcess(for: 100, in: npmLink)?.pid == 90)
+    let package = FakeTable(rows, arguments: [90: ["node", "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js"]])
+    #expect(AgentDetection.agent(for: 100, in: package) == "Claude Code")
+    // Any other node script, a node whose arguments can't be read and a script merely named like Claude are people.
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node", "/usr/local/bin/vite"]])) == nil)
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows)) == nil)
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node"]])) == nil)
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node", "/srv/claude-notes/app.js"]])) == nil)
+    // Only node's script counts: another program run with a Claude path is still itself.
+    let python = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "python3")], arguments: [90: ["python3", "/usr/local/bin/claude"]])
+    #expect(AgentDetection.agent(for: 100, in: python) == nil)
 }
 
 @Test func codexDesktopIsAPerson() {

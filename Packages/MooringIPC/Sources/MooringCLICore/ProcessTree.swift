@@ -7,12 +7,16 @@ public enum ProcessTree {
     ]
 
     /// The first process at or above `pid` that isn't a shell or wrapper, or nil when the walk reaches pid 1 or 0 first.
+    /// Its name is the program it runs, so Claude Code run by `node` comes back as `claude`.
     public static func autoWatch(from pid: Int32, in table: some ProcessTable) -> ProcessEntry? {
         var current = pid
         // The cap guards against a table that loops.
         for _ in 0..<64 {
-            guard current > 1, let entry = table.entry(current) else { return nil }
-            if !skipped.contains(AgentDetection.normalized(entry.name)) { return entry }
+            guard current > 1, var entry = table.entry(current) else { return nil }
+            if !skipped.contains(AgentDetection.normalized(entry.name)) {
+                entry.name = AgentDetection.programName(of: entry, in: table)
+                return entry
+            }
             current = entry.parent
         }
         return nil
@@ -22,5 +26,10 @@ public enum ProcessTree {
     /// name; anything else, a desktop app included, keeps its own.
     public static func agentName(for processName: String) -> String {
         AgentDetection.agents[AgentDetection.normalized(processName)] ?? processName
+    }
+
+    /// As `agentName(for:)`, for a process in `table`, so Claude Code run by `node` is named as Claude Code.
+    public static func agentName(for entry: ProcessEntry, in table: some ProcessTable) -> String {
+        agentName(for: AgentDetection.programName(of: entry, in: table))
     }
 }

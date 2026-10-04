@@ -2,7 +2,8 @@
 ///
 /// Names match the agent CLIs exactly, case included, so the Claude and Codex desktop apps (`Claude`, `Codex`) and
 /// the terminals inside them count as people. The trade-off: a process a desktop app launches directly (an MCP
-/// server Claude.app starts, say) counts as a person too, unless it runs under one of the CLIs.
+/// server Claude.app starts, say) counts as a person too, unless it runs under one of the CLIs. Claude Code installed
+/// with npm runs as `node`, so a `node` running Claude Code's script counts as `claude`.
 public enum AgentDetection {
     /// Process names of the agent CLIs, exactly as they run, and the name shown for each.
     public static let agents: [String: String] = [
@@ -22,7 +23,7 @@ public enum AgentDetection {
         // The cap guards against a table that loops.
         for _ in 0..<64 {
             guard current > 1, let entry = table.entry(current) else { return nil }
-            if let name = agents[normalized(entry.name)] { return (name, entry.pid) }
+            if let name = agents[normalized(programName(of: entry, in: table))] { return (name, entry.pid) }
             current = entry.parent
         }
         return nil
@@ -38,6 +39,16 @@ public enum AgentDetection {
             current = entry.parent
         }
         return false
+    }
+
+    /// The program `entry` runs: its process name, or `claude` for a `node` whose script (the first argument) ends in
+    /// `/claude` or lies in the `@anthropic-ai/claude-code` package.
+    public static func programName(of entry: ProcessEntry, in table: some ProcessTable) -> String {
+        guard normalized(entry.name) == "node", let arguments = table.arguments(entry.pid), arguments.count > 1 else {
+            return entry.name
+        }
+        let script = arguments[1]
+        return script.hasSuffix("/claude") || script.contains("/@anthropic-ai/claude-code/") ? "claude" : entry.name
     }
 
     /// Without the leading `-` that marks a login shell; case is kept.

@@ -38,15 +38,18 @@ func proc(_ pid: Int32, _ parent: Int32, _ name: String) -> ProcessEntry {
     ProcessEntry(pid: pid, parent: parent, name: name)
 }
 
-/// A process table from a list of entries.
+/// A process table from a list of entries, with the command lines of any that have them.
 struct FakeProcessTable: ProcessTable {
     let entries: [Int32: ProcessEntry]
+    let commandLines: [Int32: [String]]
 
-    init(_ rows: [ProcessEntry]) {
+    init(_ rows: [ProcessEntry], arguments: [Int32: [String]] = [:]) {
         entries = Dictionary(uniqueKeysWithValues: rows.map { ($0.pid, $0) })
+        commandLines = arguments
     }
 
     func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
+    func arguments(_ pid: Int32) -> [String]? { commandLines[pid] }
 }
 
 /// Collects what the CLI writes.

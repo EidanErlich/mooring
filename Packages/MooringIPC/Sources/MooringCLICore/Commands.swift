@@ -4,11 +4,15 @@ import MooringIPC
 
 /// Runs the `mooring` command line against an environment, so tests can drive it without a socket.
 public enum MooringCLI {
-    /// This build's version, as `mooring --version` prints it and `mooring mcp` reports it.
-    public static let version = "0.2.0-dev"
+    /// The version `mooring --version` prints: the environment's `appVersion`, set for each run.
+    @TaskLocal static var version = "unknown"
 
     /// Parses `arguments` (without the program name), runs the command and returns the exit status.
     public static func run(_ arguments: [String], environment: CLIEnvironment) async -> Int32 {
+        await $version.withValue(environment.appVersion) { await parseAndRun(arguments, environment: environment) }
+    }
+
+    private static func parseAndRun(_ arguments: [String], environment: CLIEnvironment) async -> Int32 {
         // `hook` runs inside Claude Code's own hooks, where any output or failure would reach Claude.
         let isHook = arguments.first == "hook"
         do {
@@ -62,29 +66,36 @@ struct OutputOptions: ParsableArguments {
 }
 
 struct MooringCommand: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        commandName: "mooring",
-        abstract: "Keep your Mac awake from scripts and agents",
-        discussion: """
-        Turn keep-awake on or off, hold it while a process runs, or manage named leases. \
-        Every command takes --json and --no-launch after its name.
+    // Computed, so the version is the one `MooringCLI.run` was given.
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(
+            commandName: "mooring",
+            abstract: "Keep your Mac awake from scripts and agents",
+            discussion: """
+            Turn keep-awake on or off, hold it while a process runs, or manage named leases. \
+            Every command takes --json and --no-launch after its name.
 
-        For agents:
+            For agents:
 
-          To stay awake while you work, then let go:
-            mooring lease acquire <name> --watch-pid auto --reason "…"
-            …do the work…
-            mooring lease release <name>
+              To stay awake while you work, then let go:
+                mooring lease acquire <name> --watch-pid auto --reason "…"
+                …do the work…
+                mooring lease release <name>
 
-          To stay awake exactly as long as a command runs:
-            mooring anchor -- <command>
-        """,
-        version: "mooring \(MooringCLI.version)",
-        subcommands: [
-            OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self, MCPCommand.self,
-            NotifyCommand.self, WinGroup.self
-        ]
-    )
+              To stay awake exactly as long as a command runs:
+                mooring anchor -- <command>
+
+              To move, resize or lay out windows:
+                mooring win list
+                mooring win arrange <app>=<region> …
+            """,
+            version: "mooring \(MooringCLI.version)",
+            subcommands: [
+                OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self, MCPCommand.self,
+                NotifyCommand.self, WinGroup.self
+            ]
+        )
+    }
 }
 
 /// `mooring mcp`: serves MCP on stdin and stdout until stdin ends.
@@ -183,7 +194,7 @@ struct CommandRunner {
         }
         if response.ok, let result = response.result {
             if options.json {
-                printJSON(result)
+                guard printJSON(result) else { return 4 }
             } else {
                 let text = render?(result) ?? CLIText.human(result, for: request.args, now: env.now(), processes: env.processes)
                 env.write(text + trailingNewline(for: result))
@@ -192,7 +203,7 @@ struct CommandRunner {
         }
         let error = response.error ?? WireError(code: .internal, message: "Unexpected reply from Mooring")
         if options.json {
-            printJSON(response.ok ? Response.failure(id: response.id, error.code, error.message) : response)
+            guard printJSON(response.ok ? Response.failure(id: response.id, error.code, error.message) : response) else { return 4 }
         } else {
             env.writeError("mooring: \(error.message)\n")
         }
@@ -221,12 +232,14 @@ struct CommandRunner {
         return WireText.unreachableExitCode
     }
 
-    private func printJSON(_ value: some Encodable) {
+    /// Prints `value` as one JSON line, or says on stderr that it couldn't and returns false (the caller exits 4).
+    private func printJSON(_ value: some Encodable) -> Bool {
         guard let line = try? WireCoding.encodeLine(value), let text = String(bytes: line, encoding: .utf8) else {
             env.writeError("mooring: Couldn't encode the reply\n")
-            return
+            return false
         }
         env.write(text)
+        return true
     }
 
     /// Status text already ends with a newline; the one-line results don't.

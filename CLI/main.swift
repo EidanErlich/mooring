@@ -33,6 +33,7 @@ func readStandardInput(limit: Int) -> Data {
     return data
 }
 
+let executablePath = ownExecutablePath()
 let environment = CLIEnvironment(
     client: SocketClient(path: SocketClient.defaultPath),
     processes: SystemProcessTable(),
@@ -42,7 +43,7 @@ let environment = CLIEnvironment(
     writeError: writer(to: .standardError),
     newID: { UUID().uuidString },
     now: { Date() },
-    ownBinaryPath: ownExecutablePath(),
+    ownBinaryPath: executablePath,
     pathEnv: ProcessInfo.processInfo.environment["PATH"],
     home: FileManager.default.homeDirectoryForCurrentUser,
     readInput: readStandardInput(limit:),
@@ -52,7 +53,7 @@ let environment = CLIEnvironment(
     claude: { probeClaude(pathEnv: ProcessInfo.processInfo.environment["PATH"]) },
     // `mooring mcp` calls this from a background queue, never the main thread.
     readLine: { Swift.readLine(strippingNewline: true) },
-    appVersion: MooringCLI.version
+    appVersion: AppVersion.current(executable: executablePath)
 )
 
 let arguments = Array(CommandLine.arguments.dropFirst())

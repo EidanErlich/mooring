@@ -28,6 +28,8 @@ struct FakeProcessTable: ProcessTable {
     }
 
     func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
+    /// No command lines: callers are told apart by process name alone.
+    func arguments(_ pid: Int32) -> [String]? { nil }
 }
 
 /// Answers lid asks from a script, or holds them until the test resolves them.

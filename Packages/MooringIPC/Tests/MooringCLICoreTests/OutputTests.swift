@@ -106,6 +106,14 @@ private let threeLeases = [
     #expect(harness.capture.stderr.isEmpty)
 }
 
+@Test func jsonEncodeFailureExits4() async {
+    // JSON has no NaN, so this reply can't be printed; the command must fail rather than print nothing and exit 0.
+    let harness = Harness(client: RecordingClient(reply: .success(acquired(leaseInfo(ttl: .nan)))))
+    #expect(await harness.run(["lease", "acquire", "job", "--ttl", "1m", "--json"]) == 4)
+    #expect(harness.capture.stdout.isEmpty)
+    #expect(harness.capture.stderr == "mooring: Couldn't encode the reply\n")
+}
+
 @Test func jsonPrintsAcquireResultsAndReleases() async throws {
     let harness = Harness(client: RecordingClient(reply: .success(acquired(leaseInfo(), clamped: true))))
     #expect(await harness.run(["lease", "acquire", "job", "--ttl", "5m", "--json"]) == 0)

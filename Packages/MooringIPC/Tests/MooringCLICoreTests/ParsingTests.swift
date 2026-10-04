@@ -243,7 +243,7 @@ private func usageObject(_ message: String) -> String {
 @Test func jsonHelpAndVersionAreUnchanged() async {
     let harness = Harness()
     #expect(await harness.run(["--version", "--json"]) == 0)
-    #expect(harness.capture.stdout == "mooring 0.2.0-dev\n")
+    #expect(harness.capture.stdout == "mooring 9.9.9-test\n")
     #expect(await harness.run(["status", "--help", "--json"]) == 0)
     #expect(harness.capture.stdout.contains("USAGE: mooring status"))
     #expect(harness.capture.stderr.isEmpty)
@@ -278,7 +278,8 @@ private func usageObject(_ message: String) -> String {
 @Test func versionAndHelpExitZero() async {
     let harness = Harness()
     #expect(await harness.run(["--version"]) == 0)
-    #expect(harness.capture.stdout == "mooring 0.2.0-dev\n")
+    // The version is the environment's, which the binary reads from its enclosing app.
+    #expect(harness.capture.stdout == "mooring 9.9.9-test\n")
     #expect(await harness.run(["lease", "acquire", "--help"]) == 0)
     #expect(harness.client.requests.isEmpty)
 }
@@ -292,6 +293,14 @@ private func usageObject(_ message: String) -> String {
     #expect(text.contains(#"mooring lease acquire <name> --watch-pid auto --reason "…""#))
     #expect(text.contains("mooring lease release <name>"))
     #expect(text.contains("mooring anchor -- <command>"))
+}
+
+@Test func helpMentionsWin() async throws {
+    let harness = Harness()
+    #expect(await harness.run(["--help"]) == 0)
+    let text = harness.capture.stdout
+    let forAgents = try #require(text.range(of: "For agents"))
+    #expect(text[forAgents.upperBound...].contains("mooring win"))
 }
 
 @Test func bareMooringPrintsHelp() async {
