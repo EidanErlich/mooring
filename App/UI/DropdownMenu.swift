@@ -10,9 +10,10 @@ import SwiftUI
 final class DropdownMenu: NSObject, NSMenuDelegate {
     static let width: CGFloat = 300
 
-    let root = NSMenu()
+    let root: NSMenu
     let awake = NSMenu()
     let apps = NSMenu()
+    private(set) var windowsSubmenu: WindowsSubmenu!
     /// Called once when the root menu closes.
     var onClose: (() -> Void)?
 
@@ -27,11 +28,12 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private let appsItem = NSMenuItem()
     private var observing = false
     private var headerItem: NSMenuItem?
-    /// A lid action waiting for the menu to close so its confirmation can run.
-    private var pendingLidAction: (() -> Void)?
+    /// An action waiting for the menu to close: a lid confirmation or Windows' Turn On.
+    private var pendingAfterClose: (() -> Void)?
 
     init(engine: AwakeEngine, model: DropdownModel, helperEnabled: @escaping () -> Bool,
          runningApps: @escaping () -> [NSRunningApplication], openSettings: @escaping () -> Void,
+         windows: WindowsController, windowActions: WindowActions = .live,
          pendingApproval: @escaping (String) -> Bool = { _ in false },
          needsLidConfirmation: @escaping (PowerSnapshot) -> Bool = { LidOptIn.needsConfirmation(power: $0, settings: Defaults[.awake]) },
          confirmLidOnBattery: @escaping () -> Void = { _ = LidOptIn.confirm() }) {
@@ -43,7 +45,12 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         self.pendingApproval = pendingApproval
         self.needsLidConfirmation = needsLidConfirmation
         self.confirmLidOnBattery = confirmLidOnBattery
+        self.root = NSMenu()
         super.init()
+        windowsSubmenu = WindowsSubmenu(
+            windows: windows, actions: windowActions, model: model,
+            dismiss: { [weak self] in self?.root.cancelTracking() },
+            afterClose: { [weak self] action in self?.runAfterClose(action) })
         for menu in [root, awake, apps] {
             menu.delegate = self
             menu.autoenablesItems = false
@@ -77,7 +84,17 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
             action()
             return
         }
-        pendingLidAction = action
+        runAfterClose { [confirmLidOnBattery] in
+            // "Only on AC" still turns lid mode on; the lidNeedsAC guardrail holds it until AC.
+            confirmLidOnBattery()
+            action()
+        }
+    }
+
+    /// Cancels the menu and runs `action` from its close callback, since alerts and sheets
+    /// can't run inside menu tracking.
+    func runAfterClose(_ action: @escaping () -> Void) {
+        pendingAfterClose = action
         root.cancelTracking()
     }
 
@@ -86,6 +103,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
         guard menu === root else { return }
         model.menuDidOpen()
+        windowsSubmenu.dropdownDidOpen()
         sync()
         observe()
     }
@@ -94,13 +112,9 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         guard menu === root else { return }
         model.menuDidClose()
         onClose?()
-        guard let action = pendingLidAction else { return }
-        pendingLidAction = nil
-        // "Only on AC" still turns lid mode on; the lidNeedsAC guardrail holds it until AC.
-        DispatchQueue.main.async { [confirmLidOnBattery] in
-            confirmLidOnBattery()
-            action()
-        }
+        guard let action = pendingAfterClose else { return }
+        pendingAfterClose = nil
+        DispatchQueue.main.async(execute: action)
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -149,6 +163,10 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         awakeItem.identifier = NSUserInterfaceItemIdentifier("awake")
         awakeItem.submenu = awake
         root.addItem(awakeItem)
+        let windowsItem = NSMenuItem(title: "Windows", action: nil, keyEquivalent: "")
+        windowsItem.identifier = NSUserInterfaceItemIdentifier("windows")
+        windowsItem.submenu = windowsSubmenu.menu
+        root.addItem(windowsItem)
         root.addItem(.separator())
         root.addItem(native(id: "settings", title: "Settings…", key: ",") { [openSettings] in openSettings() })
         root.addItem(native(id: "quit", title: "Quit Mooring", key: "q") { NSApp.terminate(nil) })
@@ -265,10 +283,17 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     /// whatever it reads from the engine or the model keeps the row up to date. Menus
     /// don't highlight disabled items, so only the pure-text rows are disabled.
     private func hosted(id: String, enabled: Bool = true, @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
+        Self.hostedItem(id: id, enabled: enabled, content)
+    }
+
+    /// `title` is for accessibility and tests; the hosted view draws the row.
+    static func hostedItem(id: String, title: String = "", enabled: Bool = true,
+                           @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
         let item = NSMenuItem()
+        item.title = title
         item.isEnabled = enabled
         item.identifier = NSUserInterfaceItemIdentifier(id)
-        let host = NSHostingView(rootView: LiveContent(content: content).frame(width: Self.width, alignment: .leading))
+        let host = NSHostingView(rootView: LiveContent(content: content).frame(width: width, alignment: .leading))
         host.frame = NSRect(origin: .zero, size: host.fittingSize)
         item.view = host
         return item

@@ -29,9 +29,12 @@ struct ClaudePluginFilesTests {
         #expect(manifest["license"] as? String == "GPL-3.0-only")
     }
 
+    // The plugin's version changes only when its files do, so it may trail the app's version but never lead it.
     @Test func pluginVersionMatchesMarketingVersion() throws {
         let manifest = try json(plugin.appendingPathComponent(".claude-plugin/plugin.json"))
-        #expect(manifest["version"] as? String == (try marketingVersion()))
+        let pluginVersion = try #require(manifest["version"] as? String)
+        let marketing = try marketingVersion()
+        #expect(pluginVersion.compare(marketing, options: .numeric) != .orderedDescending)
     }
 
     @Test func hooksReferenceOnlyTheScript() throws {

@@ -8,6 +8,7 @@ import Defaults
 final class StatusItemController: NSObject {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let engine: AwakeEngine
+    private let windows: WindowsController?
     private var shown: String?
     private var countdown: Timer?
     private var settingUpdates: Task<Void, Never>?
@@ -19,8 +20,9 @@ final class StatusItemController: NSObject {
 
     var button: NSStatusBarButton? { statusItem.button }
 
-    init(engine: AwakeEngine) {
+    init(engine: AwakeEngine, windows: WindowsController? = nil) {
         self.engine = engine
+        self.windows = windows
         super.init()
         statusItem.button?.target = self
         statusItem.button?.action = #selector(handleClick(_:))
@@ -56,12 +58,12 @@ final class StatusItemController: NSObject {
         statusItem.menu = nil
     }
 
-    /// Arms one observation of the engine and redraws. Only an engine change re-arms,
+    /// Arms one observation of the engine and Windows, and redraws. Only a change in either re-arms,
     /// so timer ticks and setting changes never stack up observations.
     private func observe() {
         observationsArmed += 1
         withObservationTracking {
-            _ = (engine.leases, engine.state, engine.wantsLid)
+            _ = (engine.leases, engine.state, engine.wantsLid, windows?.state)
         } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
@@ -72,6 +74,7 @@ final class StatusItemController: NSObject {
     func redraw() {
         let menuState = MenuBarState.from(leases: engine.leases, state: engine.state, wantsLid: engine.wantsLid,
                                           helperEnabled: HelperClient.shared.status == .enabled,
+                                          windowsNeedAccessibility: windows?.wantsAttention == true,
                                           showTimeLeft: Defaults[.showTimeLeftInMenuBar], now: Date())
         // The spoken sentence names everything the image shows, down to the visible minute.
         let sentence = MenuBarText.accessibilityLabel(for: menuState)

@@ -36,6 +36,10 @@ Everything below ends in the same lease engine as the menu and the `mooring` com
 - **Claude Desktop, Cursor and other MCP clients:** in Settings → Agents → Other agents (MCP), click Add for Claude Desktop or Cursor and restart it; for any other client, click Copy config and paste it into the client's `mcp.json`. The server offers `keep_awake`, `release_awake`, `awake_status` and `notify`. `mooring doctor` checks the setup.
 - **Telling you a job is done:** `mooring notify "Done" "what finished"`, or the MCP `notify` tool. Settings → Agents → "Let agents post notifications" turns it off for agents.
 
+## Windows
+
+Mooring also includes a window manager, [Loop](https://github.com/MrKai77/Loop), vendored as WindowKit: a radial menu, keyboard actions, cycles, drag-to-edge snapping and a preview. It is off by default and Mooring never asks for Accessibility until you turn it on. Choose **Windows › Turn On…** in the menu (or use the Window Manager switch in Settings → Windows → Behavior); Mooring explains what macOS calls Accessibility and opens System Settings → Privacy & Security → Accessibility, and Windows switches on by itself once you grant it. If you later revoke it, Windows turns itself off and the icon shows an orange "!" that reads "Windows needs Accessibility". The Windows settings are in Settings → Windows, and General → Shortcuts lists every global shortcut and flags clashes with each other and with macOS.
+
 ## License
 
 GPL-3.0-only; see [LICENSE](LICENSE). Code adapted from MIT-licensed projects keeps its original notices; see [THIRD_PARTY](THIRD_PARTY).

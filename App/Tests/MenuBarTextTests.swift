@@ -30,7 +30,8 @@ struct MenuBarTextTests {
             (.attention(.suspension(.thermal)), "Mooring needs attention: lid mode paused, Mac too warm"),
             (.attention(.suspension(.lidNeedsAC)), "Mooring needs attention: lid mode paused, needs power"),
             (.attention(.suspension(.lowBatteryAll)), "Mooring paused, battery low"),
-            (.attention(.helperNeedsApproval), "Mooring needs attention: helper needs approval")
+            (.attention(.helperNeedsApproval), "Mooring needs attention: helper needs approval"),
+            (.attention(.windowsNeedAccessibility), "Mooring needs attention: Windows needs Accessibility")
         ]
         for (menuState, sentence) in cases {
             #expect(MenuBarText.accessibilityLabel(for: menuState) == sentence)

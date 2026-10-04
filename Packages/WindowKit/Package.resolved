@@ -1,0 +1,67 @@
+{
+  "originHash" : "4c0ee8b24ae638ad071c91437dd069d64a0bca7bf0ab8432b585888ebf57aed6",
+  "pins" : [
+    {
+      "identity" : "defaults",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sindresorhus/Defaults",
+      "state" : {
+        "revision" : "00a7465a0668a87fa159e779b9d80f1f9652357e",
+        "version" : "9.0.9"
+      }
+    },
+    {
+      "identity" : "luminare",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mrkai77/Luminare",
+      "state" : {
+        "revision" : "99c14e36cd536c8252ea147c36e270675fe9c187"
+      }
+    },
+    {
+      "identity" : "scribe",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SenpaiHunters/Scribe",
+      "state" : {
+        "branch" : "main",
+        "revision" : "658180864653457ce201917200bac67ee3eeac87"
+      }
+    },
+    {
+      "identity" : "subsurface",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mrkai77/Subsurface",
+      "state" : {
+        "revision" : "660fe2bd7fbefe8f60b587905748b8e1ea413e2f"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax",
+      "state" : {
+        "revision" : "4799286537280063c85a32f09884cfbca301b1a1",
+        "version" : "602.0.0"
+      }
+    },
+    {
+      "identity" : "swiftui-introspect",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/siteline/swiftui-introspect",
+      "state" : {
+        "revision" : "7d311b4d0a462bfdd4c5c2b1c98ae44795a280ba",
+        "version" : "1.4.0"
+      }
+    },
+    {
+      "identity" : "swiftui-variadic-views",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/lorenzofiamingo/swiftui-variadic-views",
+      "state" : {
+        "revision" : "af67d0e85bd2b499fbfb4cda834117e7c52b12b0",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

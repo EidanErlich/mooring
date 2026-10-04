@@ -18,10 +18,10 @@ private func awake(lid: Bool = false, suspensions: Set<Suspension> = []) -> Targ
 
 private func state(
     _ leases: [Lease], _ target: TargetState = awake(), wantsLid: Bool = false,
-    helperEnabled: Bool = true, showTimeLeft: Bool = true
+    helperEnabled: Bool = true, windowsNeedAccessibility: Bool = false, showTimeLeft: Bool = true
 ) -> MenuBarState {
     MenuBarState.from(leases: leases, state: target, wantsLid: wantsLid, helperEnabled: helperEnabled,
-                      showTimeLeft: showTimeLeft, now: now)
+                      windowsNeedAccessibility: windowsNeedAccessibility, showTimeLeft: showTimeLeft, now: now)
 }
 
 struct MenuBarStateTests {
@@ -63,6 +63,16 @@ struct MenuBarStateTests {
         #expect(state([lease("a")], awake(suspensions: [.lidNeedsAC, .thermal, .lowBatteryLid, .lowBatteryAll]))
             == .attention(.suspension(.lowBatteryAll)))
         #expect(state([lease("a")], awake(suspensions: [.lidNeedsAC, .thermal])) == .attention(.suspension(.thermal)))
+    }
+
+    @Test func windowsNeedAccessibilityShowsAttention() {
+        #expect(state([], .off, windowsNeedAccessibility: true) == .attention(.windowsNeedAccessibility))
+        #expect(state([lease("a")], windowsNeedAccessibility: true) == .attention(.windowsNeedAccessibility))
+        // Suspensions and the helper reason come first.
+        #expect(state([lease("a")], awake(suspensions: [.thermal]), windowsNeedAccessibility: true)
+            == .attention(.suspension(.thermal)))
+        #expect(state([lease("a", level: lidLevel)], wantsLid: true, helperEnabled: false, windowsNeedAccessibility: true)
+            == .attention(.helperNeedsApproval))
     }
 
     @Test func timeLeftIsShownByDefault() {

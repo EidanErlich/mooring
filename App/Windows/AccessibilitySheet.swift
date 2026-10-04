@@ -1,0 +1,80 @@
+import AppKit
+import SwiftUI
+
+/// Explains why Windows needs Accessibility, while the controller polls for it.
+struct AccessibilitySheet: View {
+    static let explanation = "Mooring moves and resizes other apps' windows. macOS calls this Accessibility."
+    static let listHint = "If Mooring isn't in the list, click + and choose Mooring in Applications."
+
+    let openSettingsPane: () -> Void
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(Self.explanation)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Self.listHint)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", action: cancel)
+                    .keyboardShortcut(.cancelAction)
+                Button("Open Privacy & Security", action: openSettingsPane)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(20)
+        .frame(width: 380)
+    }
+}
+
+/// Shows the sheet in its own small window (Mooring has no main window to attach a sheet to).
+/// It has no close button, so it goes away only through Cancel, trust arriving or the timeout.
+@MainActor
+final class AccessibilitySheetWindow: AccessibilitySheetPresenting {
+    private weak var controller: WindowsController?
+    private var window: NSWindow?
+
+    init(controller: WindowsController) {
+        self.controller = controller
+    }
+
+    /// Space between the sheet and the screen's top-left corner.
+    static let margin: CGFloat = 20
+
+    /// The sheet's top-left point: the top left of the main screen, clear of System Settings, which opens centred.
+    static func topLeft(in visibleFrame: NSRect) -> NSPoint {
+        NSPoint(x: visibleFrame.minX + margin, y: visibleFrame.maxY - margin)
+    }
+
+    func show() {
+        let window = window ?? makeWindow()
+        self.window = window
+        NSApp.activate()
+        if let screen = NSScreen.main ?? NSScreen.screens.first {
+            window.setFrameTopLeftPoint(Self.topLeft(in: screen.visibleFrame))
+        } else {
+            window.center()
+        }
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    func close() {
+        window?.orderOut(nil)
+        window = nil
+    }
+
+    func makeWindow() -> NSWindow {
+        let sheet = AccessibilitySheet(
+            openSettingsPane: { [weak controller] in controller?.openSettingsPane() },
+            cancel: { [weak controller] in controller?.cancelTurnOn() }
+        )
+        let window = NSWindow(contentViewController: NSHostingController(rootView: sheet))
+        window.styleMask = [.titled]
+        window.titleVisibility = .hidden
+        window.isReleasedWhenClosed = false
+        window.level = .normal
+        return window
+    }
+}

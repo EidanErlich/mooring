@@ -17,7 +17,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **On timeout, the runner doesn't kill grandchildren** (`ProcessRunner` has no process group).
 - **The waiting picker** shows no selection for odd stored values (for example after `defaults write`).
 - **`findClaude` and `runBounded` in the CLI are untested.**
-- **A skill or hook change must bump the plugin version** (`plugin.json`) together with `MARKETING_VERSION`; the installed copy is cached by version, so otherwise it keeps the old files and Settings shows no "Needs update".
+- **A skill or hook change must bump the plugin version** (`plugin.json`; it may trail `MARKETING_VERSION` but never lead it). The installed copy is cached by version, so otherwise it keeps the old files and Settings shows no "Needs update".
 
 ## Lid approvals (2c-1 leftovers)
 
@@ -38,7 +38,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 
-- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.3; read the bundle version.
+- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.4; read the bundle version.
 - The helper path written to MCP client configs comes from `Bundle.main`; running from a DMG or a translocated location writes a path that later vanishes.
 - An agent sending a raw `untilOff` acquire can make a person's timed menu session open-ended (without lid).
 - `mooring mcp` handles one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
@@ -54,6 +54,30 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - overlong MCP lines are buffered whole before the 1 MB check;
   - a second `initialize` changes the name the server filters `status` by.
 - A config symlink chain that dangles is followed one hop only, so the atomic write replaces the second link with a file; and a relative link target is resolved lexically, which can differ when the link's folder is itself a symlink.
+
+
+## Windows (3a leftovers)
+
+- **Settings can't be edited before Windows is on.** While off, every Windows page shows only the "Windows is off" banner.
+- **The pill clears while the Accessibility sheet is open** after trust was revoked, because the state moves from needsAccessibility to waitingForTrust.
+- **Loop's other pages weren't checked for controls that do nothing** in Mooring (only Launch at login, Start hidden and Hide menu bar icon were removed). A missing settings window shows a blank page, and the page padding is indented oddly.
+- **Stash isn't fully gone.** `StashManager.shared` is still created during a Loop session (it does nothing), a Stash binding that already exists can still open its settings view, and the `windowDetails` capability is one switch for several features.
+- **Shortcuts page:** the fn and Caps Lock (⇪) modifiers aren't handled the same way everywhere; letter labels follow the ASCII layout, not the keyboard layout; the layout tests only check sizes.
+- **No live preview on the hosted pages.** Loop's settings window shows a live radial menu and preview beside its pages; Mooring hosts the pages without it, so changes on Radial Menu and Preview show no preview.
+- **Loop and Mooring share one defaults registration.** `Defaults` registers defaults in the process-wide registration domain. No key names collide today (Loop's 76, Mooring's 5); a test checking the names would keep it that way.
+- **Tests:**
+  - `submenuFollowsTheStateWhileOpen` depends on `Task.yield` timing and may flake on CI;
+  - `offMeansOff` counts WindowKit singletons process-wide, so a later app test that builds a real WindowKit must run serially;
+  - the WindowKit start/stop tests start real managers.
+- **WindowKit code:**
+  - the `runningOwner` identifier is never cleaned up when its owner goes away;
+  - `ScreenSwitchFrames.frame(for:)` is used only by tests;
+  - the `PrivateApis.swift` header still talks about `@_silgen_name`;
+  - the `WindowsController` live pieces could move to their own file.
+- **Build noise and docs:** the vendored code gives deprecation warnings (macOS 13 to 14) and an upstream `swiftui-introspect` manifest warning; the Scribe comment in `Packages/WindowKit/Package.swift` says `Package.resolved` fixes the revision, but the app's pin is `Config/Package.resolved`; `UPSTREAM.md` words the test-suite condition for Loop's settings loosely (the code checks `XCTestConfigurationFilePath`).
+- `gesturesAvailable` sits between `menuActions(primary:)` and its doc comment, so the comment attaches to the wrong declaration.
+- `everyLoaderSymbolIsChecked` doesn't include the MultitouchSupport symbol list.
+- Turn On without Accessibility shows macOS's own Accessibility alert alongside Mooring's sheet; confirm in the owner check that this reads well.
 
 
 ## CLI and IPC (stage 2a leftovers)

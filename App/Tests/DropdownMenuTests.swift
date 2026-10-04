@@ -2,25 +2,29 @@ import AppKit
 import AwakeKit
 import Foundation
 import Testing
+import WindowKit
 @testable import Mooring
 
 @MainActor
 struct DropdownMenuTests {
-    private func ids(_ menu: NSMenu) -> [String] {
+    func ids(_ menu: NSMenu) -> [String] {
         menu.items.map { $0.isSeparatorItem ? "-" : $0.identifier!.rawValue }
     }
 
-    private func makeMenuAndEngine(
+    func makeMenuAndEngine(
         helperEnabled: @escaping () -> Bool = { true },
         runningApps: @escaping () -> [NSRunningApplication] = { [] },
         model: DropdownModel = DropdownModel(),
         needsLidConfirmation: @escaping () -> Bool = { false },
-        confirmLidOnBattery: @escaping () -> Void = {}
+        confirmLidOnBattery: @escaping () -> Void = {},
+        windows: WindowsController? = nil,
+        windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil })
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
         let menu = DropdownMenu(engine: engine, model: model, helperEnabled: helperEnabled,
                                 runningApps: runningApps, openSettings: {},
+                                windows: windows ?? makeWindows(.off), windowActions: windowActions,
                                 needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery)
         return (menu, engine)
     }
@@ -34,7 +38,7 @@ struct DropdownMenuTests {
     }
 
     @Test func rootItemsInOrder() {
-        #expect(ids(makeMenu().root) == ["header", "-", "awake", "-", "settings", "quit"])
+        #expect(ids(makeMenu().root) == ["header", "-", "awake", "windows", "-", "settings", "quit"])
         #expect(makeMenu().root.item(withTitle: "Awake")?.submenu != nil)
     }
 

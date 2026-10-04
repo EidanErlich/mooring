@@ -1,27 +1,37 @@
 import AwakeKit
 import SwiftUI
 
-/// The Settings sidebar (docs/SPEC.md, "Settings window"). Windows, Clipboard
-/// and Shortcuts pages arrive with their stages.
+/// The Settings sidebar (docs/SPEC.md, "Settings window"). The Clipboard page arrives with its stage.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, keepAwake, lidAndBattery, agents, advanced
+    case general, shortcuts, keepAwake, lidAndBattery, agents
+    case windowsBehavior, windowsKeybinds, windowsGestures, windowsRadialMenu, windowsPreview, windowsExcludedApps
+    case advanced
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .general: "General"
+        case .shortcuts: "Shortcuts"
         case .keepAwake: "Keep Awake"
         case .lidAndBattery: "Lid & Battery"
         case .agents: "Agents"
+        case .windowsBehavior: "Behavior"
+        case .windowsKeybinds: "Keybinds"
+        case .windowsGestures: "Gestures"
+        case .windowsRadialMenu: "Radial Menu"
+        case .windowsPreview: "Preview"
+        case .windowsExcludedApps: "Excluded Apps"
         case .advanced: "Advanced"
         }
     }
 
     var group: String {
         switch self {
-        case .general: "General"
+        case .general, .shortcuts: "General"
         case .keepAwake, .lidAndBattery, .agents: "Awake"
+        case .windowsBehavior, .windowsKeybinds, .windowsGestures, .windowsRadialMenu, .windowsPreview,
+             .windowsExcludedApps: "Windows"
         case .advanced: "Mooring"
         }
     }
@@ -29,9 +39,16 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: "gearshape"
+        case .shortcuts: "command"
         case .keepAwake: "sun.max"
         case .lidAndBattery: "laptopcomputer"
         case .agents: "sparkles"
+        case .windowsBehavior: "macwindow"
+        case .windowsKeybinds: "keyboard"
+        case .windowsGestures: "hand.draw"
+        case .windowsRadialMenu: "circle.circle"
+        case .windowsPreview: "inset.filled.center.rectangle"
+        case .windowsExcludedApps: "xmark.octagon"
         case .advanced: "wrench.and.screwdriver"
         }
     }
@@ -70,6 +87,7 @@ final class SettingsNavigation {
 
 struct SettingsView: View {
     let engine: AwakeEngine?
+    let windows: WindowsController?
     @Bindable var navigation: SettingsNavigation
 
     private var groups: [String] {
@@ -89,11 +107,18 @@ struct SettingsView: View {
             }
             .navigationSplitViewColumnWidth(180)
         } detail: {
-            switch navigation.selection ?? .general {
+            let page = navigation.selection ?? .general
+            switch page {
             case .general: GeneralSettingsPage()
+            case .shortcuts: ShortcutsSettingsPage(windows: windows)
             case .keepAwake: KeepAwakeSettingsPage()
             case .lidAndBattery: LidBatterySettingsPage()
             case .agents: AgentsSettingsPage()
+            case .windowsBehavior, .windowsKeybinds, .windowsGestures, .windowsRadialMenu, .windowsPreview,
+                 .windowsExcludedApps:
+                if let windows {
+                    WindowsSettingsPage(page: page, windows: windows)
+                }
             case .advanced: AdvancedSettingsPage(engine: engine)
             }
         }
