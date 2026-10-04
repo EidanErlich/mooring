@@ -1,10 +1,11 @@
 import AwakeKit
 import SwiftUI
 
-/// The Settings sidebar (docs/SPEC.md, "Settings window"). The Clipboard page arrives with its stage.
+/// The Settings sidebar (docs/SPEC.md, "Settings window").
 enum SettingsPage: String, CaseIterable, Identifiable {
     case general, shortcuts, keepAwake, lidAndBattery, agents
     case windowsBehavior, windowsKeybinds, windowsGestures, windowsRadialMenu, windowsPreview, windowsExcludedApps
+    case clipboardHistory, clipboardIgnoreRules, clipboardAppearance
     case advanced
 
     var id: String { rawValue }
@@ -22,6 +23,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .windowsRadialMenu: "Radial Menu"
         case .windowsPreview: "Preview"
         case .windowsExcludedApps: "Excluded Apps"
+        case .clipboardHistory: "History"
+        case .clipboardIgnoreRules: "Ignore Rules"
+        case .clipboardAppearance: "Appearance"
         case .advanced: "Advanced"
         }
     }
@@ -32,6 +36,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .keepAwake, .lidAndBattery, .agents: "Awake"
         case .windowsBehavior, .windowsKeybinds, .windowsGestures, .windowsRadialMenu, .windowsPreview,
              .windowsExcludedApps: "Windows"
+        case .clipboardHistory, .clipboardIgnoreRules, .clipboardAppearance: "Clipboard"
         case .advanced: "Mooring"
         }
     }
@@ -49,6 +54,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .windowsRadialMenu: "circle.circle"
         case .windowsPreview: "inset.filled.center.rectangle"
         case .windowsExcludedApps: "xmark.octagon"
+        case .clipboardHistory: "clock.arrow.circlepath"
+        case .clipboardIgnoreRules: "eye.slash"
+        case .clipboardAppearance: "paintbrush"
         case .advanced: "wrench.and.screwdriver"
         }
     }
@@ -88,6 +96,7 @@ final class SettingsNavigation {
 struct SettingsView: View {
     let engine: AwakeEngine?
     let windows: WindowsController?
+    let clipboard: ClipboardController?
     @Bindable var navigation: SettingsNavigation
 
     private var groups: [String] {
@@ -110,7 +119,7 @@ struct SettingsView: View {
             let page = navigation.selection ?? .general
             switch page {
             case .general: GeneralSettingsPage()
-            case .shortcuts: ShortcutsSettingsPage(windows: windows)
+            case .shortcuts: ShortcutsSettingsPage(windows: windows, clipboard: clipboard)
             case .keepAwake: KeepAwakeSettingsPage()
             case .lidAndBattery: LidBatterySettingsPage()
             case .agents: AgentsSettingsPage()
@@ -118,6 +127,10 @@ struct SettingsView: View {
                  .windowsExcludedApps:
                 if let windows {
                     WindowsSettingsPage(page: page, windows: windows)
+                }
+            case .clipboardHistory, .clipboardIgnoreRules, .clipboardAppearance:
+                if let clipboard {
+                    ClipboardSettingsPage(page: page, clipboard: clipboard)
                 }
             case .advanced: AdvancedSettingsPage(engine: engine)
             }

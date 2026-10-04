@@ -107,9 +107,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Off by default; ClipKit isn't even created until Clipboard is turned on.
         let clipboard = ClipboardController.live(
             statusBarButton: { [weak statusItem] in statusItem?.button },
-            openSettings: { SettingsWindowController.shared.show() })
+            openSettings: { SettingsWindowController.shared.showClipboardHistory() })
         clipboard.launch()
         self.clipboard = clipboard
+        SettingsWindowController.shared.clipboard = clipboard
 
         let dropdown = DropdownController(
             engine: engine, approvals: approvals, windows: windows, clipboard: clipboard,

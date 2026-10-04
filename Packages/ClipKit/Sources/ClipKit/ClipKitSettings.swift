@@ -45,6 +45,30 @@ public struct ClipSettings: Equatable, Sendable {
     public var showPreview: Bool
     public var previewDelayMilliseconds: Int
     public var imageMaxHeight: Int
+
+    public init(
+        historySize: Int, clearOnQuit: Bool, pasteByDefault: Bool, removeFormattingByDefault: Bool,
+        ignoredApps: [String], ignoreAllAppsExceptListed: Bool, ignoredTypes: Set<String>,
+        ignoreRegexes: [String], recordUniversalClipboard: Bool, popupPosition: PopupPosition,
+        pinsPosition: PinsPosition, searchVisibility: SearchVisibility, showPreview: Bool,
+        previewDelayMilliseconds: Int, imageMaxHeight: Int
+    ) {
+        self.historySize = historySize
+        self.clearOnQuit = clearOnQuit
+        self.pasteByDefault = pasteByDefault
+        self.removeFormattingByDefault = removeFormattingByDefault
+        self.ignoredApps = ignoredApps
+        self.ignoreAllAppsExceptListed = ignoreAllAppsExceptListed
+        self.ignoredTypes = ignoredTypes
+        self.ignoreRegexes = ignoreRegexes
+        self.recordUniversalClipboard = recordUniversalClipboard
+        self.popupPosition = popupPosition
+        self.pinsPosition = pinsPosition
+        self.searchVisibility = searchVisibility
+        self.showPreview = showPreview
+        self.previewDelayMilliseconds = previewDelayMilliseconds
+        self.imageMaxHeight = imageMaxHeight
+    }
 }
 
 extension ClipKit {

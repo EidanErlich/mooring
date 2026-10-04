@@ -1,6 +1,6 @@
 import AppKit
 import Defaults
-import KeyboardShortcuts
+@_exported import KeyboardShortcuts
 import os
 import SwiftData
 import SwiftUI
