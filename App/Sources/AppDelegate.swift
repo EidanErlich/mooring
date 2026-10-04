@@ -101,19 +101,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsWindowController.shared.windows = windows
         observeWindowsForArranger()
 
+        let statusItem = StatusItemController(engine: engine, windows: windows)
+        statusItemController = statusItem
+
         // Off by default; ClipKit isn't even created until Clipboard is turned on.
-        let clipboard = ClipboardController.live()
+        let clipboard = ClipboardController.live(
+            statusBarButton: { [weak statusItem] in statusItem?.button },
+            openSettings: { SettingsWindowController.shared.show() })
         clipboard.launch()
         self.clipboard = clipboard
 
-        let statusItem = StatusItemController(engine: engine, windows: windows)
         let dropdown = DropdownController(
-            engine: engine, approvals: approvals, windows: windows,
+            engine: engine, approvals: approvals, windows: windows, clipboard: clipboard,
             openSettings: { SettingsWindowController.shared.show() })
         statusItem.onOpenMenu = { [weak statusItem] in
             statusItem.map(dropdown.open(from:))
         }
-        statusItemController = statusItem
         self.dropdown = dropdown
     }
 

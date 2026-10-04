@@ -6,11 +6,12 @@ import AwakeKit
 final class DropdownController {
     private let dropdownMenu: DropdownMenu
 
-    init(engine: AwakeEngine, approvals: LidApprovalCenter, windows: WindowsController, openSettings: @escaping () -> Void) {
+    init(engine: AwakeEngine, approvals: LidApprovalCenter, windows: WindowsController, clipboard: ClipboardController,
+         openSettings: @escaping () -> Void) {
         dropdownMenu = DropdownMenu(
             engine: engine, model: DropdownModel(),
             helperEnabled: { HelperClient.shared.status == .enabled },
-            runningApps: DropdownMenu.regularApps, openSettings: openSettings, windows: windows,
+            runningApps: DropdownMenu.regularApps, openSettings: openSettings, windows: windows, clipboard: clipboard,
             pendingApproval: { approvals.pending.contains($0) }
         )
     }

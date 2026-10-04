@@ -3,13 +3,14 @@
 - Repo: https://github.com/p0deje/Maccy
 - Commit: c376789c5d377b7c520b6f6e91f3f3a1aa28640b (2026-09-04)
 - License: MIT (see LICENSE in this folder)
-- Used for: the dropdown's floating panel (stage 1b) and clipboard history, vendored as ClipKit (stage 4)
+- Used for: the dropdown's floating panel (stage 1b, since removed) and clipboard history, vendored as ClipKit (stage 4), with its popup panel
 
 ## Files taken
 
 | Upstream file | Mooring file |
 | --- | --- |
-| `Maccy/FloatingPanel.swift` | `App/UI/FloatingPanel.swift` (stage 1b) |
+| `Maccy/FloatingPanel.swift` | `App/UI/FloatingPanel.swift` (stage 1b; deleted when the dropdown became a real menu) |
+| `Maccy/FloatingPanel.swift` | `App/UI/ClipboardPanel.swift` and `Packages/ClipKit/Sources/ClipKit/ClipKitPopup.swift` (stage 4 task 4) |
 
 ### Stage 4: ClipKit
 
@@ -116,7 +117,7 @@ Source files (paths relative to `Maccy/` upstream and to `Sources/ClipKit/Maccy/
 ### Left out
 
 - `Intents/` (all six: `AppIntentError.swift`, `Clear.swift`, `Delete.swift`, `Get.swift`, `HistoryItemAppEntity.swift`, `Select.swift`), `SoftwareUpdater.swift`, `AppStoreReview.swift`, `About.swift`, `MenuIcon.swift`, `Settings/` (all panes, and their strings apart from the three English tables above; rebuilt later as Mooring's Clipboard pages), `AppDelegate.swift` and `MaccyApp.swift` (wiring reference only).
-- `FloatingPanel.swift`: not needed to compile; the views reach the panel through `PopupPanel` (see Modifications). Stage 4 adapts it into `App/UI/`.
+- `FloatingPanel.swift`: not needed to compile; the views reach the panel through `PopupPanel` (see Modifications). Task 4 adapts it into `App/UI/ClipboardPanel.swift` (see below).
 - `GlobalHotKey.swift`: not in Maccy's own build target and referenced by nothing; it calls `KeyboardShortcuts.Shortcut.toKeyEquivalent()` / `toEventModifiers()`, which no KeyboardShortcuts release has (2.0.2 to 2.4.0 checked), so it does not compile.
 - `Extensions/Settings.PaneIdentifier+Panes.swift`: only Maccy's Settings window uses it, and it needs the Settings package.
 - `Storage.xcdatamodeld` and `History.xcdatamodeld`: neither is in Maccy's build target nor referenced by code. The store is SwiftData (`@Model` classes); there is no SwiftData migration plan. `History.xcdatamodeld` is empty.
@@ -206,3 +207,23 @@ Mooring-written (not from Maccy):
 - `Sources/ClipKit/ClipKitShortcuts.swift` (task 2): the one place hotkeys are registered and unregistered.
 - `Sources/ClipKit/ClipKitResources.swift` (task 2): `ClipKitLog.logger` and `Bundle.clipKit`.
 - `Tests/ClipKitTests/*.swift` and `Tests/ClipKitTests/Support/` (task 2).
+
+#### Stage 4 task 4: the popup
+
+`Maccy/FloatingPanel.swift` is split in two, each file headed `// Adapted from Maccy@c376789: Maccy/FloatingPanel.swift`:
+
+- `App/UI/ClipboardPanel.swift` (Swift 6, in the app): the `NSPanel` itself, with Maccy's style mask, level, collection behaviour, hidden traffic lights, close on losing key (unless an alert is up), `canBecomeKey`, `open(height:at:)` and `verticallyResize(to:)`. Changes: no longer generic over its content, which is `ClipKit.popupView()`; built by ClipKit on each `start()` through `makePopupPanel` and dropped on `stop()`, so it exists only while Clipboard is on; the `onClose` closure and `toggle(height:at:)` are gone (`ClipKitPopup.panelDidClose()` resets the popup; ClipKit's `Popup` toggles); its identifier falls back to `dev.mooring.app`; `isReleasedWhenClosed = false`; the alert check is inlined (`NSApplication.alertWindow` is internal to ClipKit). It conforms to `PopupPanel` with `@preconcurrency`.
+- `Packages/ClipKit/Sources/ClipKit/ClipKitPopup.swift`: `public enum ClipKitPopup`, the panel's reach into Maccy's state: the saved size, the corner radius, the opening size, the origin for a popup position, `savePosition(of:)` (Maccy's `saveWindowPosition`), `panel(_:willResizeTo:)` (Maccy's `windowWillResize`, with `saveWindowFrame` inlined), `panelDidMove` (`determinePreviewPlacement`), the live-resize and key/resign-key preview calls, and `panelDidClose()` (the slideout closes and `AppState.shared.popup.reset()`, Maccy's `onClose`). Each does nothing, or only reads settings, until a ClipKit has started.
+
+Vendored edits:
+
+- `Maccy/Views/ListHeaderView.swift`: the title "Maccy" → "Clipboard".
+- `Maccy/Observables/Footer.swift`: the "quit" footer item (⌘Q) is removed; it would quit Mooring.
+- `Maccy/Observables/AppState.swift`: `openPreferences()` closes the popup and calls the running ClipKit's `openSettings` (Mooring's Settings); `quit()` is removed; new `pasteHint`: "Paste with ⌘V. Allow Accessibility in Windows to paste automatically." while the Accessibility probe says untrusted, else nil.
+- `Maccy/Views/FooterView.swift`: shows `pasteHint` under the footer items, read again whenever the popup becomes key or resigns.
+
+Mooring-written:
+
+- `Sources/ClipKit/PopupPanel.swift`: `PopupPanel` is public; `open(height:at:)` takes the public `ClipSettings.PopupPosition` (an internal overload maps Maccy's `PopupPosition`). It stays non-isolated because Maccy's `Popup` calls it from non-isolated code.
+- `Sources/ClipKit/ClipKit.swift`: `makePopupPanel` (called in `start()`; `stop()` closes the panel and drops it), `openSettings`, `openPopup()` (opens where the popup-position setting says; nothing while not running or already open), `popupShortcutDescription` ("⇧⌘C"), and the internal `hasStarted`.
+- `Tests/ClipKitTests/PopupTests.swift`.

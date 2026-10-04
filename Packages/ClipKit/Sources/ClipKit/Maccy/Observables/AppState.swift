@@ -100,9 +100,14 @@ class AppState: Sendable {
 
   // Maccy's Settings window isn't taken; Mooring's Settings → Clipboard replaces it.
   @MainActor
-  func openPreferences() {}
+  func openPreferences() {
+    popup.close()
+    ClipKit.runningOwner?.openSettings?()
+  }
 
-  func quit() {
-    NSApp.terminate(self)
+  /// The footer's hint while Mooring can't paste for the user (no Accessibility); nil while it can.
+  var pasteHint: String? {
+    Clipboard.shared.environment.accessibilityTrusted()
+      ? nil : "Paste with ⌘V. Allow Accessibility in Windows to paste automatically."
   }
 }

@@ -66,13 +66,6 @@ class Footer: ItemsContainer {
         Task { @MainActor in
           AppState.shared.openPreferences()
         }
-      },
-      FooterItem(
-        title: "quit",
-        shortcuts: [KeyShortcut(key: .q)],
-        help: "quit_tooltip"
-      ) {
-        AppState.shared.quit()
       }
     ]
   }

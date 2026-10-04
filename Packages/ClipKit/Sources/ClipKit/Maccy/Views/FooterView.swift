@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/FooterView.swift
 import Defaults
 import SwiftUI
 
@@ -9,6 +10,8 @@ struct FooterView: View {
   @Default(.showFooter) private var showFooter
   @State private var showClear = true
   @State private var showClearAll = false
+  @State private var pasteHint: String?
+  @Environment(\.scenePhase) private var scenePhase
 
   var clearAllModifiersPressed: Bool {
     let clearModifiers = footer.items[0].shortcuts.first?.modifierFlags ?? []
@@ -53,6 +56,20 @@ struct FooterView: View {
       ForEach(footer.items.suffix(from: 2)) { item in
         FooterItemView(item: item)
       }
+
+      if let pasteHint {
+        Text(pasteHint)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .fixedSize(horizontal: false, vertical: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+      }
+    }
+    // Checked each time the popup becomes key: Accessibility can be granted while it's closed.
+    .onChange(of: scenePhase, initial: true) {
+      pasteHint = appState.pasteHint
     }
     .invisible(!showFooter)
     .frame(maxHeight: showFooter ? nil : 0)

@@ -21,7 +21,49 @@ final class FakeClipKit: ClipKitRuntime {
     }
 
     func clear(all: Bool) {
+        touches += 1
         clears.append(all)
+    }
+
+    // The history surface. `touches` counts every call to it.
+    var touches = 0
+    var entries: [ClipboardEntry] = []
+    var recentLimits: [Int] = []
+    var copies: [AnyHashable] = []
+    var ignoreNextCopies = 0
+    var popupOpens = 0
+    private var paused = false
+
+    func recentEntries(limit: Int) -> [ClipboardEntry] {
+        touches += 1
+        recentLimits.append(limit)
+        return Array(entries.prefix(limit))
+    }
+
+    func copyEntry(_ id: AnyHashable) {
+        touches += 1
+        copies.append(id)
+    }
+
+    var isPaused: Bool {
+        get {
+            touches += 1
+            return paused
+        }
+        set {
+            touches += 1
+            paused = newValue
+        }
+    }
+
+    func ignoreNextCopy() {
+        touches += 1
+        ignoreNextCopies += 1
+    }
+
+    func openPopup() {
+        touches += 1
+        popupOpens += 1
     }
 }
 

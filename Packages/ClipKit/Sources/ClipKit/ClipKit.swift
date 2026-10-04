@@ -16,9 +16,24 @@ public final class ClipKit {
     /// The popup hotkey (⇧⌘C by default). It's registered only while a ClipKit runs.
     public nonisolated static let popupShortcutName: KeyboardShortcuts.Name = .popup
 
+    /// The popup hotkey as menus show it ("⇧⌘C"), or nil when it has none.
+    public static var popupShortcutDescription: String? {
+        KeyboardShortcuts.getShortcut(for: popupShortcutName)?.description
+    }
+
     /// The instance whose `start()` is in effect. Maccy's singletons are process-wide, so only one runs.
     /// Weak, so a released instance neither keeps running nor blocks a later start.
     private(set) static weak var runningOwner: ClipKit?
+
+    /// Whether any ClipKit has started in this process, so Maccy's state exists.
+    private(set) static var hasStarted = false
+
+    /// Builds the popup window on each `start()`, once Maccy's state exists. Without it the popup
+    /// hotkey does nothing.
+    public var makePopupPanel: (@MainActor (ClipKit) -> any PopupPanel)?
+
+    /// The popup's "Preferences…" and ⌘, call this.
+    public var openSettings: (@MainActor () -> Void)?
 
     private let storeURL: URL?
     private let inMemory: Bool
@@ -72,6 +87,7 @@ public final class ClipKit {
     public func start() {
         guard Self.runningOwner == nil else { return }
         Self.runningOwner = self
+        Self.hasStarted = true
         ownsRunning = true
 
         Storage.location = prepareStoreLocation()
@@ -87,6 +103,7 @@ public final class ClipKit {
 
         ClipKitShortcuts.popupActive = true
         AppState.shared.popup.start()
+        AppState.shared.panel = makePopupPanel?(self)
         ModifierFlags.setMonitoring(true)
         Task { try? await History.shared.load() }
     }
@@ -106,7 +123,8 @@ public final class ClipKit {
     private static func tearDown() {
         Clipboard.shared.stop()
         ClipKitShortcuts.popupActive = false
-        AppState.shared.popup.stop()
+        AppState.shared.popup.stop()  // closes the panel
+        AppState.shared.panel = nil
         ModifierFlags.setMonitoring(false)
     }
 
@@ -206,6 +224,15 @@ extension ClipKit {
         } else {
             History.shared.clear()
         }
+    }
+
+    /// Opens the popup where the popup-position setting says, unless it's open. Does nothing while
+    /// not running.
+    public func openPopup() {
+        guard isRunning else { return }
+        let popup = AppState.shared.popup
+        guard popup.isClosed() else { return }
+        popup.open(height: popup.height)
     }
 
     /// Maccy's popup content, or an empty view while not running: building it creates Maccy's
