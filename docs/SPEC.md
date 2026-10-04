@@ -462,7 +462,7 @@ A hook can't wait (Claude gives it 2 s), so under "Always ask" the session start
 
 **Lease ids** are `mcp-<slug>-<server pid>-<n>`: the slug is the display name lowercased, non-alphanumerics turned into `-`, at most 24 characters ("client" when empty), and `n` counts from 1 within one server process. The pid keeps two servers of one client (two Claude Desktop windows) from sharing a lease. The app requires the pairing both ways: a request with `client` must use an `mcp-` id, and an `mcp-` id requires `client`. The owner is `.mcp(client:)`.
 
-**Tools.** The tool list is fixed at build time; a test asserts exactly these four names, and that no name or description mentions the clipboard.
+**Tools.** The tool list is fixed at build time; a test asserts exactly nine names (the four below and the five window tools in 3.4), and that no name or description mentions the clipboard.
 
 | Tool | Arguments | Notes |
 | --- | --- | --- |
@@ -473,7 +473,7 @@ A hook can't wait (Claude gives it 2 s), so under "Always ask" the session start
 
 - **Under a guardrail,** `keep_awake` is still a success: the result carries `lease_id`, `level` and `ends_at` as usual, plus `guardrail` (for example "Lid mode waits for power"), because the app keeps the lease and applies it when the guardrail clears. The notice names `release_awake` as the way to end it.
 - **"This client's leases"** means `owner == .mcp(client:)` with this client's display name **and** a watch on this server's pid. The server filters `status` itself and releases only the ids it created; the wire has no MCP-specific acquire or release kind. So two windows of one client can't release each other's leases.
-- The MCP server never has clipboard tools; its window tools arrive with level 3 (3.4). It exposes no way to end leases owned by the menu or by other agents.
+- The MCP server never has clipboard tools; its window tools are `list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout` and `apply_layout` (3.4). It exposes no way to end leases owned by the menu or by other agents.
 
 ### Notify
 
@@ -559,7 +559,7 @@ Optional notifications when an agent lease ends ("Claude Code finished · 42 min
 
 ## Part 3: Window management (from Loop)
 
-**Status:** stage 3a (WindowKit, version 0.0.4) is built: Loop's window manager runs inside Mooring, off by default, with the Windows submenu, the Windows settings group, the Accessibility flow and the Shortcuts page. Stage 3b (`mooring win`, MCP window tools, saved layouts, undo of arrangements) is not started, so 3.4 and the saved layouts in 3.1 describe future work.
+**Status:** stage 3a (WindowKit, version 0.0.4) and stage 3b (agent windows, version 0.0.5) are built. Loop's window manager runs inside Mooring, off by default, with the Windows submenu, the Windows settings group, the Accessibility flow and the Shortcuts page; agents arrange windows with `mooring win` and the MCP window tools (3.4, as built).
 
 Level 3 vendors Loop's window engine into a `WindowKit` package and runs it inside Mooring, off by default, behind the same menu-bar icon. It is the largest import (about 180 Swift files) and the only one that uses private macOS APIs, so it is isolated as a module that can be switched off entirely.
 
@@ -575,9 +575,9 @@ Level 3 vendors Loop's window engine into a `WindowKit` package and runs it insi
 | Snap by drag | Drag a window to an edge | Yes |
 | Stash | Hide windows at a screen edge, reveal on hover | Later (depends most on SkyLight private APIs) |
 | Focus switching | Move focus between windows by direction | Later |
-| `loop://` URL scheme | Scripting | Replaced by `mooring win` (3.4) |
+| `loop://` URL scheme | Scripting | Replaced by `mooring win` (3.4, built in 3b) |
 
-**Mooring-only addition, later:** saved layouts ("Coding: terminal left two-thirds, browser right third"), which Loop's own comparison table lists as missing. A layout is a named list of (app bundle id, screen, action or frame) and is applied with one hotkey or `mooring win layout <name>`.
+**Mooring-only addition, later:** saved layouts ("Coding: terminal left two-thirds, browser right third"), which Loop's own comparison table lists as missing. A layout is a named list of (app bundle id, screen, action or frame). Stage 3b built `mooring win layout save | apply | list | delete <name>` and the MCP `save_layout` and `apply_layout`; a hotkey for layouts is not built.
 
 ### 3.2 What gets removed from Loop
 
@@ -596,13 +596,15 @@ Maccy's paste action (level 4) needs the same permission, so granting it once co
 
 ### 3.4 CLI and agent window control
 
-An agent arranges windows from a plain request ("Chrome on the right half, iTerm bottom left, Slack top left") by reading the current windows, sending one plan, and reporting what landed. Mooring holds the Accessibility permission and does the matching and moving; the agent never needs Accessibility itself.
+*As built in stage 3b.* An agent arranges windows from a plain request ("Chrome on the right half, iTerm bottom left, Slack top left") by reading the current windows, sending one plan, and reporting what landed. Mooring holds the Accessibility permission and does the matching and moving; the agent never needs Accessibility itself.
+
+**Where the work happens.** In the app, through four socket ops: `win.list`, `win.arrange`, `win.undo` (optional `client`) and `win.layout`. The CLI and the MCP server only relay them. `WindowSystem` (a protocol in WindowKit, with a live implementation over Loop's `Window` and the Accessibility API) and the `Arranger` (in the app, pure over `WindowSystem`) do the matching, resolving, applying, undo and layouts; `RequestHandler+Windows.swift` gates every request.
 
 **The flow for one request:**
 
-1. **Look.** `mooring win list --json` returns running apps and their windows (id, title, frame, screen, minimized, full screen) and every screen (id, name, visible frame, position).
-2. **Plan.** The agent maps the request to one plan, all placements at once.
-3. **Execute.** Mooring resolves each app and window, then applies every placement in one transaction through Loop's engine, optionally flashing Loop's preview overlay first.
+1. **Look.** `mooring win list --json` returns running apps and their windows (id, title, frame, screen, minimized, full screen) and every screen (id, name, visible frame, position). Accessory apps (menu-bar-only apps with no Dock presence) are not listed, so they can't be arranged.
+2. **Plan.** The agent maps the request to one plan, all placements at once. A plan has at most 32 placements, and a `frame` is clamped to 0–1.
+3. **Execute.** Mooring resolves every placement first, then applies the moves in one pass, optionally flashing Loop's preview overlay (0.6 s) before moving. One arrangement applies at a time.
 4. **Report.** Mooring returns a status per placement; the agent tells the user anything that didn't land and can ask about ambiguous windows.
 
 **CLI:**
@@ -612,10 +614,14 @@ An agent arranges windows from a plain request ("Chrome on the right half, iTerm
 | `mooring win list [--json]` | Apps, windows and screens as above |
 | `mooring win arrange <app>=<region>[@screen] … [--launch] [--preview] [--json]` | One transaction, e.g. `mooring win arrange chrome=right-half iterm=bottom-left slack=top-left` |
 | `mooring win arrange --plan <file or ->` | Same, with the full JSON plan |
-| `mooring win <action> [--app <name>] [--screen …]` | One Loop action on one window |
+| `mooring win do <action> [--app <name>] [--screen …]` | One Loop action on one window. With no `--app` it targets the frontmost app (`@frontmost`). SPEC's earlier `mooring win <action>` would collide with the subcommand names, so `do` replaces it |
 | `mooring win undo` | Put every window moved by the last arrangement back |
 | `mooring win layout save \| apply \| list \| delete <name>` | Saved layouts ("save this as coding") |
 | `mooring win list-regions` | Every region name the planner accepts |
+
+`win do` travels as a one-placement plan whose `app` is the sentinel `@frontmost`; the app resolves it to the frontmost regular app other than Mooring. Human output for `arrange` is one line per placement (for an ambiguous one, the candidate titles follow); `--json` prints the result.
+
+**Exit codes.** 0 when every placement is `ok`; 2 when any placement isn't (`partial`, `ambiguous`, `not_running`, `not_found`, `failed`), and when the request is `denied`; 1 for a bad plan, and for "Nothing to undo"; 3 when the app is unreachable. Mutating requests (`arrange`, `do`, `undo`, `layout save | apply | delete`) use a 120 s client timeout (an ask's 60 s, the lock wait and a 10 s launch); `list` and `list-regions` use the normal one.
 
 **Plan schema:**
 
@@ -632,19 +638,30 @@ An agent arranges windows from a plain request ("Chrome on the right half, iTerm
 }
 ```
 
-- **`app`** is matched against running apps' names and bundle ids, case-insensitive and fuzzy ("iterm" → iTerm2 `com.googlecode.iterm2`, "code" → Visual Studio Code). Ties are reported as ambiguous, never guessed.
-- **`region`** is any Loop action name (halves, quarters, thirds, two-thirds, maximize, almost-maximize, centre). **`frame`** gives fractions of the screen's visible area for anything else.
-- **`screen`** is `main`, `left`, `right`, or an index; default is the screen the window is on.
-- **`title`** picks one window when an app has several; default is the app's frontmost window.
-- Minimized windows are restored. Apps that aren't running are launched only when `launch` is true.
+- **`app`** is matched case-insensitively against running apps' names and bundle ids, in three tiers: an exact name or bundle id wins; otherwise a prefix match; otherwise a substring match ("iterm" → iTerm2 `com.googlecode.iterm2`, "code" → Visual Studio Code). The bundle id's last component counts as well. Ties within a tier are `ambiguous`, never guessed.
+- **`region`** is a Loop action name in kebab case (`left-half`, `right-half`, `top-left`, `bottom-left`, thirds, two-thirds, `maximize`, `almost-maximize`, `center`, …); `mooring win list-regions` prints them all. An unknown region is reported on that placement. **`frame`** gives fractions of the screen's visible area for anything else, origin top-left.
+- **`screen`** is `main`, `left`, `right`, or an index; default is the screen the window is on. `left` and `right` are relative to the main screen.
+- **`title`** picks one window by a case-insensitive substring; a title that matches several windows is `ambiguous`. With no `title`, the app's frontmost window is used, even when the app has several.
+- Minimized windows are restored. A full-screen window is `failed` ("is full screen"). Apps that aren't running are launched only when `launch` is true, waiting up to 10 s for a window.
 
-**Result per placement:** `ok` (with the final frame), `partial` (the app enforces a minimum size; final frame given), `ambiguous` (candidate windows listed), `not_running`, `not_found`, or `failed` (reason). The CLI exits 0 only when every placement is `ok`.
+**Result per placement:** `ok` (with the final frame), `partial` (the app enforces a minimum size; final frame given; it compares size only), `ambiguous` (candidate windows listed), `not_running`, `not_found`, or `failed` (reason).
 
-**MCP tools** (same schema as the CLI): `list_windows`, `arrange_windows(placements, launch, preview)`, `undo_arrangement`, `save_layout(name)`, `apply_layout(name)`.
+**Undo** keeps the last 10 arrangements in memory (window id → previous frame); `win undo` reverts the latest. It is lost on quit. With nothing to undo the reply is `notFound`, "Nothing to undo".
 
-**Skill guidance:** list windows before arranging; send one plan rather than one call per window; report every placement that isn't `ok`; offer `mooring win undo` if the user doesn't like the result.
+**Saved layouts** live in `~/Library/Application Support/Mooring/layouts.json` (name → placements of bundle id, screen, and region or frame as screen fractions). `save` captures the frontmost window of each visible app on each screen; `apply` runs the stored placements as a plan with `launch: true`.
 
-**Control mode:** agents arrange windows automatically by default. "Ask first" shows a notification summarising the plan ("Claude Code wants to arrange 3 windows") with Allow; "Off" makes the window commands and tools return an error the agent can relay (see Agent control and approvals in Part 2).
+**Accessibility timeouts.** Every Accessibility call made for an arrangement is bounded at 1.5 s per application and per window element, so one hung app can't stall a request.
+
+**MCP tools** (same schema as the CLI; every call carries the client's name, so it counts as an agent): `list_windows`, `arrange_windows(placements, launch, preview)`, `undo_arrangement`, `save_layout(name)`, `apply_layout(name)`. Results are text plus `structuredContent` with the per-placement results. With these the server has 9 tools (2.5).
+
+**Skill guidance:** list windows before arranging; send one plan rather than one call per window; report every placement that isn't `ok`; offer `mooring win undo` if the user doesn't like the result. The skill's description and title mention window arrangement so that it loads for these requests.
+
+**Gating.** Settings → Agents → "Window arrangement by agents" (`AwakeSettings.agentWindows`): **Automatic** (default) · Ask first · Off, with the caption "Agents can move and resize your windows with `mooring win` and MCP. Windows must be on."
+
+- **Windows off** (the `WindowsController` state isn't on): every `win` op, `list` included, is `denied` with "Windows is off. Turn it on in Mooring (Windows › Turn On…)." It never turns Windows on by itself.
+- **Off** (agents): an agent's mutating ops (`win.arrange`, `win.undo` and `win.layout` save, apply and delete) are `denied` with "Window arrangement by agents is off in Settings". Listing windows, listing layouts and `list-regions` are always allowed (while Windows is on).
+- **Ask first** applies to `win.arrange` (including `win do`) and `win.layout apply`; undo, layout save and delete never ask. It posts a notification (category `mooring.window-approval`) "<Agent> wants to arrange N windows" with the actions **Allow** and **Deny**, and a body that lists at most 6 placements and then "and N more". It waits 60 s; Deny, no answer or unavailable notifications are `denied`, and the last says "Turn on notifications for Mooring in System Settings to approve window arrangement". The mode and the Windows state are checked again right before applying, so a change made while the ask was open takes effect. A layout apply applies exactly the placements that were approved.
+- **People are never asked.** The caller is an agent by the same detection as in Agent control and approvals (process ancestry, an MCP `client`, a link).
 
 Example exchange:
 
@@ -671,7 +688,7 @@ A single **Shortcuts** page (General › Shortcuts) lists every global hotkey ac
 
 - [ ] With Windows off, Mooring never asks for Accessibility and loads none of `WindowKit`.
 - [ ] Radial menu, preview, keyboard actions and cycles behave as in the upstream Loop commit that was vendored.
-- [ ] The Chrome / iTerm / Slack request lands in one `mooring win arrange` call, and `mooring win undo` restores the previous layout
+- [ ] The Chrome / iTerm / Slack request lands in one `mooring win arrange` call, and `mooring win undo` restores the previous layout (built and covered by `Arranger`, handler, CLI and MCP tests over a fake `WindowSystem`; needs the owner check with Accessibility)
 - [ ] A failing private-API call hides the dependent feature instead of crashing.
 - [ ] The Shortcuts page detects a clash between the Windows trigger and the clipboard hotkey.
 
@@ -992,6 +1009,17 @@ struct AwakeSettings: Codable, Equatable {
 - Also take `Accent Color/` (wallpaper-derived accent colours, used by the radial menu theming), which the Take list above omits. `Core/LoopManager.swift` references `Updater` and `IconManager`; remove those calls when vendoring.
 - Undo keeps the last 10 arrangements in memory (window id → previous frame); it is lost on quit.
 
+**Stage 3b: agent windows decisions (as built)**
+
+- **Ops and wire:** `win.list`, `win.arrange`, `win.undo` and `win.layout`, handled in the app; the CLI and MCP only relay. Wire types are `WinPlan`, `WinPlacement`, `WinResult`, `WinListResult`, `WinLayoutArgs` and `WinUndoArgs {client}` (lenient, so the protocol stays `v: 1`). `WinPlan.validated()` allows at most 32 placements, clamps frames to 0–1 and accepts the `@frontmost` sentinel for `win do`.
+- **Components:** `WindowSystem` and the `WS*` types (WindowKit, public); `Arranger` (app, pure over `WindowSystem`, with the undo stack and layouts); `RequestHandler+Windows.swift` (gating and dispatch); the `mooring.window-approval` notification beside the lid approval one; `WinCommands` in MooringCLICore; five MCP window tools.
+- **Matching:** exact name or bundle id, then prefix, then substring, case-insensitive; ties are `ambiguous`. With no `title`, the frontmost window is used. `partial` compares size only. `left` and `right` screens are relative to the main screen.
+- **Gating:** Windows state, then agent mode, checked again inside the arrange lock right before applying; one arrangement at a time; `win.undo` carries `client` so MCP undo is gated like any other agent request. See 3.4 for the messages.
+- **Timeouts:** Accessibility calls are bounded at 1.5 s per application and per window element; mutating CLI and MCP requests use a 120 s client.
+- **Not listed:** accessory apps are excluded from `win list`.
+- **Layouts:** `~/Library/Application Support/Mooring/layouts.json`.
+- **Version:** 0.0.5 (`MARKETING_VERSION`). The plugin is 0.0.4 (its skill changed).
+
 **Stage 3a: WindowKit decisions (as built)**
 
 - **Vendored snapshot:** Loop@0ac6d83 at `Packages/WindowKit`, in Swift 5 language mode (plus the upcoming features Loop turns on). The app and the other packages stay Swift 6. Mooring-written WindowKit code (`WindowKit.swift`, `WindowKit+Actions.swift`, `Capabilities.swift`, `ScreenSwitchFrames.swift`, `WindowChord.swift`, `WindowSettingsPage.swift`) sits beside the `Loop/` folder. The vendored `Loop/` folders and Loop's tests are excluded from SwiftLint.
@@ -1003,7 +1031,7 @@ struct AwakeSettings: Codable, Equatable {
 - **Dropdown, Windows ›:** while off, **Turn On…**; in needsAccessibility, the reason line, **Turn On…** and **Turn Off Windows** (waitingForTrust has the last two). While on: Left half, Right half, Maximize, Centre, Next screen, each with its chord as trailing text (a Loop chord cannot be a menu key equivalent, and a key equivalent would register a live shortcut); **More Actions ›** (both replaced by "Window actions aren't available on this version of macOS" when window-id lookup fails); and the **Window Manager** switch. Turn On and Turn Off Windows run after the menu closes. Actions apply to the app that was frontmost before the menu opened; if that is Mooring itself, they apply to Mooring's window.
 - **Settings → Windows:** six Luminare pages (Behavior, Keybinds, Gestures, Radial Menu, Preview, Excluded Apps) hosted in the detail area. While Windows is not on, each page shows only the "Windows is off" banner with **Turn On…** (Behavior also keeps the Window Manager toggle, which reads on whenever Windows is wanted, including while it needs Accessibility), because building Loop's pages creates `SettingsWindowManager.shared` and Luminare views, which would break "loads none of WindowKit". So settings cannot be edited before turning Windows on.
 - **General → Shortcuts:** lists Toggle On/Off (None by default), the Windows trigger key and every Windows keybind, or a note that Windows is off. Two Mooring shortcuts on one chord show "Also used by <other>". A chord that matches an enabled macOS shortcut shows "Used by macOS: <name>", read from `com.apple.symbolichotkeys` plus a built-in table of stock defaults for ids the plist does not list. A link points to Loop's advice on remapping Caps Lock; Mooring never remaps it.
-- **Version:** 0.0.4 (`MARKETING_VERSION`). The plugin stays 0.0.3, because its files did not change: the plugin changes version only when its files change, and `pluginVersionMatchesMarketingVersion` requires plugin ≤ marketing.
+- **Version:** 0.0.4 (`MARKETING_VERSION`); the plugin stayed 0.0.3 because its files did not change. The plugin changes version only when its files change, and `pluginVersionMatchesMarketingVersion` requires plugin ≤ marketing. (Stage 3b ships 0.0.5 with plugin 0.0.4.)
 
 **Stage 4 additions to the Maccy file map**
 
@@ -1036,7 +1064,7 @@ Each stage is one branch and one pull request titled `Stage N: …`, and ends at
 | 2c-1 Lid approvals | `LidApproval`, agent detection, Allow once / Always allow / Deny notifications, session lid, Settings → Agents → Lid mode, `doctor`'s Notifications check | Handler tests with an injected approver; the deny path exits 2 | Closes the lid during a Claude task; clicks each notification button |
 | 2c-2 MCP, links and Shortcuts | `mooring mcp` (`keep_awake`, `release_awake`, `awake_status`, `notify`) and `mooring notify`; the `mooring://` URL scheme; the three Shortcuts actions; Settings → Agents → Other agents (MCP) with Add/Update/Remove for Claude Desktop and Cursor and Copy config; `doctor`'s MCP clients check; version 0.0.3 | `MCPServerTests` drive the server over an in-memory pipe; handler, link, intent, config and CLI tests | Runs the Shortcuts, opens links from Raycast, adds Mooring to Claude Desktop and asks it to keep the Mac awake and to notify, and runs `mooring doctor` |
 | 3a WindowKit (built, 0.0.4) | Vendored Loop@0ac6d83 as `Packages/WindowKit` with pinned dependencies and capability checks; `WindowsController` and the Accessibility flow; the dropdown's Windows › submenu; Settings → Windows (six Luminare pages); General → Shortcuts with conflict detection; version 0.0.4 | With Windows off, no Accessibility prompt and no WindowKit object created; frame-maths, capability, controller, submenu and shortcut-conflict tests; Loop's six tests pass | Grants Accessibility; tries the radial menu, keybinds, a cycle, drag-to-edge snapping and the preview; revokes Accessibility and sees the orange pill |
-| 3b Agent windows | `mooring win list / arrange / undo / layout`, MCP window tools, skill update | Arranging three TextEdit windows returns `ok` frames; `undo` restores them | Asks Claude for the Chrome / iTerm / Slack layout |
+| 3b Agent windows (built, 0.0.5) | `win.list`, `win.arrange`, `win.undo` and `win.layout` in the app, with `mooring win list / arrange / do / undo / layout / list-regions`; five MCP window tools (9 in all); gating by Windows state and Settings → Agents → "Window arrangement by agents" (Automatic · Ask first · Off) with the `mooring.window-approval` notification; undo of the last 10 arrangements; saved layouts; the skill covers windows; version 0.0.5 (plugin 0.0.4) | `Arranger`, handler, CLI and MCP tests over a fake `WindowSystem`; the full suite passes | With Accessibility granted, arranges three TextEdit windows and undoes them; asks Claude for the Chrome / iTerm / Slack layout; tries Ask first (Allow, then Deny) and `win layout save` / `apply` |
 | 4 ClipKit | Vendored Maccy: the Clipboard submenu and popup, ⇧⌘C, ignore rules, retention | Unit tests; a test fails the build if any IPC op, MCP tool, intent or URL route touches ClipKit | Copies from 1Password and confirms it isn't recorded |
 | 5 Release | Sparkle appcast, GitHub Release zip, Homebrew tap `EidanErlich/homebrew-tap`, README install docs | Clean install on a second macOS user account | Tags v0.1 |
 

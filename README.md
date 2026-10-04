@@ -40,6 +40,10 @@ Everything below ends in the same lease engine as the menu and the `mooring` com
 
 Mooring also includes a window manager, [Loop](https://github.com/MrKai77/Loop), vendored as WindowKit: a radial menu, keyboard actions, cycles, drag-to-edge snapping and a preview. It is off by default and Mooring never asks for Accessibility until you turn it on. Choose **Windows › Turn On…** in the menu (or use the Window Manager switch in Settings → Windows → Behavior); Mooring explains what macOS calls Accessibility and opens System Settings → Privacy & Security → Accessibility, and Windows switches on by itself once you grant it. If you later revoke it, Windows turns itself off and the icon shows an orange "!" that reads "Windows needs Accessibility". The Windows settings are in Settings → Windows, and General → Shortcuts lists every global shortcut and flags clashes with each other and with macOS.
 
+### Agents can arrange windows
+
+With Windows on, an agent can move and resize your windows from a plain request ("Chrome on the right half, iTerm bottom left"). `mooring win list` shows the windows, `mooring win arrange chrome=right-half iterm=bottom-left` places them in one go, and `mooring win undo` puts them back; the Claude Code plugin and the MCP tools (`list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout`, `apply_layout`) do the same. `mooring win layout save coding` keeps an arrangement to apply later. Settings → Agents → "Window arrangement by agents" chooses Automatic, Ask first (a notification with Allow and Deny) or Off.
+
 ## License
 
 GPL-3.0-only; see [LICENSE](LICENSE). Code adapted from MIT-licensed projects keeps its original notices; see [THIRD_PARTY](THIRD_PARTY).

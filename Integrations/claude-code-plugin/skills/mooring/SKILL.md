@@ -1,9 +1,9 @@
 ---
 name: mooring
-description: Use when a job may outlive the turn or needs the Mac to stay awake, such as long builds, big downloads, background commands or multi-step analyses.
+description: Use when a job may outlive the turn or needs the Mac to stay awake, such as long builds, big downloads, background commands or multi-step analyses, or when asked to move, resize or lay out windows (mooring win).
 ---
 
-# Mooring: keeping the Mac awake
+# Mooring: keeping the Mac awake and arranging windows
 
 Mooring is a menu-bar app that stops the Mac sleeping. Its plugin already holds a lease while you work in this session, so the Mac stays awake without any action from you. Do not disable Mooring or change its settings.
 
