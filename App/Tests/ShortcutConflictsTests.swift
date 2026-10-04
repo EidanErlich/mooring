@@ -1,4 +1,5 @@
 import AppKit
+import ClipKit
 import SwiftUI
 import Testing
 @testable import Mooring
@@ -73,6 +74,39 @@ struct ShortcutConflictsTests {
 
         let size = layOut(ShortcutsSettingsPage(windows: .fake(.on), keybinds: { keybinds }, system: { [self.spotlight] }))
         #expect(size.width > 0 && size.height > 0)
+    }
+
+    /// ⇧⌘C written by KeyboardShortcuts and ⌘⇧C written by WindowKit are the same chord.
+    @Test func clipboardHotkeyConflictsWithWindowsKeybind() {
+        let content = ShortcutsContent.make(
+            windows: .on, clipboardChord: { "⇧⌘C" }, keybinds: { [entry("Maximize", "⌘⇧C"), entry("Center", "⌃⌥C")] },
+            system: [])
+        #expect(content.clipboard == [ShortcutRow(title: "Clipboard popup", chord: "⇧⌘C", warning: "Also used by Maximize")])
+        #expect(content.windows.map(\.warning) == ["Also used by Clipboard popup", nil])
+        #expect(content.clipboardNote == nil)
+        #expect(content.awake.map(\.warning) == [nil])
+
+        let spotlightChord = ShortcutsContent.make(
+            windows: .off, clipboardChord: { "⌘␣" }, keybinds: { [] }, system: [spotlight])
+        #expect(spotlightChord.clipboard.map(\.warning) == ["Used by macOS: Spotlight"])
+
+        let unset = ShortcutsContent.make(windows: .on, clipboardChord: { nil }, keybinds: { [] }, system: [])
+        #expect(unset.clipboard == [ShortcutRow(title: "Clipboard popup", chord: "None", warning: nil)])
+    }
+
+    /// The chord comes from the recorded shortcut through the shared formatter.
+    @Test func clipboardChordUsesTheSharedFormat() {
+        let shortcut = KeyboardShortcuts.Shortcut(.c, modifiers: [.command, .shift])
+        #expect(ShortcutsContent.chord(of: shortcut) == "⇧⌘C")
+        #expect(ShortcutsContent.chord(of: nil) == nil)
+    }
+
+    @Test func offShowsClipboardNote() {
+        let content = ShortcutsContent.make(
+            windows: .on, keybinds: { [entry("Maximize", "⇧⌘C")] }, system: [])
+        #expect(content.clipboard.isEmpty)
+        #expect(content.clipboardNote == "Clipboard is off: turn it on to use its shortcut")
+        #expect(content.windows.map(\.warning) == [nil])
     }
 
     @Test func stockMacFlagsSpotlightDefault() {

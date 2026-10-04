@@ -1,7 +1,7 @@
 import Foundation
 
 /// The operations a request can name.
-public enum Op: String, Codable, Sendable, Equatable { // swiftlint:disable:this type_name
+public enum Op: String, Codable, Sendable, Equatable, CaseIterable { // swiftlint:disable:this type_name
     case acquire, renew, release, status, hook, notify
     case winList = "win.list", winArrange = "win.arrange", winUndo = "win.undo", winLayout = "win.layout"
 }

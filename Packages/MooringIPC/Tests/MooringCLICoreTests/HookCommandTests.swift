@@ -268,7 +268,8 @@ private func socketEnvironment(path: String, replyTimeout: TimeInterval, input: 
     let environment = socketEnvironment(path: server.path, replyTimeout: 1.5, input: try fixture("Stop"), capture: capture)
     let started = ContinuousClock.now
     #expect(await MooringCLI.run(["hook", "Stop"], environment: environment) == 0)
-    #expect(ContinuousClock.now - started < .seconds(2))
+    // Gives up at the 1.5 s reply timeout; the margin covers a loaded CI runner (one run took 2.04 s).
+    #expect(ContinuousClock.now - started < .milliseconds(2500))
     #expect(server.requests.count == 1)
     #expect(capture.stdout.isEmpty)
     #expect(capture.stderr.isEmpty)

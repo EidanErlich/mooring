@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var dropdown: DropdownController?
     private var windows: WindowsController?
+    private var clipboard: ClipboardController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
@@ -101,13 +102,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observeWindowsForArranger()
 
         let statusItem = StatusItemController(engine: engine, windows: windows)
+        statusItemController = statusItem
+
+        // Off by default; ClipKit isn't even created until Clipboard is turned on.
+        let clipboard = ClipboardController.live(
+            statusBarButton: { [weak statusItem] in statusItem?.button },
+            openSettings: { SettingsWindowController.shared.showClipboardHistory() })
+        clipboard.launch()
+        self.clipboard = clipboard
+        SettingsWindowController.shared.clipboard = clipboard
+
         let dropdown = DropdownController(
-            engine: engine, approvals: approvals, windows: windows,
+            engine: engine, approvals: approvals, windows: windows, clipboard: clipboard,
             openSettings: { SettingsWindowController.shared.show() })
         statusItem.onOpenMenu = { [weak statusItem] in
             statusItem.map(dropdown.open(from:))
         }
-        statusItemController = statusItem
         self.dropdown = dropdown
     }
 
@@ -214,6 +224,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
+        clipboard?.willTerminate()
     }
 
     /// Never quit with lid sleep disabled (docs/SPEC.md 1.6, layer 4). The

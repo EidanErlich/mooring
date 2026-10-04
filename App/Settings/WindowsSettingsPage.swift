@@ -20,7 +20,8 @@ extension SettingsPage {
         case .windowsRadialMenu: .radialMenu
         case .windowsPreview: .preview
         case .windowsExcludedApps: .excludedApps
-        case .general, .shortcuts, .keepAwake, .lidAndBattery, .agents, .advanced: nil
+        case .general, .shortcuts, .keepAwake, .lidAndBattery, .agents, .advanced,
+             .clipboardHistory, .clipboardIgnoreRules, .clipboardAppearance: nil
         }
     }
 

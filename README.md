@@ -2,7 +2,7 @@
 
 Mooring is a free, open-source macOS menu-bar app that keeps your Mac awake, including with the lid closed, without a password prompt after a one-time approval. Scripts and coding agents drive the same engine through a `mooring` command.
 
-> **Status:** early development. Mooring keeps your Mac awake (idle and display sleep) from the menu bar: left-click the anchor to turn it on, right-click for durations, "while an app runs" and the list of what's keeping the Mac awake. Lid mode (keep running with the lid closed) works after a one-time approval of Mooring's helper; it pauses itself on low battery or when the Mac runs hot, and if Mooring quits or crashes the helper turns lid sleep back on within a few seconds. The full design is in [docs/SPEC.md](docs/SPEC.md).
+> **Status:** early development. Mooring keeps your Mac awake (idle and display sleep) from the menu bar: left-click the anchor to turn it on, right-click for durations, "while an app runs" and the list of what's keeping the Mac awake. Lid mode (keep running with the lid closed) works after a one-time approval of Mooring's helper; it pauses itself on low battery or when the Mac runs hot, and if Mooring quits or crashes the helper turns lid sleep back on within a few seconds. Two optional modules, both off until you turn them on, are built in: Windows, a window manager agents can drive, and Clipboard, a clipboard history agents can't read. The full design is in [docs/SPEC.md](docs/SPEC.md).
 
 ## Build from source
 
@@ -43,6 +43,16 @@ Mooring also includes a window manager, [Loop](https://github.com/MrKai77/Loop),
 ### Agents can arrange windows
 
 With Windows on, an agent can move and resize your windows from a plain request ("Chrome on the right half, iTerm bottom left"). `mooring win list` shows the windows, `mooring win arrange chrome=right-half iterm=bottom-left` places them in one go, and `mooring win undo` puts them back; the Claude Code plugin and the MCP tools (`list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout`, `apply_layout`) do the same. `mooring win layout save coding` keeps an arrangement to apply later. Settings → Agents → "Window arrangement by agents" chooses Automatic, Ask first (a notification with Allow and Deny) or Off (agents can't even list windows). Agents get only regions that move and resize windows, so `mooring win undo` can always put them back.
+
+## Clipboard
+
+Mooring also includes a clipboard history, [Maccy](https://github.com/p0deje/Maccy), vendored as ClipKit. It is off by default: until you turn it on, Mooring records nothing, creates no history file and listens for no shortcut. Choose **Clipboard › Turn On…** in the menu (or the Clipboard switch in Settings → Clipboard → History), copy as usual, and press ⇧⌘C to search, pin and paste. Pasting automatically needs Accessibility, the same permission Windows uses; without it, choosing an item copies it and the popup reminds you to paste with ⌘V. Clipboard › in the menu lists your latest copies and has Pause Recording, Ignore Next Copy and Clear.
+
+Mooring never records concealed or temporary copies (what password managers mark), copies made while Secure Keyboard Entry is on, copies from apps on the ignore list (1Password, Bitwarden, Dashlane, LastPass, KeePassXC, Keychain Access and Passwords by default) or copies from your other devices through Universal Clipboard unless you allow them. Settings → Clipboard → Ignore Rules edits the list.
+
+### Agents can't read it
+
+No `mooring` command, MCP tool, Shortcuts action, `mooring://` link or AppleScript call returns clipboard history, and tests fail the build if one appears. Mooring protects your clipboard *history*; any app can still read what you copied most recently, because that is how macOS pasteboards work. The history file (`~/Library/Application Support/Mooring/Clipboard/`) is kept in a folder only you can open and left out of backups, but it isn't encrypted, so any process running as you, including an agent with shell access, can read it. If that matters to you, leave Clipboard off. Turning Clipboard off stops recording but keeps what's saved; use Delete Clipboard History… in Settings → Clipboard to remove it.
 
 ## License
 

@@ -9,5 +9,7 @@ excluded:
   - Packages/AwakeKit/Sources/AwaykeMonitors   # vendored Awayke code
   - Packages/WindowKit/Sources/WindowKit/Loop   # vendored Loop code
   - Packages/WindowKit/Tests/WindowKitTests/Loop   # vendored Loop tests
+  - Packages/ClipKit/Sources/ClipKit/Maccy   # vendored Maccy code
+  - Packages/ClipKit/Tests/ClipKitTests/Maccy   # vendored Maccy tests
 line_length:
   warning: 140

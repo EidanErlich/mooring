@@ -18,15 +18,21 @@ struct DropdownMenuTests {
         needsLidConfirmation: @escaping () -> Bool = { false },
         confirmLidOnBattery: @escaping () -> Void = {},
         windows: WindowsController? = nil,
-        windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil })
+        windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil }),
+        clipboard: ClipboardController? = nil
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
         let menu = DropdownMenu(engine: engine, model: model, helperEnabled: helperEnabled,
                                 runningApps: runningApps, openSettings: {},
                                 windows: windows ?? makeWindows(.off), windowActions: windowActions,
+                                clipboard: clipboard ?? Self.offClipboard(),
                                 needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery)
         return (menu, engine)
+    }
+
+    static func offClipboard() -> ClipboardController {
+        ClipboardController(settings: FakeClipboardSettings(enabled: false)) { _ in FakeClipKit() }
     }
 
     private func makeMenu(
@@ -38,7 +44,7 @@ struct DropdownMenuTests {
     }
 
     @Test func rootItemsInOrder() {
-        #expect(ids(makeMenu().root) == ["header", "-", "awake", "windows", "-", "settings", "quit"])
+        #expect(ids(makeMenu().root) == ["header", "-", "awake", "windows", "clipboard", "-", "settings", "quit"])
         #expect(makeMenu().root.item(withTitle: "Awake")?.submenu != nil)
     }
 

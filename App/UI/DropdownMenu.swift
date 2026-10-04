@@ -14,6 +14,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     let awake = NSMenu()
     let apps = NSMenu()
     private(set) var windowsSubmenu: WindowsSubmenu!
+    private(set) var clipboardSubmenu: ClipboardSubmenu!
     /// Called once when the root menu closes.
     var onClose: (() -> Void)?
 
@@ -28,12 +29,13 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private let appsItem = NSMenuItem()
     private var observing = false
     private var headerItem: NSMenuItem?
-    /// An action waiting for the menu to close: a lid confirmation or Windows' Turn On.
+    /// An action waiting for the menu to close: a lid confirmation, Windows' or Clipboard's Turn On, or
+    /// the Clipboard popup.
     private var pendingAfterClose: (() -> Void)?
 
     init(engine: AwakeEngine, model: DropdownModel, helperEnabled: @escaping () -> Bool,
          runningApps: @escaping () -> [NSRunningApplication], openSettings: @escaping () -> Void,
-         windows: WindowsController, windowActions: WindowActions = .live,
+         windows: WindowsController, windowActions: WindowActions = .live, clipboard: ClipboardController,
          pendingApproval: @escaping (String) -> Bool = { _ in false },
          needsLidConfirmation: @escaping (PowerSnapshot) -> Bool = { LidOptIn.needsConfirmation(power: $0, settings: Defaults[.awake]) },
          confirmLidOnBattery: @escaping () -> Void = { _ = LidOptIn.confirm() }) {
@@ -49,6 +51,10 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         super.init()
         windowsSubmenu = WindowsSubmenu(
             windows: windows, actions: windowActions, model: model,
+            dismiss: { [weak self] in self?.root.cancelTracking() },
+            afterClose: { [weak self] action in self?.runAfterClose(action) })
+        clipboardSubmenu = ClipboardSubmenu(
+            clipboard: clipboard, model: model,
             dismiss: { [weak self] in self?.root.cancelTracking() },
             afterClose: { [weak self] action in self?.runAfterClose(action) })
         for menu in [root, awake, apps] {
@@ -104,6 +110,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         guard menu === root else { return }
         model.menuDidOpen()
         windowsSubmenu.dropdownDidOpen()
+        clipboardSubmenu.dropdownDidOpen()
         sync()
         observe()
     }
@@ -167,6 +174,10 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         windowsItem.identifier = NSUserInterfaceItemIdentifier("windows")
         windowsItem.submenu = windowsSubmenu.menu
         root.addItem(windowsItem)
+        let clipboardItem = NSMenuItem(title: "Clipboard", action: nil, keyEquivalent: "")
+        clipboardItem.identifier = NSUserInterfaceItemIdentifier("clipboard")
+        clipboardItem.submenu = clipboardSubmenu.menu
+        root.addItem(clipboardItem)
         root.addItem(.separator())
         root.addItem(native(id: "settings", title: "Settings…", key: ",") { [openSettings] in openSettings() })
         root.addItem(native(id: "quit", title: "Quit Mooring", key: "q") { NSApp.terminate(nil) })
@@ -285,7 +296,11 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private func hosted(id: String, enabled: Bool = true, @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
         Self.hostedItem(id: id, enabled: enabled, content)
     }
+}
 
+// MARK: Shared behaviour
+
+extension DropdownMenu {
     /// `title` is for accessibility and tests; the hosted view draws the row.
     static func hostedItem(id: String, title: String = "", enabled: Bool = true,
                            @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
@@ -304,11 +319,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         item.identifier = NSUserInterfaceItemIdentifier(id)
         return item
     }
-}
 
-// MARK: Shared behaviour
-
-extension DropdownMenu {
     /// Names of the picked apps, from the running app when possible.
     static func pickedAppNames(_ engine: AwakeEngine) -> [String] {
         engine.sessionApps.map { lease in

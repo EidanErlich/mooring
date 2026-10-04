@@ -38,7 +38,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 
-- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.5; read the bundle version.
+- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.6; read the bundle version.
 - The helper path written to MCP client configs comes from `Bundle.main`; running from a DMG or a translocated location writes a path that later vanishes.
 - An agent sending a raw `untilOff` acquire can make a person's timed menu session open-ended (without lid).
 - `mooring mcp` handles one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
@@ -106,6 +106,32 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - The process-wide 1.5 s Accessibility timeout set when Windows starts isn't reset when it stops.
 - The ask notification sanitizes app and title but shows `region` and `screen` as sent.
 
+
+## Clipboard (4 leftovers)
+
+- **Shortcut text:** `KeyboardShortcuts`' own rendering of Space and the F-keys may not match `ShortcutChord`'s forms ("␣", "F11"), so the Shortcuts page could miss a conflict with Spotlight or another macOS shortcut for the clipboard chord. Check it against the keys macOS reserves.
+- **Upstream flake:** Maccy's `HistoryItemTests` (for example `testSeveralItemsCanHaveEmptyPin`) crashed once with SwiftData's "Already have an objectID registered for this persistent identifier". It didn't recur in 14 reruns; it looks like a rare flake in upstream's test, not in Mooring's code.
+- **Tests:**
+  - wall-clock performance thresholds may flake on CI, and the popup performance test measures load plus `recent`, not row rendering;
+  - `offMeansNoStoreNoPolling`'s real-singleton line can't fail with the fake, so its comment overstates it, and `turnOffUnregistersHotkey`'s name overstates what it checks;
+  - the read-only-parent store test assumes the tests don't run as root;
+  - the Settings tests include a Finder-dependent case;
+  - nothing tests that `AppDelegate` passes `showClipboardHistory` to `ClipboardController.live`.
+- **ClipKit code:**
+  - `History.load`'s task isn't cancelled on stop;
+  - `ModifierFlags`' `deinit` and statics aren't main-actor isolated (theoretical);
+  - after **Delete Clipboard History…** in a session where Clipboard already ran, the SwiftData store stays open on the deleted file (it can't reopen in-process), so if Clipboard is turned back on before Mooring restarts, that session's copies aren't saved to disk and an empty `Clipboard/` folder is recreated.
+- **Settings pages:**
+  - `ClipboardOnPage` builds a model on every parent re-render, and the model caches values;
+  - `@_exported import KeyboardShortcuts` in ClipKit stands in for linking it from the app;
+  - the ignored-app picker removes ".app" with `replacingOccurrences` and silently does nothing for a bundle with no id;
+  - the preview delay isn't exposed ("Ignore all apps except listed" is hidden on purpose, SPEC 4.8).
+- **Agent wall:**
+  - the parenthesis matcher ignores parentheses inside strings and comments, and trailing closures;
+  - there is no `OSAScriptingDefinition` key check in `Info.plist`;
+  - the scan reads Swift source text only, not non-Swift files or linked symbols; the `Metadata.appintents` check reads the test host's build and skips if there is none;
+  - hardening idea: also assert the app declares no `NSServices` in `Info.plist` and donates nothing to Core Spotlight (`CSSearchableIndex`), two more routes by which history could leave the app.
+- **Owner checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint (now refreshed when the popup becomes key); holding ⌥ in the open Clipboard submenu swaps Clear for Clear All (the rows are hosted SwiftUI views, and only the `isAlternate` setup is unit-tested); Delete Clipboard History… removes the folder.
 
 ## CLI and IPC (stage 2a leftovers)
 
