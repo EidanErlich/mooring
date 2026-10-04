@@ -7,7 +7,7 @@ PROJECT     := Mooring.xcodeproj
 DERIVED     ?= build/DerivedData
 APP         := Mooring.app
 INSTALL_DIR := /Applications
-PACKAGES    := Packages/AwakeKit Packages/MooringIPC Packages/WindowKit
+PACKAGES    := Packages/AwakeKit Packages/MooringIPC Packages/WindowKit Packages/ClipKit
 
 # Extra xcodebuild settings, e.g. XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO" in CI.
 XCODEBUILD_FLAGS ?=

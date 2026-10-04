@@ -1,5 +1,5 @@
 {
-  "originHash" : "797a0d3afa637b945ae145b004871311255906ab8e27fae53e8418c22b486b02",
+  "originHash" : "00d4ccfa5b4d0f19bb62e08e97d86ca46e06e8fc8ec3f148d55a789edeb042a2",
   "pins" : [
     {
       "identity" : "defaults",
@@ -29,46 +29,12 @@
       }
     },
     {
-      "identity" : "luminare",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mrkai77/Luminare",
-      "state" : {
-        "revision" : "99c14e36cd536c8252ea147c36e270675fe9c187"
-      }
-    },
-    {
       "identity" : "sauce",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Clipy/Sauce",
       "state" : {
         "revision" : "df657bc1beba23ffd580953f183cd756b5bcd514",
         "version" : "2.4.1"
-      }
-    },
-    {
-      "identity" : "scribe",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/SenpaiHunters/Scribe",
-      "state" : {
-        "branch" : "main",
-        "revision" : "658180864653457ce201917200bac67ee3eeac87"
-      }
-    },
-    {
-      "identity" : "subsurface",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/mrkai77/Subsurface",
-      "state" : {
-        "revision" : "660fe2bd7fbefe8f60b587905748b8e1ea413e2f"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser",
-      "state" : {
-        "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
-        "version" : "1.8.2"
       }
     },
     {
@@ -96,24 +62,6 @@
       "state" : {
         "revision" : "1f886cb20fedda14a5ac75efd09bc99c95b43a18",
         "version" : "1.4.1"
-      }
-    },
-    {
-      "identity" : "swiftui-introspect",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/siteline/swiftui-introspect",
-      "state" : {
-        "revision" : "7d311b4d0a462bfdd4c5c2b1c98ae44795a280ba",
-        "version" : "1.4.0"
-      }
-    },
-    {
-      "identity" : "swiftui-variadic-views",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/lorenzofiamingo/swiftui-variadic-views",
-      "state" : {
-        "revision" : "af67d0e85bd2b499fbfb4cda834117e7c52b12b0",
-        "version" : "1.0.0"
       }
     }
   ],
