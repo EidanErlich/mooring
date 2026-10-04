@@ -7,6 +7,8 @@ PROJECT     := Mooring.xcodeproj
 DERIVED     ?= build/DerivedData
 APP         := Mooring.app
 INSTALL_DIR := /Applications
+# `make uninstall` quits the app with this; its test swaps in a stub.
+PKILL       ?= pkill
 PACKAGES    := Packages/AwakeKit Packages/MooringIPC Packages/WindowKit Packages/ClipKit
 
 # Extra xcodebuild settings, e.g. XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO" in CI.
@@ -48,6 +50,7 @@ run: build
 test: generate
 	@for pkg in $(PACKAGES); do echo "== swift test $$pkg"; (cd $$pkg && swift test) || exit 1; done
 	bash scripts/test-mooring-hook.sh
+	bash scripts/test-make-uninstall.sh
 	$(XCODEBUILD) -configuration Debug test $(XCODEBUILD_FLAGS)
 
 lint:
@@ -63,9 +66,17 @@ install: generate
 reset-sleep:
 	sudo pmset -a disablesleep 0
 
+# Also removes ~/.local/bin/mooring, but only a link into the installed app. (Settings → Advanced →
+# Uninstall Mooring… does the rest: helper, login item, plugin and settings.)
 uninstall:
-	-pkill -x Mooring
-	rm -rf $(INSTALL_DIR)/$(APP)
+	-"$(PKILL)" -x Mooring
+	@link="$(HOME)/.local/bin/mooring"; \
+	if [ -L "$$link" ]; then \
+		case "$$(readlink "$$link")" in \
+			"$(INSTALL_DIR)/$(APP)"/*) rm -f "$$link" && echo "Removed $$link" ;; \
+		esac; \
+	fi
+	rm -rf "$(INSTALL_DIR)/$(APP)"
 
 clean:
 	rm -rf build $(PROJECT)

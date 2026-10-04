@@ -211,16 +211,7 @@ enum ClaudePluginInstaller {
         } catch {
             return .failure(.cli(error.localizedDescription))
         }
-        func run(_ argv: [String]) -> Result<Data, InstallError> {
-            let result = runner.run(argv)
-            guard result.status == 0 else {
-                let message = String(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))
-                // Never leave the page's error line blank. 124 is the runner's timeout status.
-                if !message.isEmpty { return .failure(.command(message)) }
-                return .failure(.command(result.status == 124 ? "Timed out" : "Failed (exit \(result.status))"))
-            }
-            return .success(result.stdout)
-        }
+        func run(_ argv: [String]) -> Result<Data, InstallError> { Self.run(argv, runner: runner) }
         let marketplaces = run([claude, "plugin", "marketplace", "list", "--json"])
         guard case .success(let marketplaceJSON) = marketplaces else { return marketplaces.map { _ in () } }
         let registered = ClaudeCode.parseMarketplaces(marketplaceJSON)?.first { $0.name == ClaudeCode.appMarketplaceName }
@@ -232,6 +223,29 @@ enum ClaudePluginInstaller {
         guard case .success(let pluginJSON) = plugins else { return plugins.map { _ in () } }
         let installed = ClaudeCode.parsePluginList(pluginJSON)?.contains { $0.id == ClaudeCode.appPluginID } ?? false
         return run(pluginCommand(claude: claude, installed: installed)).map { _ in () }
+    }
+
+    /// Uninstall's remove path: unregisters the app's marketplace, which uninstalls its plugin too. Does nothing when
+    /// the marketplace isn't registered, and leaves a copy installed from GitHub alone, since the user added that.
+    static func uninstall(claude: String, runner: ToolRunning) -> Result<Void, InstallError> {
+        let marketplaces = run([claude, "plugin", "marketplace", "list", "--json"], runner: runner)
+        guard case .success(let json) = marketplaces else { return marketplaces.map { _ in () } }
+        guard ClaudeCode.parseMarketplaces(json)?.contains(where: { $0.name == ClaudeCode.appMarketplaceName }) == true else {
+            return .success(())
+        }
+        return run([claude, "plugin", "marketplace", "remove", ClaudeCode.appMarketplaceName], runner: runner).map { _ in () }
+    }
+
+    /// Runs one `claude` command, turning a non-zero exit into `.command` with its trimmed stderr.
+    private static func run(_ argv: [String], runner: ToolRunning) -> Result<Data, InstallError> {
+        let result = runner.run(argv)
+        guard result.status == 0 else {
+            let message = String(result.stderr.trimmingCharacters(in: .whitespacesAndNewlines).prefix(300))
+            // Never leave the page's error line blank. 124 is the runner's timeout status.
+            if !message.isEmpty { return .failure(.command(message)) }
+            return .failure(.command(result.status == 124 ? "Timed out" : "Failed (exit \(result.status))"))
+        }
+        return .success(result.stdout)
     }
 
     /// Links `mooring` into `~/.local/bin` when that isn't already done.
