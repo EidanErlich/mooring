@@ -33,7 +33,7 @@ When a long job finishes and the user may be away, `mooring notify "Done" "<what
 When the user asks you to move, resize or lay out windows:
 
 1. Run `mooring win list --json` first.
-2. Then send one `mooring win arrange …` for the whole request.
+2. Then send one `mooring win arrange …` for the whole request, such as `mooring win arrange chrome=right-half iterm=bottom-left@main`. To pick a window by title, use `--plan -` with JSON: `{"placements":[{"app":"chrome","title":"Docs","region":"left-half"}]}`.
 3. Tell the user every placement that isn't `ok`, and ask about `ambiguous` ones.
 4. Offer `mooring win undo`.
 5. If the reply says Windows is off, ask the user to turn it on from the menu bar.

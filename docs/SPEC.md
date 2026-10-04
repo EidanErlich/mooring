@@ -619,9 +619,9 @@ Maccy's paste action (level 4) needs the same permission, so granting it once co
 | `mooring win layout save \| apply \| list \| delete <name>` | Saved layouts ("save this as coding") |
 | `mooring win list-regions` | Every region name the planner accepts |
 
-`win do` travels as a one-placement plan whose `app` is the sentinel `@frontmost`; the app resolves it to the frontmost regular app other than Mooring. Human output for `arrange` is one line per placement (for an ambiguous one, the candidate titles follow); `--json` prints the result.
+`win do` travels as a one-placement plan whose `app` is the sentinel `@frontmost`; the app resolves it to the frontmost regular app other than Mooring. Human output for `arrange` is one line per placement, such as `iterm ok (was minimized, restored)`, `notes isn't running` or `code ambiguous: matches several apps: Visual Studio Code, Xcode`; `--json` prints the result.
 
-**Exit codes.** 0 when every placement is `ok`; 2 when any placement isn't (`partial`, `ambiguous`, `not_running`, `not_found`, `failed`), and when the request is `denied`; 1 for a bad plan, and for "Nothing to undo"; 3 when the app is unreachable. Mutating requests (`arrange`, `do`, `undo`, `layout save | apply | delete`) use a 120 s client timeout (an ask's 60 s, the lock wait and a 10 s launch); `list` and `list-regions` use the normal one.
+**Exit codes.** 0 when every placement is `ok`; 2 when any placement isn't (`partial`, `ambiguous`, `not_running`, `not_found`, `failed`), and when the request is `denied`; 1 for a bad plan, and for "Nothing to undo"; 3 when the app is unreachable. Mutating requests (`arrange`, `do`, `undo`, `layout save | apply | delete`) use a 120 s client timeout (an ask's 60 s, the lock wait and a 10 s launch), and so do `list` and `list-regions`, since a list can wait 1.5 s on each hung app; `layout list` uses the normal one.
 
 **Plan schema:**
 
@@ -631,28 +631,28 @@ Maccy's paste action (level 4) needs the same permission, so granting it once co
     { "app": "chrome", "region": "right-half" },
     { "app": "iterm",  "region": "bottom-left", "screen": "main" },
     { "app": "slack",  "region": "top-left" },
-    { "app": "code", "title": "mooring", "frame": { "x": 0, "y": 0, "w": 0.6, "h": 1 } }
+    { "app": "vscode", "title": "mooring", "frame": { "x": 0, "y": 0, "w": 0.6, "h": 1 } }
   ],
   "launch": false,
   "preview": false
 }
 ```
 
-- **`app`** is matched case-insensitively against running apps' names and bundle ids, in three tiers: an exact name or bundle id wins; otherwise a prefix match; otherwise a substring match ("iterm" → iTerm2 `com.googlecode.iterm2`, "code" → Visual Studio Code). The bundle id's last component counts as well. Ties within a tier are `ambiguous`, never guessed.
-- **`region`** is a Loop action name in kebab case (`left-half`, `right-half`, `top-left`, `bottom-left`, thirds, two-thirds, `maximize`, `almost-maximize`, `center`, …); `mooring win list-regions` prints them all. An unknown region is reported on that placement. **`frame`** gives fractions of the screen's visible area for anything else, origin top-left.
+- **`app`** is matched case-insensitively against running apps' names and bundle ids, in three tiers: an exact name or bundle id wins; otherwise a prefix match; otherwise a substring match ("iterm" → iTerm2 `com.googlecode.iterm2`, "vscode" → Visual Studio Code `com.microsoft.VSCode`). The bundle id's last component counts as well, so "code" matches both Visual Studio Code and Xcode and is `ambiguous` when both run. Ties within a tier are `ambiguous`, never guessed.
+- **`region`** is a Loop action name in kebab case (`left-half`, `right-half`, `top-left`, `bottom-left`, thirds, two-thirds, `maximize`, `almost-maximize`, `center`, …); `mooring win list-regions` prints them all. Only actions that set a window's position and size are regions, so `win undo` can always put them back: halves, quarters, thirds and two-thirds, fourths and three-fourths, `maximize`, `almost-maximize`, `maximize-height`, `maximize-width`, `fill-available-space`, `center`, `mac-os-center`, `larger`, `smaller`, `scale-up`, `scale-down`, the shrink, grow and move steps, and `next-screen`, `previous-screen`, `left-screen`, `right-screen`, `top-screen`, `bottom-screen`. The Windows menu's other actions (`minimize`, `minimize-others`, `hide`, `fullscreen`, which is macOS full screen, Space moves, Loop's `undo` and `initial-frame`, focus, stash and cycles) are `failed` with "region isn't available to agents". An unknown region is reported on that placement. **`frame`** gives fractions of the screen's visible area for anything else, origin top-left.
 - **`screen`** is `main`, `left`, `right`, or an index; default is the screen the window is on. `left` and `right` are relative to the main screen.
-- **`title`** picks one window by a case-insensitive substring; a title that matches several windows is `ambiguous`. With no `title`, the app's frontmost window is used, even when the app has several.
+- **`title`** picks one window, case-insensitively: a window titled exactly that wins; otherwise one whose title contains it. Several at the tier that decides is `ambiguous`, so "GitHub" picks the window titled "GitHub" over "GitHub - Pull requests". With no `title`, the app's frontmost window is used, even when the app has several.
 - Minimized windows are restored. A full-screen window is `failed` ("is full screen"). Apps that aren't running are launched only when `launch` is true, waiting up to 10 s for a window.
 
-**Result per placement:** `ok` (with the final frame), `partial` (the app enforces a minimum size; final frame given; it compares size only), `ambiguous` (candidate windows listed), `not_running`, `not_found`, or `failed` (reason).
+**Result per placement** (`WinPlacementResult`, in a `WinArrangeResult`): `ok` (with the final frame), `partial` (the app enforces a minimum size; final frame given; it compares size only), `ambiguous` (`candidates` listed, and a `reason` of "matches several apps: …" or "matches several windows: …", so the agent knows whether to refine `app` or `title`), `not_running` ("isn't running", or why it couldn't be opened), `not_found`, or `failed` (reason).
 
 **Undo** keeps the last 10 arrangements in memory (window id → previous frame); `win undo` reverts the latest. It is lost on quit. With nothing to undo the reply is `notFound`, "Nothing to undo".
 
-**Saved layouts** live in `~/Library/Application Support/Mooring/layouts.json` (name → placements of bundle id, screen, and region or frame as screen fractions). `save` captures the frontmost window of each visible app on each screen; `apply` runs the stored placements as a plan with `launch: true`.
+**Saved layouts** live in `~/Library/Application Support/Mooring/layouts.json` (name → placements of bundle id, screen, and region or frame as screen fractions). `save` captures the frontmost window of each visible app on each screen; `apply` checks the stored placements as any plan (`WinPlan.validated()`: at most 32, frames clamped; otherwise `bad_request` "Layout <name> is invalid: …") before asking, then runs them with `launch: true`.
 
-**Accessibility timeouts.** Every Accessibility call made for an arrangement is bounded at 1.5 s per application and per window element, so one hung app can't stall a request.
+**Accessibility timeouts.** `WindowKit.start()` sets a 1.5 s messaging timeout on the system-wide Accessibility element, which makes it the default for every element in the process, so every Accessibility call (Loop's own, on elements it creates, included) gives up after 1.5 s. `LiveWindowSystem` also sets it on each application and window element it reads. One hung app can't stall a request for long.
 
-**MCP tools** (same schema as the CLI; every call carries the client's name, so it counts as an agent): `list_windows`, `arrange_windows(placements, launch, preview)`, `undo_arrangement`, `save_layout(name)`, `apply_layout(name)`. Results are text plus `structuredContent` with the per-placement results. With these the server has 9 tools (2.5).
+**MCP tools** (same schema as the CLI; every call carries the client's name, so it counts as an agent, and goes through the 120 s client): `list_windows`, `arrange_windows(placements, launch, preview)`, `undo_arrangement`, `save_layout(name)`, `apply_layout(name)`. Results are text plus `structuredContent` with the per-placement results. With these the server has 9 tools (2.5).
 
 **Skill guidance:** list windows before arranging; send one plan rather than one call per window; report every placement that isn't `ok`; offer `mooring win undo` if the user doesn't like the result. The skill's description and title mention window arrangement so that it loads for these requests.
 
@@ -660,7 +660,7 @@ Maccy's paste action (level 4) needs the same permission, so granting it once co
 
 - **Windows off** (the `WindowsController` state isn't on): every `win` op, `list` included, is `denied` with "Windows is off. Turn it on in Mooring (Windows › Turn On…)." It never turns Windows on by itself.
 - **Off** (agents): every agent `win` op is `denied` with "Window arrangement by agents is off in Settings": `win.arrange`, `win.undo`, every `win.layout` action, and `win.list` too (so `list-regions` and the MCP `list_windows`), since window titles reach an agent only through Mooring's Accessibility. People are unaffected.
-- **Ask first** applies to `win.arrange` (including `win do`) and `win.layout apply`; undo, layout save and delete never ask. It posts a notification (category `mooring.window-approval`) "<Agent> wants to arrange N windows" with the actions **Allow** and **Deny**, and a body that lists at most 6 placements and then "and N more". It waits 60 s; Deny, no answer or unavailable notifications are `denied`, and the last says "Turn on notifications for Mooring in System Settings to approve window arrangement". The mode and the Windows state are checked again right before applying, so a change made while the ask was open takes effect. A layout apply applies exactly the placements that were approved.
+- **Ask first** applies to `win.arrange` (including `win do`) and `win.layout apply`; undo, layout save and delete never ask. It posts a notification (category `mooring.window-approval`) "<Agent> wants to arrange N windows" with the actions **Allow** and **Deny**, and a body that lists at most 6 placements and then "and N more". The agent's app names and titles are shown without control or formatting characters and cut to 40 characters; a plan with `launch` and every layout apply end with the line "May open apps that aren't running." It waits 60 s; Deny, no answer or unavailable notifications are `denied`, and the last says "Turn on notifications for Mooring in System Settings to approve window arrangement". The mode and the Windows state are checked again right before applying, so a change made while the ask was open takes effect. A layout apply applies exactly the placements that were approved.
 - **People are never asked.** The caller is an agent by the same detection as in Agent control and approvals (process ancestry, an MCP `client`, a link).
 
 Example exchange:
@@ -669,7 +669,9 @@ Example exchange:
 You:    Put Chrome on the right half, iTerm bottom left and Slack top left.
 Claude: mooring win list --json
         mooring win arrange chrome=right-half iterm=bottom-left slack=top-left --json
-        → chrome ok · iterm ok (was minimized, restored) · slack ok
+        → chrome ok
+          iterm ok (was minimized, restored)
+          slack ok
 Claude: Done. iTerm was minimized, so I restored it. Say "undo" to put them back.
 ```
 
@@ -1011,11 +1013,11 @@ struct AwakeSettings: Codable, Equatable {
 
 **Stage 3b: agent windows decisions (as built)**
 
-- **Ops and wire:** `win.list`, `win.arrange`, `win.undo` and `win.layout`, handled in the app; the CLI and MCP only relay. Wire types are `WinPlan`, `WinPlacement`, `WinResult`, `WinListResult`, `WinLayoutArgs` and `WinUndoArgs {client}` (lenient, so the protocol stays `v: 1`). `WinPlan.validated()` allows at most 32 placements, clamps frames to 0–1 and accepts the `@frontmost` sentinel for `win do`.
+- **Ops and wire:** `win.list`, `win.arrange`, `win.undo` and `win.layout`, handled in the app; the CLI and MCP only relay. Wire types are `WinPlan`, `WinPlacement`, `WinPlacementResult`, `WinArrangeResult`, `WinListArgs {client}`, `WinListResult`, `WinLayoutArgs`, `WinLayoutResult` and `WinUndoArgs {client}` (lenient, so the protocol stays `v: 1`). `WinPlan.validated()` allows at most 32 placements, clamps frames to 0–1 and accepts the `@frontmost` sentinel for `win do`.
 - **Components:** `WindowSystem` and the `WS*` types (WindowKit, public); `Arranger` (app, pure over `WindowSystem`, with the undo stack and layouts); `RequestHandler+Windows.swift` (gating and dispatch); the `mooring.window-approval` notification beside the lid approval one; `WinCommands` in MooringCLICore; five MCP window tools.
-- **Matching:** exact name or bundle id, then prefix, then substring, case-insensitive; ties are `ambiguous`. With no `title`, the frontmost window is used. `partial` compares size only. `left` and `right` screens are relative to the main screen.
-- **Gating:** Windows state, then agent mode, checked again inside the arrange lock right before applying; one arrangement at a time; `win.undo` carries `client` so MCP undo is gated like any other agent request. See 3.4 for the messages.
-- **Timeouts:** Accessibility calls are bounded at 1.5 s per application and per window element; mutating CLI and MCP requests use a 120 s client.
+- **Matching:** exact name or bundle id, then prefix, then substring, case-insensitive; ties are `ambiguous`, with a `reason` naming apps or windows. A `title` matches exactly before by substring. With no `title`, the frontmost window is used. Regions are frame-only (`WindowRegion.offered`). `partial` compares size only. `left` and `right` screens are relative to the main screen.
+- **Gating:** Windows state, then agent mode, checked again inside the arrange lock right before applying; one arrangement at a time; `win.list` and `win.undo` carry `client` so MCP calls are gated like any other agent request, and Off refuses an agent's list too. See 3.4 for the messages.
+- **Timeouts:** Accessibility calls are bounded at 1.5 s by the process-wide timeout `WindowKit.start()` sets on the system-wide element, and per application and window element; `win list` and mutating CLI requests, and every MCP window tool, use a 120 s client.
 - **Not listed:** accessory apps are excluded from `win list`.
 - **Layouts:** `~/Library/Application Support/Mooring/layouts.json`.
 - **Version:** 0.0.5 (`MARKETING_VERSION`). The plugin is 0.0.4 (its skill changed).

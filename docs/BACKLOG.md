@@ -91,7 +91,10 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - the ask text for a layout shows bundle ids, not app names.
 - **App search** scans the top level of the Applications folders only.
 - **Results:** `WinStatus` has no fallback for a status a newer app might send; the folded region-name uniqueness is untested; `partial` ignores position clamps, so an off-position window can report `ok`.
-- **Accessibility timeouts:** the bound ignores the error from setting the timeout, and Loop's own `AXUIElementCreateApplication` calls inside `Window` have no timeout.
+- **Accessibility timeouts:** setting the timeout (process-wide and per element) ignores its error.
+- **Gating:** a request that started under Automatic isn't asked if agents switch to Ask first while it waits its turn (Off and Windows off are checked again).
+- **Regions:** `win do` refuses minimize, hide, Space moves and the other non-frame actions for people too, since `win.*` offers only frame regions; the Windows menu still has them.
+- **Matching:** two instances of one app give identical candidate names; a result from an older app without an ambiguous `reason` prints "matches several: …".
 - **CLI:**
   - the message for a plan that can't be decoded at the root path ends in a dangling "at";
   - the plan file is read before the size cap is checked;
