@@ -63,8 +63,10 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Loop's other pages weren't checked for controls that do nothing** in Mooring (only Launch at login, Start hidden and Hide menu bar icon were removed). A missing settings window shows a blank page, and the page padding is indented oddly.
 - **Stash isn't fully gone.** `StashManager.shared` is still created during a Loop session (it does nothing), a Stash binding that already exists can still open its settings view, and the `windowDetails` capability is one switch for several features.
 - **Shortcuts page:** the fn and Caps Lock (⇪) modifiers aren't handled the same way everywhere; letter labels follow the ASCII layout, not the keyboard layout; the layout tests only check sizes.
+- **No live preview on the hosted pages.** Loop's settings window shows a live radial menu and preview beside its pages; Mooring hosts the pages without it, so changes on Radial Menu and Preview show no preview.
+- **Loop and Mooring share one defaults registration.** `Defaults` registers defaults in the process-wide registration domain. No key names collide today (Loop's 76, Mooring's 5); a test checking the names would keep it that way.
 - **Tests:**
-  - `submenuFollowsTheStateWhileOpen` depends on `Task.yield` timing;
+  - `submenuFollowsTheStateWhileOpen` depends on `Task.yield` timing and may flake on CI;
   - `offMeansOff` counts WindowKit singletons process-wide, so a later app test that builds a real WindowKit must run serially;
   - the WindowKit start/stop tests start real managers.
 - **WindowKit code:**

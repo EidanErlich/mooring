@@ -51,7 +51,7 @@ This is the first half of SPEC.md stage 3. **3b**, agent windows (`mooring win l
 
 - **One owner:** a Mooring-side **`WindowsController`** (`App/Windows/`) owns WindowKit's lifecycle.
   - **While Windows is off**, it never creates Loop's managers, event monitors, event taps, Multitouch listeners or Accessibility calls, and nothing in WindowKit runs at launch.
-  - **Turning on** starts them; **turning off** stops and releases them.
+  - **Turning on** starts them; **turning off** stops and releases them. A radial menu still opening when Windows stops gives up instead of showing (amended in the final fixes).
 - **Settings key:** `windowsEnabled: Bool = false`, under Mooring's settings, with a fallback when decoding older settings.
 - **Where Loop's settings live:** Loop's own `Defaults` keys stay in a separate `UserDefaults` suite (`dev.mooring.windows`), so they can't collide with Mooring's keys.
 - **Test seams:** WindowKit's start and stop go through a protocol, so tests can show that none of WindowKit's entry points are called while Windows is off, at launch or in steady state.
@@ -60,6 +60,8 @@ This is the first half of SPEC.md stage 3. **3b**, agent windows (`mooring win l
 
 - **Capability checks:** every SkyLight path (`@_silgen_name`, runtime symbol loading) sits behind a check, run once when Windows starts.
 - **A failed check fails closed:** the dependent feature hides itself (menu item, setting or action), and the failure is logged once through `os.Logger` with the category `windows`. It never crashes.
+- **MultitouchSupport** (which Subsurface loads for trackpad gestures) is a capability too: Mooring opens it and looks up one function Subsurface uses. If that fails, the gesture triggers don't start and Settings → Windows → Gestures shows the banner "Gestures aren't available on this Mac" instead of Loop's page.
+- **If window-id lookup fails,** every action is hidden, so the Windows submenu shows a disabled line, "Window actions aren't available on this version of macOS", in place of the actions and More Actions.
 - **Stash and focus switching** stay hidden in 3a, as SPEC.md 3.1 says.
 
 ## Turning Windows on
@@ -69,16 +71,18 @@ This is the first half of SPEC.md stage 3. **3b**, agent windows (`mooring win l
   - Settings → Windows → Behavior, through the **Window Manager** toggle.
 - **If Accessibility is granted** (`AXIsProcessTrusted()`), Windows turns on immediately.
 - **If it isn't:**
-  - A sheet explains: "Mooring moves and resizes other apps' windows. macOS calls this Accessibility." It has **Open Privacy & Security**, which opens the Accessibility pane, and **Cancel**.
+  - Mooring first asks macOS to list it under Accessibility (`AXIsProcessTrustedWithOptions` with the prompt option), because macOS lists an app only once it has asked. This is the only call that prompts, and only Turn On makes it: never at launch, never while polling.
+  - A sheet explains: "Mooring moves and resizes other apps' windows. macOS calls this Accessibility." and "If Mooring isn't in the list, click + and choose Mooring in Applications." It has **Open Privacy & Security**, which opens the Accessibility pane, and **Cancel**. It's a normal window at the top left of the main screen, so it doesn't cover System Settings, which opens centred.
   - Mooring polls trust every 2 s for up to 5 minutes while the sheet is open, or while the request is pending. When trust arrives, Windows switches on by itself, with no relaunch.
   - Mooring never asks at launch, and levels 1 and 2 never need it.
 - **If trust is revoked while on** (checked every 5 s while Windows is on):
   - Windows switches off;
   - `windowsEnabled` stays true, recording that you want it;
   - the icon shows the orange attention pill with the new reason, **"Windows needs Accessibility"**;
-  - the submenu shows **Turn On…** again.
+  - the submenu shows the reason, **Turn On…** and **Turn Off Windows**.
 
   When trust comes back, Windows resumes on its own and the pill clears.
+- **Turning off while Accessibility is missing** (amended in the final fixes): **Turn Off Windows** in the submenu, shown while Windows needs Accessibility or waits for it after Turn On, or the Window Manager toggle, turns Windows off. `windowsEnabled` becomes false and the pill clears. The toggle shows whether Windows is wanted, so it reads on in all three of on, waiting and needs Accessibility.
 
 ## Dropdown: Windows ›
 
@@ -90,6 +94,8 @@ While Windows is on, the submenu holds, in order:
 
 Actions apply to the frontmost window of the app that was active before the menu opened.
 
+If window-id lookup failed, items 1 and 2 are replaced by the disabled line "Window actions aren't available on this version of macOS".
+
 Saved layouts arrive with 3b, and the submenu has no placeholder for them.
 
 ## Settings → Windows
@@ -98,9 +104,9 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
 
 | Page | Contents |
 | --- | --- |
-| Behavior | Loop's Behavior and Advanced settings, plus the Window Manager on/off toggle |
+| Behavior | Loop's Behavior and Advanced settings, plus the Window Manager on/off toggle (on while Windows is wanted, including while it needs Accessibility) |
 | Keybinds | Loop's defaults, including its trigger key |
-| Gestures | Loop's Multitouch gestures |
+| Gestures | Loop's Multitouch gestures; "Gestures aren't available on this Mac" if MultitouchSupport doesn't load |
 | Radial Menu | Loop's Radial Menu and Accent Color settings |
 | Preview | Loop's Preview settings |
 | Excluded Apps | Loop's Excluded Apps |
@@ -150,14 +156,15 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
   - toggling on, then off, releases everything.
 - **Turning on:**
   - trusted → on;
-  - untrusted → sheet, then trust arrives → on;
+  - untrusted → one request to be listed under Accessibility, then the sheet, then trust arrives → on (launch and polling never request the listing);
   - the 5-minute timeout → stays off.
 - **Revoked:** while on, trust goes false → off, the pill reason appears, and `windowsEnabled` stays true; trust returns → on and the pill clears.
+- **Turned off while it needs Accessibility:** off, `windowsEnabled` false, and the pill clears; the submenu and the toggle both offer it.
 - **Frame maths:**
   - each 3a action's target frame, for one screen and two screens of different sizes (halves, quarters, thirds, two-thirds, maximize, almost maximize, centre, grow and shrink, next and previous screen);
   - cycles step through and wrap;
   - Loop's own tests, copied, pass.
-- **Capability checks:** a forced failure hides the dependent feature and doesn't crash.
+- **Capability checks:** a forced failure hides the dependent feature and doesn't crash (including MultitouchSupport and the Gestures page, and window-id lookup and the submenu's line).
 - **Shortcuts:** duplicate chords are flagged on both rows; a chord matching an enabled system hotkey is flagged; disabled system hotkeys aren't.
 - **Dropdown:** Windows off shows only **Turn On…**; Windows on shows the five actions with their chords, More Actions and the switch.
 - **CI:** one CI run's time is recorded in the plan's ledger. If it grows by more than about 50%, cache SwiftPM packages in the workflow.
@@ -165,7 +172,7 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
 ## Owner check
 
 1. Use Mooring with Windows off. No Accessibility prompt ever appears.
-2. Choose **Windows › Turn On…**, then grant Accessibility in System Settings. Windows switches on by itself.
+2. Choose **Windows › Turn On…**. Mooring is in the Accessibility list (if not, add it with +). Grant it. Windows switches on by itself.
 3. Try:
    - the radial menu (trigger key);
    - a few keybinds;
@@ -173,7 +180,7 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
    - drag-to-edge snapping;
    - the preview.
 4. Try each action in **Windows ›**.
-5. Revoke Accessibility. Windows turns off and the orange pill reads "Windows needs Accessibility". Grant it again: Windows resumes.
+5. Revoke Accessibility. Windows turns off and the orange pill reads "Windows needs Accessibility". Grant it again: Windows resumes. Revoke it once more and choose **Windows › Turn Off Windows**: the pill clears.
 6. Open **General → Shortcuts**. Everything is listed, and conflicts, if any, are flagged.
 
 ## Out of scope
