@@ -109,6 +109,21 @@ struct RequestHandlerTests {
         #expect(fixture.engine.leases.map(\.id) == ["menu"])
     }
 
+    @Test func onWithNoFlagsIgnoresAnExpiredSession() async throws {
+        let fixture = RequestFixture()
+        fixture.knobs.settings.clickLevel = .system
+        fixture.knobs.settings.clickDuration = 3600
+        fixture.engine.acquire(id: "menu", owner: .menu, reason: AwakeEngine.menuReason, level: .screenOn, duration: 600)
+        fixture.knobs.clock.addTimeInterval(601)
+
+        let response = await fixture.acquire(.on)
+
+        let lease = try #require(fixture.lease("menu"))
+        #expect(lease.expiresAt == fixture.clock.addingTimeInterval(3600))
+        #expect(lease.level == .system)
+        #expect(try #require(acquireResult(response)).lease.expiresAt == fixture.clock.addingTimeInterval(3600))
+    }
+
     @Test func onWithPickedAppsAndNoFlagsRepliesWithTheFirstApp() async throws {
         let fixture = RequestFixture()
         fixture.engine.anchor(whileAppRuns: 42, appName: "Xcode")

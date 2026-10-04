@@ -26,7 +26,7 @@ let lidOnly = AwakeLevel(display: false, lid: true)
 
 /// A reply that arrives in the background.
 @MainActor
-private final class ReplyBox {
+final class ReplyBox {
     var reply: Response?
 }
 
