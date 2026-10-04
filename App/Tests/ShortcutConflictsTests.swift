@@ -75,6 +75,12 @@ struct ShortcutConflictsTests {
         #expect(size.width > 0 && size.height > 0)
     }
 
+    @Test func stockMacFlagsSpotlightDefault() {
+        let keybinds = [entry("Left Half", "⌘␣")]
+        let content = ShortcutsContent.make(windows: .on, keybinds: { keybinds }, system: SystemHotkeys.read(from: [:]))
+        #expect(content.windows.map(\.warning) == ["Used by macOS: Spotlight"])
+    }
+
     @Test func capsLockLinkPointsAtLoopsReadme() {
         #expect(ShortcutsSettingsPage.capsLockAdviceURL.absoluteString == "https://github.com/MrKai77/Loop#readme")
     }

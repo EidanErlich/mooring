@@ -48,9 +48,11 @@ struct ShortcutsSettingsPage: View {
     var keybinds: @MainActor () -> [ShortcutEntry] = ShortcutsContent.windowKitKeybinds
     var system: () -> [SystemHotkey] = SystemHotkeys.readSystem
     @State private var systemHotkeys: [SystemHotkey]?
+    @State private var windowsKeybinds: [ShortcutEntry]?
 
     var body: some View {
-        let content = ShortcutsContent.make(windows: windows?.state ?? .off, keybinds: keybinds, system: systemHotkeys ?? [])
+        let content = ShortcutsContent.make(
+            windows: windows?.state ?? .off, keybinds: { windowsKeybinds ?? keybinds() }, system: systemHotkeys ?? [])
         Form {
             Section("Awake") { rows(content.awake) }
             Section("Windows") {
@@ -68,8 +70,15 @@ struct ShortcutsSettingsPage: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear { systemHotkeys = system() }
+        .onAppear(perform: refresh)
+        .onChange(of: windows?.state) { refresh() }
         .navigationTitle("Shortcuts")
+    }
+
+    /// Re-reads both sources, so edits made on the Keybinds page show. WindowKit is read only while Windows is on.
+    private func refresh() {
+        systemHotkeys = system()
+        windowsKeybinds = windows?.state == .on ? keybinds() : nil
     }
 
     private func rows(_ rows: [ShortcutRow]) -> some View {

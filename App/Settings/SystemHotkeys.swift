@@ -6,24 +6,45 @@ enum SystemHotkeys {
     static let key = "AppleSymbolicHotKeys"
     private static let noKey = 65535
 
-    /// Reads the real preferences; an unreadable domain gives no hotkeys.
+    /// Reads the real preferences. An unreadable domain gives no hotkeys; a missing one is a stock Mac.
     static func readSystem() -> [SystemHotkey] {
-        guard let value = CFPreferencesCopyAppValue(key as CFString, domain as CFString) else { return [] }
+        guard let value = CFPreferencesCopyAppValue(key as CFString, domain as CFString) else { return read(from: [:]) }
         return read(from: [key: value])
     }
 
-    /// Parses a `com.apple.symbolichotkeys` dictionary. Entries that don't have the expected shape are skipped.
+    /// macOS writes an entry only after a shortcut is changed, so the stock chords of the named ids are
+    /// used when an id is absent, or present and enabled without a `value`. `enabled == false` turns
+    /// a default off; a `value` always wins. Entries of the wrong shape are skipped.
     static func read(from domain: [String: Any]) -> [SystemHotkey] {
-        guard let entries = domain[key] as? [String: Any] else { return [] }
-        return entries.keys.sorted { (Int($0) ?? 0, $0) < (Int($1) ?? 0, $1) }.compactMap { id in
-            guard let entry = entries[id] as? [String: Any],
-                  let value = entry["value"] as? [String: Any],
-                  let parameters = value["parameters"] as? [Int], parameters.count >= 3,
+        let entries: [String: Any]
+        if let present = domain[key] {
+            guard let dictionary = present as? [String: Any] else { return [] }
+            entries = dictionary
+        } else {
+            entries = [:]
+        }
+        let ids = Set(entries.keys).union(defaults.keys.map(String.init))
+        return ids.sorted { (Int($0) ?? 0, $0) < (Int($1) ?? 0, $1) }.compactMap { id in
+            let number = Int(id) ?? -1
+            guard let raw = entries[id] else { return stock(number) }
+            guard let entry = raw as? [String: Any] else { return nil }
+            let enabled = entry["enabled"] as? Bool ?? false
+            guard let value = entry["value"] as? [String: Any] else { return enabled ? stock(number) : nil }
+            guard let parameters = value["parameters"] as? [Int], parameters.count >= 3,
                   let label = keyLabel(ascii: parameters[0], code: parameters[1]) else { return nil }
             let chord = ShortcutChord.format(modifiers: NSEvent.ModifierFlags(rawValue: UInt(parameters[2])), key: label)
-            return SystemHotkey(name: name(forID: Int(id) ?? -1), chord: chord, enabled: entry["enabled"] as? Bool ?? false)
+            return SystemHotkey(name: name(forID: number), chord: chord, enabled: enabled)
         }
     }
+
+    private static func stock(_ id: Int) -> SystemHotkey? {
+        defaults[id].map { SystemHotkey(name: name(forID: id), chord: $0, enabled: true) }
+    }
+
+    private static let defaults: [Int: String] = [
+        64: "⌘␣", 65: "⌥⌘␣", 32: "⌃↑", 33: "⌃↓", 36: "F11", 60: "⌃␣", 61: "⌃⌥␣",
+        28: "⇧⌘3", 29: "⌃⇧⌘3", 30: "⇧⌘4", 31: "⌃⇧⌘4", 184: "⇧⌘5"
+    ]
 
     static func name(forID id: Int) -> String {
         switch id {
@@ -34,6 +55,8 @@ enum SystemHotkeys {
         case 61: "Select next source in Input menu"
         case 28...31: "Screenshot"
         case 33: "Application windows"
+        case 65: "Finder search window"
+        case 184: "Screenshot and recording"
         default: "a macOS shortcut"
         }
     }

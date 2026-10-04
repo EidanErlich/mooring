@@ -22,15 +22,37 @@ struct SystemHotkeysTests {
         #expect(parsed.first { $0.chord == "⌃⌥␣" } == SystemHotkey(
             name: "Select next source in Input menu", chord: "⌃⌥␣", enabled: false))
         #expect(parsed.first { $0.name == "Mission Control" }?.chord == "⌃↑")
-        #expect(parsed.first { $0.name == "Screenshot" }?.chord == "⇧⌘4")
+        #expect(parsed.contains(SystemHotkey(name: "Screenshot", chord: "⇧⌘4", enabled: true)))
         #expect(parsed.first { $0.chord == "⌥⌘A" }?.name == "a macOS shortcut")
-        #expect(parsed.count == 5, "an entry with no parameters is skipped")
+        #expect(parsed.filter { $0.name == "a macOS shortcut" }.count == 1, "an unknown id with no parameters is skipped")
     }
 
     @Test func unreadableDomainGivesNoHotkeys() {
-        #expect(SystemHotkeys.read(from: [:]).isEmpty)
         #expect(SystemHotkeys.read(from: ["AppleSymbolicHotKeys": "nope"]).isEmpty)
-        #expect(SystemHotkeys.read(from: ["AppleSymbolicHotKeys": ["64": "nope", "65": ["value": 3]]]).isEmpty)
+        let malformed = SystemHotkeys.read(from: ["AppleSymbolicHotKeys": ["64": "nope", "65": ["value": 3]]])
+        #expect(!malformed.contains { $0.name == "Spotlight" || $0.name == "Finder search window" })
+    }
+
+    /// macOS writes an entry only after a shortcut is changed, so a stock Mac's plist lacks most ids.
+    @Test func absentIdsGetTheirDefaults() {
+        let stock = SystemHotkeys.read(from: [:])
+        #expect(stock.allSatisfy { $0.enabled })
+        #expect(Set(stock.map(\.chord)).isSuperset(of: ["⌘␣", "⌥⌘␣", "⌃↑", "⌃↓", "F11", "⌃␣", "⌃⌥␣", "⇧⌘3", "⌃⇧⌘3", "⇧⌘4", "⌃⇧⌘4", "⇧⌘5"]))
+        #expect(stock.first { $0.name == "Spotlight" }?.chord == "⌘␣")
+        #expect(SystemHotkeys.read(from: ["AppleSymbolicHotKeys": [String: Any]()]) == stock)
+    }
+
+    @Test func disabledEntrySuppressesDefault() {
+        let domain: [String: Any] = ["AppleSymbolicHotKeys": ["64": ["enabled": false]]]
+        #expect(!SystemHotkeys.read(from: domain).contains { $0.name == "Spotlight" })
+        let valueless: [String: Any] = ["AppleSymbolicHotKeys": ["64": ["enabled": true]]]
+        #expect(SystemHotkeys.read(from: valueless).first { $0.name == "Spotlight" }?.chord == "⌘␣")
+    }
+
+    @Test func customValueOverridesDefault() {
+        let domain: [String: Any] = ["AppleSymbolicHotKeys": ["64": hotkey(true, [32, 49, 1_310_720])]]
+        let spotlight = SystemHotkeys.read(from: domain).filter { $0.name == "Spotlight" }
+        #expect(spotlight == [SystemHotkey(name: "Spotlight", chord: "⌃⌘␣", enabled: true)])
     }
 
     @Test func namesTheCommonIds() {
