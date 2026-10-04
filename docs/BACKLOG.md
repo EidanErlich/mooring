@@ -103,6 +103,9 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - the root `mooring --help` doesn't list `win`.
 - **MCP:** the "Unexpected reply" text is hard-coded with a default branch, and the undo or-pattern and the path helper are hard to read.
 - **Code and tests:** a dead `.launch` branch and a catch-all in the Arranger; test temp folders and a lingering task are not cleaned up; `FakeNotificationPoster` ignores the category, so there is no cross-category withdraw test; the unsigned-build helper warning in the test log is environmental.
+- The process-wide 1.5 s Accessibility timeout set when Windows starts isn't reset when it stops.
+- The ask notification sanitizes app and title but shows `region` and `screen` as sent.
+
 
 ## CLI and IPC (stage 2a leftovers)
 
