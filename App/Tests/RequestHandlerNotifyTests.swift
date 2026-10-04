@@ -30,6 +30,14 @@ struct RequestHandlerNotifyTests {
         #expect(post.id.hasPrefix("notify-"))
     }
 
+    @Test func notifyReportsAFailedPost() async {
+        let fixture = RequestFixture.agent()
+        fixture.poster.postSucceeds = false
+
+        #expect(posted(await fixture.notify("Done")) == false)
+        #expect(fixture.poster.posts.count == 1)
+    }
+
     @Test func personNotifyIsTitledTerminal() async throws {
         let fixture = RequestFixture()
 

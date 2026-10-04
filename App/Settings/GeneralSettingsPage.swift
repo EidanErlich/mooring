@@ -41,6 +41,10 @@ struct GeneralSettingsPage: View {
             LabeledContent("Status") { Text(cliCaption).foregroundStyle(.secondary) }
             if cliState != .installed {
                 Button(cliState == .missing ? "Install command-line tool" : "Reinstall", action: installCLI)
+                    .disabled(cliState == .notALink || BundleLocation.isRunningTransient)
+                if BundleLocation.isRunningTransient {
+                    Text(BundleLocation.moveCaption).font(.caption).foregroundStyle(.secondary)
+                }
             }
             if let cliError {
                 Text(cliError).font(.caption).foregroundStyle(.red)
@@ -64,6 +68,7 @@ struct GeneralSettingsPage: View {
         case .installed: "Installed at ~/.local/bin/mooring"
         case .missing: "Not installed"
         case .pointsElsewhere(let path): "Points to \(path)"
+        case .notALink: "Not a link (Mooring won't replace it)"
         }
     }
 

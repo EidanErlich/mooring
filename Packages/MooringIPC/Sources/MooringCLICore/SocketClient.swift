@@ -1,3 +1,4 @@
+import AppKit
 import Darwin
 import Foundation
 import MooringIPC
@@ -12,15 +13,19 @@ public struct SocketClient: RequestSending, Sendable {
     private let replyTimeout: TimeInterval
     private let launchWait: TimeInterval
     private let launcher: @Sendable () -> Void
+    private let isAppRunning: @Sendable () -> Bool
 
+    /// `isAppRunning` tells a busy app from a missing one when the socket still isn't answering after the launch wait.
     public init(
         path: String, replyTimeout: TimeInterval = 5, launchWait: TimeInterval = 3,
-        launcher: @escaping @Sendable () -> Void = SocketClient.openApp
+        launcher: @escaping @Sendable () -> Void = SocketClient.openApp,
+        isAppRunning: @escaping @Sendable () -> Bool = SocketClient.isMooringRunning
     ) {
         self.path = path
         self.replyTimeout = replyTimeout
         self.launchWait = launchWait
         self.launcher = launcher
+        self.isAppRunning = isAppRunning
     }
 
     /// Starts Mooring in the background without bringing it forward. The retry loop checks it came up.
@@ -38,6 +43,13 @@ public struct SocketClient: RequestSending, Sendable {
         }
     }
 
+    /// Whether a Mooring app (bundle id `dev.mooring.app`) is running.
+    public static func isMooringRunning() -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: "dev.mooring.app").isEmpty
+    }
+
+    /// After launching, a socket that still isn't answering when the wait runs out is `busy` if the app is running
+    /// (busy, or still starting) and `unreachable` if it isn't.
     public func send(_ request: Request, launch: Bool) async throws -> Response {
         guard let line = try? WireCoding.encodeLine(request) else { throw CLIError.unreachable }
         if let response = try await attempt(line, op: request.op) { return response }
@@ -45,12 +57,14 @@ public struct SocketClient: RequestSending, Sendable {
 
         let launcher = launcher
         try await onGlobalQueue { launcher() }
-        let deadline = Date().addingTimeInterval(launchWait)
-        while Date() < deadline {
+        let deadline = ContinuousClock.now + .seconds(launchWait)
+        while ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(100))
             if let response = try await attempt(line, op: request.op) { return response }
         }
-        throw CLIError.unreachable
+        let isAppRunning = isAppRunning
+        let running = try await onGlobalQueue { isAppRunning() }
+        throw running ? CLIError.busy : CLIError.unreachable
     }
 
     /// One exchange on a fresh socket: the reply, or nil when nothing listens at `path` yet.
@@ -72,10 +86,10 @@ public struct SocketClient: RequestSending, Sendable {
 }
 
 /// The blocking POSIX calls behind `SocketClient`.
-private enum SocketExchange {
+enum SocketExchange {
     /// Sends `line` and reads one reply line, or returns nil when no server is listening at `path`.
-    /// A connect refused for permission is `blocked` and any other connect failure is `unreachable`. Once connected,
-    /// a failed write, a timeout, a reply over `WireCoding.maxLineBytes` and EOF before a newline are `noAnswer`.
+    /// A failed connect throws as `connectError(for:)` says. Once connected, a failed write, a timeout,
+    /// a reply over `WireCoding.maxLineBytes` and EOF before a newline are `noAnswer`.
     static func exchange(_ line: Data, at path: String, timeout: TimeInterval) throws -> Data? {
         guard var address = address(for: path) else { throw CLIError.unreachable }
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
@@ -89,14 +103,23 @@ private enum SocketExchange {
             }
         }
         if connected != 0 {
-            switch errno {
-            case ENOENT, ECONNREFUSED, ENOTSOCK: return nil
-            case EPERM, EACCES: throw CLIError.blocked
-            default: throw CLIError.unreachable
-            }
+            if let error = connectError(for: errno) { throw error }
+            return nil
         }
         try writeAll(line, to: descriptor)
         return try readLine(from: descriptor)
+    }
+
+    /// The error for a connect that failed with `code`, or nil when nothing is listening yet (so the app may be
+    /// launched): `EAGAIN` (the app's queue of waiting connections is full) is `busy`, a permission refusal is
+    /// `blocked` and anything else is `unreachable`.
+    static func connectError(for code: Int32) -> CLIError? {
+        switch code {
+        case ENOENT, ECONNREFUSED, ENOTSOCK: nil
+        case EAGAIN: .busy
+        case EPERM, EACCES: .blocked
+        default: .unreachable
+        }
     }
 
     private static func configure(_ descriptor: Int32, timeout: TimeInterval) {

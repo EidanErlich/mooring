@@ -18,12 +18,14 @@ protocol LidApproving: AnyObject {
 /// Posts the approval notifications and `notify`'s. Tests use a fake; nothing real is posted there.
 @MainActor
 protocol NotificationPosting: AnyObject {
-    /// Requests authorization if it hasn't been asked yet; true only if allowed.
+    /// Requests authorization if it hasn't been asked yet; true only if a notification could be seen:
+    /// allowed, with alerts on and a style other than none.
     func authorize() async -> Bool
-    /// "allowed", "notDetermined" or "denied"; nil if the settings can't be read.
+    /// "allowed", "alerts off", "notDetermined" or "denied"; nil if the settings can't be read.
     func notificationStatus() async -> String?
-    /// Posts a notification; `category` is set only when given (the approvals' actions).
-    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async
+    /// Posts a notification; `category` is set only when given (the approvals' actions). False if the system
+    /// refused it, so nothing was shown.
+    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async -> Bool
     /// Removes a delivered notification whose ask is over.
     func withdraw(id: String)
     /// The ids of delivered approval notifications in `category`.
@@ -35,12 +37,20 @@ protocol NotificationPosting: AnyObject {
 final class SystemNotificationPoster: NotificationPosting {
     private var center: UNUserNotificationCenter { .current() }
 
+    /// Whether an allowed app's notifications would appear: alerts on and a style other than none.
+    private static func showsAlerts(_ settings: UNNotificationSettings) -> Bool {
+        settings.alertSetting == .enabled && settings.alertStyle != .none
+    }
+
     func authorize() async -> Bool {
-        switch await center.notificationSettings().authorizationStatus {
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
         case .notDetermined:
-            return (try? await center.requestAuthorization(options: [.alert, .sound])) == true
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return false }
+            // Granted, but the person may have turned alerts off in the same prompt.
+            return Self.showsAlerts(await center.notificationSettings())
         case .authorized, .provisional:
-            return true
+            return Self.showsAlerts(settings)
         case .denied:
             return false
         @unknown default:
@@ -49,22 +59,28 @@ final class SystemNotificationPoster: NotificationPosting {
     }
 
     func notificationStatus() async -> String? {
-        switch await center.notificationSettings().authorizationStatus {
-        case .notDetermined: "notDetermined"
-        case .authorized, .provisional: "allowed"
-        case .denied: "denied"
-        @unknown default: nil
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined: return "notDetermined"
+        case .authorized, .provisional: return Self.showsAlerts(settings) ? "allowed" : "alerts off"
+        case .denied: return "denied"
+        @unknown default: return nil
         }
     }
 
-    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async {
+    func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async -> Bool {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
         content.userInfo = userInfo
         if let category { content.categoryIdentifier = category }
-        try? await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+        do {
+            try await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
+            return true
+        } catch {
+            return false
+        }
     }
 
     func withdraw(id: String) {
@@ -140,14 +156,17 @@ final class LidApprovalCenter: LidApproving {
             waiting[id] = Waiting(leaseID: leaseID, continuation: continuation, timer: timer)
             pending.insert(leaseID)
             Task {
-                await poster.post(id: id, title: title, body: text, userInfo: ["leaseID": leaseID], category: Self.categoryID)
+                let posted = await poster.post(id: id, title: title, body: text, userInfo: ["leaseID": leaseID],
+                                               category: Self.categoryID)
+                // Nothing was shown, so nobody can answer: don't wait out the timeout.
+                guard posted else { return resolve(id, with: .unavailable) }
                 // Resolved while posting: don't leave buttons that do nothing.
                 if waiting[id] == nil { poster.withdraw(id: id) }
             }
         }
     }
 
-    /// "allowed", "notDetermined" or "denied", for `mooring status` and `doctor`.
+    /// "allowed", "alerts off", "notDetermined" or "denied", for `mooring status` and `doctor`.
     func notificationStatus() async -> String? {
         await poster.notificationStatus()
     }

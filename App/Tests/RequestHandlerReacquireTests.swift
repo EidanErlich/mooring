@@ -114,6 +114,33 @@ struct RequestHandlerReacquireTests {
         #expect(acquireResult(response)?.clamped == true)
     }
 
+    @Test func reacquireOfExpiredLeaseStartsFresh() async throws {
+        let fixture = RequestFixture()
+        _ = await fixture.acquire(.lease, id: "job", level: "display", ttl: 600, watchPid: 4242, reason: "building")
+        // Expired, but not yet ticked away.
+        fixture.knobs.clock.addTimeInterval(601)
+
+        let response = await fixture.acquire(.lease, id: "job", ttl: 600)
+
+        #expect(response.ok)
+        let lease = try #require(fixture.lease("job"))
+        #expect(lease.watch == nil)
+        #expect(lease.level == .system)
+        #expect(lease.reason == "job")
+        #expect(lease.expiresAt == fixture.clock.addingTimeInterval(600))
+    }
+
+    @Test func rawReacquireOfWatchedLeaseStillNeedsAnEnd() async throws {
+        let fixture = RequestFixture.agent(children: [300])
+        _ = await fixture.acquire(.lease, id: "job", watchPid: 300)
+
+        // A raw wire client, not the CLI, which would refuse this itself.
+        let response = await fixture.acquire(.lease, id: "job")
+
+        #expect(wireFailure(response) == WireError(code: .badRequest, message: "A lease needs --ttl or --watch-pid"))
+        #expect(try #require(fixture.lease("job")).watch?.pid == 300)
+    }
+
     @Test func renewStillResetsTheLength() async throws {
         let fixture = RequestFixture()
         _ = await fixture.acquire(.lease, id: "job", ttl: 3600)

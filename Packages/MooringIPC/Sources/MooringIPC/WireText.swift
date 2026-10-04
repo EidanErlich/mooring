@@ -1,5 +1,9 @@
 /// Text conventions the CLI shares with the app: duration and level grammar, level names and exit codes.
 public enum WireText {
+    /// What `notify` says when the app's reply is `posted: false`: the system took the notification but nothing showed.
+    public static let notificationNotShown =
+        "Mooring couldn't show the notification. Check System Settings → Notifications → Mooring."
+
     /// Exit code when the app's socket can't be reached.
     public static let unreachableExitCode: Int32 = 3
 

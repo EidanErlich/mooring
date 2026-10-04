@@ -147,15 +147,34 @@ private let releaseReply = Response.success(id: "t", .release(ReleaseResult(rele
     #expect(counter.calls == 1)
 }
 
-@Test func launchTimesOut() async throws {
+@Test func launchTimeoutWithoutAppSaysUnreachable() async throws {
     let counter = LaunchCounter()
-    let client = SocketClient(path: "/tmp/mc-missing-\(UUID().uuidString.prefix(8))/s.sock", launchWait: 0.5, launcher: {
-        counter.bump()
-    })
+    let client = SocketClient(
+        path: "/tmp/mc-missing-\(UUID().uuidString.prefix(8))/s.sock", launchWait: 0.5, launcher: { counter.bump() },
+        isAppRunning: { false }
+    )
     let started = ContinuousClock.now
     await #expect(throws: CLIError.unreachable) { try await client.send(releaseRequest, launch: true) }
     #expect(ContinuousClock.now - started < .milliseconds(1500))
     #expect(counter.calls == 1)
+}
+
+@Test func launchTimeoutWithAppRunningSaysBusy() async throws {
+    // The app is up but never took the connection in time: busy, not missing, and the request was never sent.
+    let client = SocketClient(
+        path: "/tmp/mc-missing-\(UUID().uuidString.prefix(8))/s.sock", launchWait: 0.3, launcher: {}, isAppRunning: { true }
+    )
+    await #expect(throws: CLIError.busy) { try await client.send(releaseRequest, launch: true) }
+}
+
+@Test func eagainMeansBusy() {
+    // A full queue of waiting connections: the app is there, but the request wasn't sent.
+    #expect(SocketExchange.connectError(for: EAGAIN) == .busy)
+    // Nothing listening yet: nil, so the client may launch the app and retry.
+    for code in [ENOENT, ECONNREFUSED, ENOTSOCK] { #expect(SocketExchange.connectError(for: code) == nil) }
+    #expect(SocketExchange.connectError(for: EACCES) == .blocked)
+    #expect(SocketExchange.connectError(for: EPERM) == .blocked)
+    #expect(SocketExchange.connectError(for: EIO) == .unreachable)
 }
 
 @Test func silentServerIsNoAnswer() async throws {

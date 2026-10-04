@@ -25,21 +25,25 @@ final class Arranger {
     private let maxUndo: Int
     private let ownPID: pid_t
     private let locateApp: @MainActor (String) -> String?
+    /// A saved layout's `app`, a bundle id, as the ask names it.
+    let appName: @MainActor (String) -> String
     private let launchTimeout: Duration
     private let pollInterval: Duration
     private var undoStack: [[UndoEntry]] = []
 
-    /// `locateApp` turns a query for an app that isn't running into a bundle id to open; `launchTimeout` is how long
-    /// an opened app gets to show a window.
+    /// `locateApp` turns a query for an app that isn't running into a bundle id to open; `appName` turns a bundle id
+    /// into the app's name, or gives it back; `launchTimeout` is how long an opened app gets to show a window.
     init(system: any WindowSystem, layoutsURL: URL, maxUndo: Int = 10,
          ownPID: pid_t = ProcessInfo.processInfo.processIdentifier,
          locateApp: @escaping @MainActor (String) -> String? = AppLocator.bundleID(for:),
+         appName: @escaping @MainActor (String) -> String = AppLocator.displayName(for:),
          launchTimeout: Duration = .seconds(10), pollInterval: Duration = .milliseconds(200)) {
         self.system = system
         layouts = LayoutStore(url: layoutsURL)
         self.maxUndo = maxUndo
         self.ownPID = ownPID
         self.locateApp = locateApp
+        self.appName = appName
         self.launchTimeout = launchTimeout
         self.pollInterval = pollInterval
     }

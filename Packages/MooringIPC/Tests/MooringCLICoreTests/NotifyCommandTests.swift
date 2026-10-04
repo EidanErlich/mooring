@@ -34,6 +34,15 @@ private func notifyArgs(_ request: Request?) -> NotifyArgs? {
     #expect(harness.capture.stdout.isEmpty)
 }
 
+@Test func notifyNotShownExitsTwoWithMessage() async {
+    let notShown = Response.success(id: "r", .notify(NotifyResult(posted: false)))
+    let harness = Harness(client: RecordingClient(reply: .success(notShown)))
+    #expect(await harness.run(["notify", "Done"]) == 2)
+    #expect(harness.capture.stderr
+        == "mooring: Mooring couldn't show the notification. Check System Settings → Notifications → Mooring.\n")
+    #expect(harness.capture.stdout.isEmpty)
+}
+
 @Test func notifyRequiresTitle() async {
     let harness = Harness(client: RecordingClient(reply: .success(posted)))
     #expect(await harness.run(["notify"]) == 1)

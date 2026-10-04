@@ -18,6 +18,8 @@ final class RequestKnobs {
 /// Process ancestry for agent detection; empty, so callers count as people, unless a test adds a chain.
 struct FakeProcessTable: ProcessTable {
     var entries: [Int32: ProcessEntry] = [:]
+    /// Command lines of the processes a test gives them; the rest have none, so callers are told apart by name alone.
+    var commandLines: [Int32: [String]] = [:]
 
     /// `chain` from the caller up: `[(200, "sh"), (100, "claude")]` makes 200 a child of 100, and 100 a child of launchd.
     init(_ chain: [(pid: Int32, name: String)] = []) {
@@ -28,6 +30,7 @@ struct FakeProcessTable: ProcessTable {
     }
 
     func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
+    func arguments(_ pid: Int32) -> [String]? { commandLines[pid] }
 }
 
 /// Answers lid asks from a script, or holds them until the test resolves them.
@@ -72,6 +75,16 @@ final class FakeLidApprover: LidApproving {
     }
 }
 
+/// The app's `agentLidGrants` default, in memory.
+@MainActor
+final class MemoryAgentLidGrants {
+    var grants: [String: Double] = [:]
+
+    var record: AgentLidRecord {
+        AgentLidRecord(read: { self.grants }, write: { self.grants = $0 })
+    }
+}
+
 @MainActor
 struct RequestFixture {
     let knobs = RequestKnobs()
@@ -84,16 +97,24 @@ struct RequestFixture {
     let windowApprover = FakeWindowApprover()
     let windowCenter: WindowApprovalCenter?
     let caller: Caller
+    /// The engine's saved lease table; a fixture made over another's `leaseStore` is that app relaunched.
+    let leaseStore: MemoryStore
+    /// What the handler's `agentLidRecord` saves, in place of the app's defaults.
+    let agentLidGrants: MemoryAgentLidGrants
 
     /// `table` is the caller's ancestry; `callerPID` is where agent detection starts.
     init(
         processes: any ProcessInspecting = AliveProcesses(), table: FakeProcessTable = FakeProcessTable(), callerPID: Int32 = 77,
-        windowCenter: WindowApprovalCenter? = nil
+        windowCenter: WindowApprovalCenter? = nil, leaseStore: MemoryStore? = nil, agentLidGrants: MemoryAgentLidGrants? = nil
     ) {
         let knobs = knobs
         caller = Caller(uid: 501, pid: callerPID)
+        let leaseStore = leaseStore ?? MemoryStore()
+        let agentLidGrants = agentLidGrants ?? MemoryAgentLidGrants()
+        self.leaseStore = leaseStore
+        self.agentLidGrants = agentLidGrants
         let engine = AwakeEngine(
-            assertions: NullAssertions(), store: MemoryStore(), processes: processes,
+            assertions: NullAssertions(), store: leaseStore, processes: processes,
             lid: LidController(helper: FakeLidHelper()), settings: { knobs.settings }, now: { knobs.clock }
         )
         self.engine = engine
@@ -104,7 +125,8 @@ struct RequestFixture {
             processes: table, approver: approver, updateSettings: { change in change(&knobs.settings) },
             notificationStatus: { knobs.notifications }, poster: poster,
             windowsState: { knobs.windowsState }, arranger: { knobs.arranger },
-            windowApprover: windowCenter.map { $0 as any WindowApproving } ?? windowApprover
+            windowApprover: windowCenter.map { $0 as any WindowApproving } ?? windowApprover,
+            agentLidRecord: agentLidGrants.record
         )
     }
 

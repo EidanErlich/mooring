@@ -7,10 +7,13 @@ import Testing
 extension RequestFixture {
     /// A fixture whose caller (pid 200) runs under `claude` (pid 100), so it counts as Claude Code. `children` are
     /// processes the caller started.
-    static func agent(children: [Int32] = []) -> RequestFixture {
+    /// `leaseStore` and `agentLidGrants` relaunch the app of another fixture.
+    static func agent(
+        children: [Int32] = [], leaseStore: MemoryStore? = nil, agentLidGrants: MemoryAgentLidGrants? = nil
+    ) -> RequestFixture {
         var table = FakeProcessTable([(200, "sh"), (100, "claude")])
         for pid in children { table.entries[pid] = ProcessEntry(pid: pid, parent: 200, name: "sleep") }
-        return RequestFixture(table: table, callerPID: 200)
+        return RequestFixture(table: table, callerPID: 200, leaseStore: leaseStore, agentLidGrants: agentLidGrants)
     }
 
     /// Waits until `condition` holds (or about 2 s pass), for work a request starts in the background.
@@ -26,7 +29,7 @@ let lidOnly = AwakeLevel(display: false, lid: true)
 
 /// A reply that arrives in the background.
 @MainActor
-private final class ReplyBox {
+final class ReplyBox {
     var reply: Response?
 }
 
@@ -358,6 +361,7 @@ struct RequestHandlerLidTests {
         #expect(status.leases.first { $0.id == "menu" }?.pendingApproval == true)
         #expect(status.notifications == "notDetermined")
         #expect(status.agentLidApproval == "askWhenOpenEnded")
+        #expect(status.agentSessionLid == true)
         fixture.approver.resolve("menu", with: .deny)
         _ = await ask.value
     }

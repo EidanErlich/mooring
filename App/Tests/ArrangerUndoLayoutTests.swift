@@ -104,6 +104,66 @@ extension ArrangerTests {
         }
         #expect(fake.calls.isEmpty)
     }
+
+    // MARK: Corrupt layouts
+
+    static let corruptTime = Date(timeIntervalSince1970: 1_700_000_000)
+
+    func writeCorrupt(_ text: String) throws {
+        try FileManager.default.createDirectory(at: layoutsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: layoutsURL)
+    }
+
+    /// The text of a set-aside file, by name.
+    func setAside(_ name: String) throws -> String? {
+        String(bytes: try Data(contentsOf: layoutsURL.deletingLastPathComponent().appendingPathComponent(name)), encoding: .utf8)
+    }
+
+    @Test func corruptLayoutsAreSetAside() throws {
+        try writeCorrupt("{not json")
+        let store = LayoutStore(url: layoutsURL, now: { Self.corruptTime })
+        #expect(try store.load().isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: layoutsURL.path))
+        #expect(try setAside("layouts.corrupt-1700000000.json") == "{not json")
+    }
+
+    @Test func secondCorruptFileKeepsTheFirst() throws {
+        let store = LayoutStore(url: layoutsURL, now: { Self.corruptTime })
+        for text in ["first", "second", "third"] {
+            try writeCorrupt(text)
+            #expect(try store.load().isEmpty)
+        }
+        #expect(try setAside("layouts.corrupt-1700000000.json") == "first")
+        #expect(try setAside("layouts.corrupt-1700000000-1.json") == "second")
+        #expect(try setAside("layouts.corrupt-1700000000-2.json") == "third")
+    }
+
+    /// A corrupt file that can't be renamed stays where it is, and saving is refused rather than writing over it.
+    @Test func failedRenameKeepsCorruptFileAndBlocksSave() async throws {
+        try writeCorrupt("{not json")
+        let folder = layoutsURL.deletingLastPathComponent().path
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder) }
+
+        let store = LayoutStore(url: layoutsURL, now: { Self.corruptTime })
+        #expect(throws: WireError.self) { try store.load() }
+        await #expect {
+            try await arranger.layout(WinLayoutArgs(action: "save", name: "coding"))
+        } throws: { error in
+            (error as? WireError)?.message.hasPrefix("Couldn't read saved layouts") == true
+        }
+        #expect(String(bytes: try Data(contentsOf: layoutsURL), encoding: .utf8) == "{not json")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder) == ["layouts.json"])
+    }
+
+    @Test func saveWorksAfterCorruptFile() async throws {
+        try writeCorrupt("[1, 2")
+        #expect(try await arranger.layout(WinLayoutArgs(action: "list")).names == [])
+        #expect(try await arranger.layout(WinLayoutArgs(action: "save", name: "coding")).names == ["coding"])
+        #expect(try await arranger.layout(WinLayoutArgs(action: "list")).names == ["coding"])
+        let files = try FileManager.default.contentsOfDirectory(atPath: layoutsURL.deletingLastPathComponent().path)
+        #expect(files.filter { $0.hasPrefix("layouts.corrupt-") }.count == 1)
+    }
 }
 
 extension CGRect {

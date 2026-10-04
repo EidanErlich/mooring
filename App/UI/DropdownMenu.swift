@@ -78,13 +78,14 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         appsItem.title = AppSessionText.rowTitle(appNames: Self.pickedAppNames(engine))
         appsItem.state = engine.sessionApps.isEmpty ? .off : .on
         syncLeaseItems()
-        if let headerItem { resizeToFit(headerItem) }
+        syncHeader()
     }
 
-    /// A hosted item keeps the height it was built with, so the header (whose line can
-    /// wrap or shrink as the state and leases change) is resized by hand.
-    private func resizeToFit(_ item: NSMenuItem) {
-        guard let view = item.view else { return }
+    /// The header's title follows its line. A hosted item keeps the height it was built with, so the header (whose
+    /// line can wrap or shrink as the state and leases change) is resized by hand.
+    private func syncHeader() {
+        guard let headerItem, let view = headerItem.view else { return }
+        Self.setTitle(StatusHeader.text(engine, now: Date()), of: headerItem)
         view.frame.size = NSSize(width: Self.width, height: view.fittingSize.height)
     }
 
@@ -134,7 +135,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         guard menu === apps else { return }
         apps.removeAllItems()
         for app in runningApps() {
-            apps.addItem(hosted(id: "app.\(app.processIdentifier)") {
+            apps.addItem(hosted(id: "app.\(app.processIdentifier)", title: app.localizedName ?? "App") {
                 MenuRow(title: app.localizedName ?? "App", icon: app.icon,
                         checked: Self.isPicked(self.engine, app), highlighted: self.isHighlighted("app.\(app.processIdentifier)")) {
                     Self.togglePick(self.engine, self.model, app)
@@ -147,12 +148,13 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         model.highlightedID = item?.identifier?.rawValue
     }
 
-    /// Arms one observation of the leases; it re-arms itself only after a change.
+    /// Arms one observation of the leases and their lid approvals (which lease rows show); it re-arms itself only after
+    /// a change.
     private func observe() {
         guard !observing else { return }
         observing = true
         withObservationTracking {
-            _ = engine.leases
+            for lease in engine.leases { _ = pendingApproval(lease.id) }
             _ = engine.state
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -168,7 +170,9 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     // MARK: Building
 
     private func buildRoot() {
-        let header = hosted(id: "header", enabled: false) { StatusHeader(engine: self.engine, model: self.model) }
+        let header = hosted(id: "header", enabled: false, title: StatusHeader.text(engine, now: Date())) {
+            StatusHeader(engine: self.engine, model: self.model)
+        }
         headerItem = header
         root.addItem(header)
         root.addItem(.separator())
@@ -190,12 +194,12 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     }
 
     private func buildAwake() {
-        awake.addItem(hosted(id: "on") {
+        awake.addItem(hosted(id: "on", title: "On") {
             SwitchRow(title: "On", isOn: Binding(get: { self.engine.hasMenuSession }, set: { _ in self.engine.toggleMenu() }))
         })
         for duration in AwakeDuration.allCases {
             let id = "duration.\(duration)"
-            awake.addItem(hosted(id: id) {
+            awake.addItem(hosted(id: id, title: duration.menuTitle) {
                 MenuRow(title: duration.menuTitle, checked: self.model.lastPick.isChecked(duration, menuLease: self.engine.menuLease),
                         highlighted: self.isHighlighted(id)) {
                     self.engine.turnOnMenu(duration: duration.interval)
@@ -207,12 +211,12 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         appsItem.identifier = NSUserInterfaceItemIdentifier("apps")
         appsItem.submenu = apps
         awake.addItem(appsItem)
-        awake.addItem(hosted(id: "keepScreenOn") {
+        awake.addItem(hosted(id: "keepScreenOn", title: "Keep screen on") {
             SwitchRow(title: "Keep screen on", isOn: Binding(
                 get: { self.engine.sessionLevel?.display ?? false }, set: { self.engine.setKeepScreenOn($0) }))
         })
         awake.addItem(.separator())
-        awake.addItem(hosted(id: "anchoredCaption", enabled: false) {
+        awake.addItem(hosted(id: "anchoredCaption", enabled: false, title: "Anchored") {
             Text("Anchored").font(.caption).foregroundStyle(.secondary).padding(.horizontal, 14)
         })
     }
@@ -225,7 +229,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
             }]
         }
         return [
-            hosted(id: "allowLidClose") {
+            hosted(id: "allowLidClose", title: "Allow lid close") {
                 SwitchRow(title: "Allow lid close", isOn: Binding(
                     get: { self.engine.sessionLevel?.lid ?? false },
                     set: { enabled in
@@ -236,7 +240,7 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
                         }
                     }))
             },
-            hosted(id: "untilLidOpens") {
+            hosted(id: "untilLidOpens", title: "Until I open the lid") {
                 MenuRow(title: "Until I open the lid", highlighted: self.isHighlighted("untilLidOpens")) {
                     self.requestLid { self.engine.startLidSession() }
                 }
@@ -254,6 +258,26 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         for (offset, item) in lidItems().enumerated() { awake.insertItem(item, at: start + 1 + offset) }
     }
 
+    private func index(of id: String, in menu: NSMenu) -> Int? {
+        menu.items.firstIndex { $0.identifier?.rawValue == id }
+    }
+
+    private func isHighlighted(_ id: String) -> Bool {
+        model.highlightedID == id
+    }
+
+    /// Hosts a SwiftUI row in a menu item. The content closure runs in a view body, so
+    /// whatever it reads from the engine or the model keeps the row up to date. Menus
+    /// don't highlight disabled items, so only the pure-text rows are disabled. `title` is the row's visible text.
+    private func hosted(id: String, enabled: Bool = true, title: String,
+                        @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
+        Self.hostedItem(id: id, title: title, enabled: enabled, content)
+    }
+}
+
+// MARK: Lease rows
+
+extension DropdownMenu {
     /// One item per lease after the caption, in engine order, or "Nothing anchored". It
     /// only adds and removes the items that changed: a renewed lease keeps its row, so a
     /// click is never delivered to a view that is about to be replaced.
@@ -266,60 +290,34 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         }
         if wanted.isEmpty {
             if index(of: "nothingAnchored", in: awake) == nil {
-                awake.addItem(hosted(id: "nothingAnchored", enabled: false) {
+                awake.addItem(hosted(id: "nothingAnchored", enabled: false, title: "Nothing anchored") {
                     Text("Nothing anchored").foregroundStyle(.secondary).padding(.horizontal, 14)
                 })
             }
             return
         }
-        for (position, id) in wanted.enumerated() {
-            let target = caption + 1 + position
-            if target < awake.items.count, awake.items[target].identifier?.rawValue == id { continue }
+        let now = Date()
+        for (position, lease) in engine.leases.enumerated() {
+            let id = "lease.\(lease.id)", target = caption + 1 + position
+            let title = LeaseRow.text(for: lease, pending: pendingApproval(lease.id), now: now)
             if let existing = awake.items.first(where: { $0.identifier?.rawValue == id }) {
+                // A row keeps its view; only its title follows the lease.
+                Self.setTitle(title, of: existing)
+                guard awake.index(of: existing) != target else { continue }
                 awake.removeItem(existing)
                 awake.insertItem(existing, at: target)
             } else {
-                let leaseID = String(id.dropFirst("lease.".count))
-                let row = hosted(id: id) {
-                    LeaseRow(engine: self.engine, model: self.model, id: leaseID, pendingApproval: self.pendingApproval)
-                }
-                awake.insertItem(row, at: target)
+                awake.insertItem(hosted(id: id, title: title) {
+                    LeaseRow(engine: self.engine, model: self.model, id: lease.id, pendingApproval: self.pendingApproval)
+                }, at: target)
             }
         }
-    }
-
-    private func index(of id: String, in menu: NSMenu) -> Int? {
-        menu.items.firstIndex { $0.identifier?.rawValue == id }
-    }
-
-    private func isHighlighted(_ id: String) -> Bool {
-        model.highlightedID == id
-    }
-
-    /// Hosts a SwiftUI row in a menu item. The content closure runs in a view body, so
-    /// whatever it reads from the engine or the model keeps the row up to date. Menus
-    /// don't highlight disabled items, so only the pure-text rows are disabled.
-    private func hosted(id: String, enabled: Bool = true, @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
-        Self.hostedItem(id: id, enabled: enabled, content)
     }
 }
 
 // MARK: Shared behaviour
 
 extension DropdownMenu {
-    /// `title` is for accessibility and tests; the hosted view draws the row.
-    static func hostedItem(id: String, title: String = "", enabled: Bool = true,
-                           @ViewBuilder _ content: @escaping () -> some View) -> NSMenuItem {
-        let item = NSMenuItem()
-        item.title = title
-        item.isEnabled = enabled
-        item.identifier = NSUserInterfaceItemIdentifier(id)
-        let host = NSHostingView(rootView: LiveContent(content: content).frame(width: width, alignment: .leading))
-        host.frame = NSRect(origin: .zero, size: host.fittingSize)
-        item.view = host
-        return item
-    }
-
     private func native(id: String, title: String, key: String = "", action: @escaping () -> Void) -> NSMenuItem {
         let item = ClosureMenuItem(title: title, keyEquivalent: key, closure: action)
         item.identifier = NSUserInterfaceItemIdentifier(id)
@@ -368,15 +366,6 @@ extension DropdownMenu {
 
 private extension AwakeDuration {
     var menuTitle: String { self == .untilTurnedOff ? title : "For \(title)" }
-}
-
-/// Evaluates its content in its own body, so reads of observable state are tracked per row.
-private struct LiveContent<Content: View>: View {
-    let content: () -> Content
-
-    var body: some View {
-        content()
-    }
 }
 
 /// A native menu item that runs a closure.

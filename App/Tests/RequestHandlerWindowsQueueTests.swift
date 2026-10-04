@@ -30,7 +30,7 @@ extension RequestHandlerWindowsTests {
         #expect(approver.calls.count == 2)
         let call = try #require(approver.calls.last)
         #expect(call.title == "Claude Code wants to arrange \(results(applied)?.count ?? 0) windows")
-        #expect(call.body.hasPrefix("Layout “coding”: com.google.Chrome → "))
+        #expect(call.body.hasPrefix("Layout “coding”: Google Chrome → "))
 
         // A layout that doesn't exist is reported without asking.
         let missing = await send(.winLayout(WinLayoutArgs(action: "apply", name: "nope")))
@@ -48,7 +48,7 @@ extension RequestHandlerWindowsTests {
 
         let reply = Task { await suite.send(.winLayout(WinLayoutArgs(action: "apply", name: "coding"))) }
         let post = try #require(await suite.post(titled: "Claude Code wants to arrange 4 windows"))
-        #expect(post.body.contains("com.google.Chrome → 56% × 69% at 7%, 9%"))
+        #expect(post.body.contains("Google Chrome → 56% × 69% at 7%, 9%"))
         // Saved over (capturing Chrome where it is now) before the person answers.
         #expect(await suite.send(.winLayout(WinLayoutArgs(action: "save", name: "coding")), from: Self.person).ok)
         suite.fixture.windowCenter?.handle(actionIdentifier: WindowApprovalCenter.allowAction, requestID: post.id)

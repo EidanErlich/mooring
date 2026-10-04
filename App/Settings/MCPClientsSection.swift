@@ -35,10 +35,15 @@ final class MCPClientsModel {
     private let helperPath: String
     private let copy: (String) -> Void
 
-    /// `helperPath` is the `mooring` that the config entries should run; `copy` puts text on the clipboard.
-    init(home: URL, helperPath: String, copy: @escaping (String) -> Void) {
+    /// Whether the app runs from a place it won't stay, so a config entry pointing into it would soon break.
+    let isTransient: Bool
+
+    /// `helperPath` is the `mooring` that the config entries should run, inside the app at `bundleURL`; `copy` puts text
+    /// on the clipboard.
+    init(home: URL, helperPath: String, bundleURL: URL = Bundle.main.bundleURL, copy: @escaping (String) -> Void) {
         self.home = home
         self.helperPath = helperPath
+        isTransient = BundleLocation.isTransient(bundleURL)
         self.copy = copy
         refresh()
     }
@@ -66,6 +71,15 @@ final class MCPClientsModel {
         }
     }
 
+    /// Whether `row`'s button can be used: Add and Update write a path into the app, so they wait until it has moved
+    /// out of a transient location. Remove always works.
+    func isEnabled(_ row: Row) -> Bool {
+        switch row.state {
+        case .notAdded, .needsUpdate: !isTransient
+        case .notInstalled, .added: true
+        }
+    }
+
     /// Adds, updates or removes `client`'s entry, depending on its row's state.
     func perform(_ client: MCPClientConfig.Client) {
         let config = config(client)
@@ -75,6 +89,10 @@ final class MCPClientsModel {
             case .notInstalled:
                 message = nil
             case .notAdded, .needsUpdate:
+                guard !isTransient else {
+                    message = BundleLocation.moveCaption
+                    break
+                }
                 try config.add(helperPath: helperPath)
                 message = "Restart \(config.name) to load it."
             case .added:
@@ -117,12 +135,17 @@ struct MCPClientsSection: View {
                 LabeledContent(row.name) {
                     HStack {
                         Text(Self.stateText(row.state)).foregroundStyle(.secondary)
-                        if let title = row.buttonTitle { Button(title) { model.perform(row.client) } }
+                        if let title = row.buttonTitle {
+                            Button(title) { model.perform(row.client) }.disabled(!model.isEnabled(row))
+                        }
                     }
                 }
                 if let message = row.message {
                     Text(message).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
                 }
+            }
+            if model.isTransient {
+                Text(BundleLocation.moveCaption).font(.caption).foregroundStyle(.secondary)
             }
             Text("Mooring rewrites the file with sorted keys and keeps a .mooring-backup next to it.")
                 .font(.caption).foregroundStyle(.secondary)

@@ -21,14 +21,15 @@ struct DropdownMenuTests {
         windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil }),
         clipboard: ClipboardController? = nil,
         updateAvailable: @escaping () -> Bool = { false },
-        checkForUpdate: @escaping () -> Void = {}
+        checkForUpdate: @escaping () -> Void = {},
+        pendingApproval: @escaping (String) -> Bool = { _ in false }
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
         let menu = DropdownMenu(engine: engine, model: model, helperEnabled: helperEnabled,
                                 runningApps: runningApps, openSettings: {},
                                 windows: windows ?? makeWindows(.off), windowActions: windowActions,
-                                clipboard: clipboard ?? Self.offClipboard(),
+                                clipboard: clipboard ?? Self.offClipboard(), pendingApproval: pendingApproval,
                                 needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery,
                                 updateAvailable: updateAvailable, checkForUpdate: checkForUpdate)
         return (menu, engine)

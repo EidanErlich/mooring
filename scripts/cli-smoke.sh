@@ -13,6 +13,15 @@ fi
 
 passed=0
 failed=0
+anchor_pid=""
+
+# However the script ends, stop its anchor and drop its leases, without launching Mooring to do it.
+cleanup() {
+    if [[ -n "$anchor_pid" ]]; then kill "$anchor_pid" 2>/dev/null || true; fi
+    "$MOORING" lease release smoke-test --no-launch >/dev/null 2>&1 || true
+    "$MOORING" lease release smoke-lid --no-launch >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 # check <name> <expected-exit…> <command…>: the expected exits are one, or several in quotes ("0 2").
 check() {
@@ -60,6 +69,7 @@ check "bare number duration is a usage error" 1 "$MOORING" on --for 5
 check "renew of a missing lease" 1 "$MOORING" lease renew no-such-lease
 
 wait "$anchor_pid" 2>/dev/null
+anchor_pid=""
 sleep 1
 check "anchor lease is gone after it finishes" 0 anchor_listed no
 

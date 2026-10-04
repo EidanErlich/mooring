@@ -85,7 +85,8 @@ extension RequestHandler {
         }
         let placements = try Arranger.validated(layout: saved, named: name)
         if let agent {
-            let body = "Layout “\(WindowApproval.shown(name))”: \(WindowApproval.body(placements, launch: true))"
+            let listed = WindowApproval.body(placements, launch: true, appName: arranger.appName)
+            let body = "Layout “\(WindowApproval.shown(name))”: \(listed)"
             try await askToArrange(agent, count: placements.count, body: body)
         }
         return try await onItsTurn(for: caller) { arranger in

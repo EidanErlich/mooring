@@ -124,7 +124,7 @@ struct AnchoredCommand {
             problem = error.message
         } catch CLIError.unreachable {
             problem = "Mooring isn't running"
-        } catch CLIError.noAnswer {
+        } catch CLIError.noAnswer, CLIError.busy {
             problem = "Mooring didn't answer"
         } catch CLIError.blocked {
             problem = "permission denied"

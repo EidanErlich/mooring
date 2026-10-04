@@ -144,14 +144,18 @@ public struct StatusResult: Codable, Sendable, Equatable {
     public var lidClosed: Bool?
     public var helper: String
     public var suspensions: [String]
-    /// The notification permission as the app sees it: `allowed`, `notDetermined` or `denied`. Absent from older apps.
+    /// The notification permission as the app sees it: `allowed`, `alerts off` (allowed, but nothing would
+    /// show), `notDetermined` or `denied`. Absent from older apps.
     public var notifications: String?
     /// The agent lid-mode setting: `askWhenOpenEnded`, `alwaysAsk`, `alwaysAllow` or `never`. Absent from older apps.
     public var agentLidApproval: String?
+    /// Whether Claude Code sessions ask for lid mode (Settings › Agents). Absent from older apps.
+    public var agentSessionLid: Bool?
 
     public init(summary: String, effective: LevelInfo, systemAssertion: Bool, displayAssertion: Bool, lidSleepDisabled: Bool,
                 helperSleepDisabled: Bool?, wantsLid: Bool, leases: [LeaseInfo], power: PowerInfo, thermal: String,
-                lidClosed: Bool?, helper: String, suspensions: [String], notifications: String?, agentLidApproval: String?) {
+                lidClosed: Bool?, helper: String, suspensions: [String], notifications: String?, agentLidApproval: String?,
+                agentSessionLid: Bool? = nil) {
         self.summary = summary
         self.effective = effective
         self.systemAssertion = systemAssertion
@@ -167,6 +171,7 @@ public struct StatusResult: Codable, Sendable, Equatable {
         self.suspensions = suspensions
         self.notifications = notifications
         self.agentLidApproval = agentLidApproval
+        self.agentSessionLid = agentSessionLid
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -186,6 +191,7 @@ public struct StatusResult: Codable, Sendable, Equatable {
         try container.encode(suspensions, forKey: .suspensions)
         try container.encodeIfPresent(notifications, forKey: .notifications)
         try container.encodeIfPresent(agentLidApproval, forKey: .agentLidApproval)
+        try container.encodeIfPresent(agentSessionLid, forKey: .agentSessionLid)
     }
 }
 

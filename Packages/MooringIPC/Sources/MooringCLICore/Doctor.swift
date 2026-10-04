@@ -34,7 +34,7 @@ public enum Doctor {
         [
             appCheck(status, unavailable: unavailable, appError: appError),
             pathCheck(pathEnv: pathEnv, ownBinary: ownBinary, resolve: resolve),
-            helperCheck(status),
+            helperCheck(status, claude: claude),
             lidCheck(status),
             pluginCheck(claude),
             claudeVersionCheck(claude),
@@ -69,7 +69,7 @@ public enum Doctor {
                 return Check(name: "App", state: "fail", detail: "answered with an error: \(appError)", fix: "Quit and reopen Mooring")
             }
             let detail = switch unavailable {
-            case .noAnswer: "didn't answer"
+            case .noAnswer, .busy: "didn't answer"
             case .blocked: "permission denied"
             case .unreachable, .usage: "not running"
             }
@@ -91,12 +91,24 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: found, fix: nil)
     }
 
-    private static func helperCheck(_ status: StatusResult?) -> Check {
+    /// The helper only matters for lid mode. A helper that was never registered passes as "not needed" when nothing wants
+    /// the lid held: no lid is wanted now, and the Claude hooks (which ask for lid when a session starts) can't, because
+    /// the plugin isn't installed or session lid is off. A helper that is missing or awaiting approval always fails.
+    private static func helperCheck(_ status: StatusResult?, claude: ClaudeSnapshot?) -> Check {
         guard let status else { return Check(name: "Helper", state: "skip", detail: "needs the app", fix: nil) }
         guard status.helper == "enabled" else {
+            if status.helper == "notRegistered", !status.wantsLid, !hooksWantLid(status, claude: claude) {
+                return Check(name: "Helper", state: "pass", detail: "not needed", fix: nil)
+            }
             return Check(name: "Helper", state: "fail", detail: status.helper, fix: "Settings → Lid & Battery → Approve")
         }
         return Check(name: "Helper", state: "pass", detail: status.helper, fix: nil)
+    }
+
+    /// True when a Claude Code session would ask for lid mode: the plugin is installed and session lid is on and not forbidden.
+    private static func hooksWantLid(_ status: StatusResult, claude: ClaudeSnapshot?) -> Bool {
+        guard status.agentSessionLid == true, status.agentLidApproval != "never" else { return false }
+        return (claude?.plugins ?? []).contains { $0.id == ClaudeCode.appPluginID || $0.id == ClaudeCode.repoPluginID }
     }
 
     private static func lidCheck(_ status: StatusResult?) -> Check {
@@ -106,8 +118,10 @@ public enum Doctor {
             return Check(name: name, state: "skip", detail: "the helper can't read it", fix: nil)
         }
         guard actual == status.lidSleepDisabled else {
-            return Check(name: name, state: "fail", detail: actual ? "stuck disabled" : "mismatch",
-                         fix: "Quit and reopen Mooring to restore sleep")
+            // Mooring believes lid mode is on but the helper reports sleep isn't disabled: toggling re-applies it.
+            return actual
+                ? Check(name: name, state: "fail", detail: "stuck disabled", fix: "Quit and reopen Mooring to restore sleep")
+                : Check(name: name, state: "fail", detail: "mismatch", fix: "Turn lid mode off and on again")
         }
         return Check(name: name, state: "pass", detail: "matches", fix: nil)
     }
@@ -144,18 +158,19 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: version, fix: nil)
     }
 
-    /// Notifications carry lid approvals, so a denial only fails when the setting can ask for one.
+    /// Notifications carry lid approvals, so a denial (or alerts turned off) only fails when the setting can ask for one.
     private static func notificationsCheck(_ status: StatusResult?) -> Check {
         let name = "Notifications"
         guard let status else { return Check(name: name, state: "skip", detail: "needs the app", fix: nil) }
         switch status.notifications {
         case "allowed": return Check(name: name, state: "pass", detail: "allowed", fix: nil)
         case "notDetermined": return Check(name: name, state: "skip", detail: "not asked yet", fix: nil)
-        case "denied":
+        case "denied", "alerts off":
+            let detail = status.notifications ?? ""
             guard ["askWhenOpenEnded", "alwaysAsk"].contains(status.agentLidApproval) else {
-                return Check(name: name, state: "skip", detail: "denied (not needed)", fix: nil)
+                return Check(name: name, state: "skip", detail: "\(detail) (not needed)", fix: nil)
             }
-            return Check(name: name, state: "fail", detail: "denied", fix: "System Settings → Notifications → Mooring")
+            return Check(name: name, state: "fail", detail: detail, fix: "System Settings → Notifications → Mooring")
         default: return Check(name: name, state: "skip", detail: "unknown", fix: nil)
         }
     }

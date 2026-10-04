@@ -81,7 +81,7 @@ enum CLIText {
     /// when the process is already gone.
     private static func acquireTimeText(_ lease: LeaseInfo, now: Date, processes: any ProcessTable) -> String {
         guard let pid = lease.watchPid else { return timeText(lease, now: now) }
-        let who = processes.entry(pid).map { "\(ProcessTree.agentName(for: $0.name)) (\(pid))" } ?? "process \(pid)"
+        let who = processes.entry(pid).map { "\(ProcessTree.agentName(for: $0, in: processes)) (\(pid))" } ?? "process \(pid)"
         let watching = "while \(who) runs"
         guard let expiry = lease.expiresAt else { return watching }
         return "\(watching) · \(remaining(expiry.timeIntervalSince(now))) cap"

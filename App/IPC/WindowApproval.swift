@@ -33,9 +33,11 @@ enum WindowApproval {
     }
 
     /// "chrome → right half · iterm → bottom left · …", naming at most `listedPlacements`, then `mayOpenApps` on a line
-    /// of its own when `launch`.
-    static func body(_ placements: [WinPlacement], launch: Bool = false) -> String {
-        var parts = placements.prefix(listedPlacements).map(describe)
+    /// of its own when `launch`. `appName` turns each `app` into the name shown, such as a saved bundle id into the
+    /// app's name.
+    static func body(_ placements: [WinPlacement], launch: Bool = false,
+                     appName: (String) -> String = { $0 }) -> String {
+        var parts = placements.prefix(listedPlacements).map { describe($0, appName: appName) }
         if placements.count > listedPlacements { parts.append("and \(placements.count - listedPlacements) more") }
         let body = parts.joined(separator: " · ")
         return launch ? body + "\n" + mayOpenApps : body
@@ -49,8 +51,8 @@ enum WindowApproval {
         return kept.count > longestName ? String(kept.prefix(longestName - 1)) + "…" : kept
     }
 
-    private static func describe(_ placement: WinPlacement) -> String {
-        var app = placement.app == WinPlacement.frontmostApp ? "the frontmost app" : shown(placement.app)
+    private static func describe(_ placement: WinPlacement, appName: (String) -> String) -> String {
+        var app = placement.app == WinPlacement.frontmostApp ? "the frontmost app" : shown(appName(placement.app))
         if let title = placement.title, !title.isEmpty { app += " “\(shown(title))”" }
         var target = placement.region.map { $0.replacingOccurrences(of: "-", with: " ") } ?? ""
         if let frame = placement.frame {
@@ -120,7 +122,9 @@ final class WindowApprovalCenter: WindowApproving {
             }
             waiting[id] = Waiting(continuation: continuation, timer: timer)
             Task {
-                await poster.post(id: id, title: title, body: body, userInfo: [:], category: Self.categoryID)
+                let posted = await poster.post(id: id, title: title, body: body, userInfo: [:], category: Self.categoryID)
+                // Nothing was shown, so nobody can answer: don't wait out the timeout.
+                guard posted else { return resolve(id, with: .unavailable) }
                 // Resolved while posting: don't leave buttons that do nothing.
                 if waiting[id] == nil { poster.withdraw(id: id) }
             }

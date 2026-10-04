@@ -176,6 +176,17 @@ private func acquireArgs(_ request: Request?) -> AcquireArgs? {
     #expect(json.capture.stderr.isEmpty)
 }
 
+@Test func busyPrintsTryAgain() async {
+    let message = "Mooring is running but didn't answer. Try again in a moment."
+    let human = Harness(client: RecordingClient(reply: .failure(.busy)))
+    #expect(await human.run(["status"]) == 3)
+    #expect(human.capture.stderr == "mooring: \(message)\n")
+
+    let json = Harness(client: RecordingClient(reply: .failure(.busy)))
+    #expect(await json.run(["status", "--json"]) == 3)
+    #expect(json.capture.stdout == #"{"ok":false,"error":{"code":"unreachable","message":"\#(message)"}}"# + "\n")
+}
+
 @Test func blockedPrintsPermissionDenied() async {
     let message = "Can't reach Mooring's socket (permission denied). "
         + "If this runs in a sandbox, allow ~/Library/Application Support/Mooring/mooring.sock"
@@ -243,7 +254,7 @@ private func usageObject(_ message: String) -> String {
 @Test func jsonHelpAndVersionAreUnchanged() async {
     let harness = Harness()
     #expect(await harness.run(["--version", "--json"]) == 0)
-    #expect(harness.capture.stdout == "mooring 0.2.0-dev\n")
+    #expect(harness.capture.stdout == "mooring 9.9.9-test\n")
     #expect(await harness.run(["status", "--help", "--json"]) == 0)
     #expect(harness.capture.stdout.contains("USAGE: mooring status"))
     #expect(harness.capture.stderr.isEmpty)
@@ -278,7 +289,8 @@ private func usageObject(_ message: String) -> String {
 @Test func versionAndHelpExitZero() async {
     let harness = Harness()
     #expect(await harness.run(["--version"]) == 0)
-    #expect(harness.capture.stdout == "mooring 0.2.0-dev\n")
+    // The version is the environment's, which the binary reads from its enclosing app.
+    #expect(harness.capture.stdout == "mooring 9.9.9-test\n")
     #expect(await harness.run(["lease", "acquire", "--help"]) == 0)
     #expect(harness.client.requests.isEmpty)
 }
@@ -292,6 +304,14 @@ private func usageObject(_ message: String) -> String {
     #expect(text.contains(#"mooring lease acquire <name> --watch-pid auto --reason "…""#))
     #expect(text.contains("mooring lease release <name>"))
     #expect(text.contains("mooring anchor -- <command>"))
+}
+
+@Test func helpMentionsWin() async throws {
+    let harness = Harness()
+    #expect(await harness.run(["--help"]) == 0)
+    let text = harness.capture.stdout
+    let forAgents = try #require(text.range(of: "For agents"))
+    #expect(text[forAgents.upperBound...].contains("mooring win"))
 }
 
 @Test func bareMooringPrintsHelp() async {

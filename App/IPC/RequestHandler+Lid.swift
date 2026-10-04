@@ -75,21 +75,30 @@ extension RequestHandler {
     /// Runs `acquire` (true: with lid as requested; false: without it) as `request` allows, asking the person when
     /// `LidApproval` says to. Returns the lease as it ends up; a refusal still acquires, then throws `denied`.
     /// A nil `request` doesn't want lid and just acquires. `reason` leads the notification instead of the lease's own.
+    /// A live lease with a person's lid is left as it is when the agent is refused or must be asked: an agent can't
+    /// take away lid mode a person set.
     func approvingLid(
         _ request: LidRequest?, reason: String? = nil, acquire: (Bool) throws -> Lease
     ) async throws -> Lease {
         guard let request else { return try acquire(true) }
+        let personsLease = request.existing.flatMap { hasPersonsLid($0) ? $0 : nil }
         switch lidStep(request) {
         case .grant:
             return noteGrant(try acquire(true), for: request)
         case .refuse(let message):
+            if personsLease != nil { throw WireError(code: .denied, message: message + " Your lease is unchanged.") }
             // Acquiring again merges in the existing level, so lid is taken off afterwards: the reply is the outcome.
             droppingLid(try acquire(false))
             throw WireError(code: .denied, message: message)
         case .ask(let agent):
             // If the CLI disconnects meanwhile, the ask still runs its course and an Allow still adds lid.
-            return try await ask(agent, about: droppingLid(try acquire(false)), reason: reason)
+            return try await ask(agent, about: personsLease ?? droppingLid(try acquire(false)), reason: reason)
         }
+    }
+
+    /// `lease` has lid mode a person set: it isn't recorded as an agent's.
+    func hasPersonsLid(_ lease: Lease) -> Bool {
+        lease.level.lid && agentLid[lease.id] != lease.createdAt
     }
 
     /// Records who `lease`'s lid mode belongs to after `request` was granted. Lid an agent added is recorded, so the
@@ -101,7 +110,7 @@ extension RequestHandler {
             agentLid[lease.id] = nil
             return lease
         }
-        let personsLid = request.existing.map { $0.level.lid && agentLid[$0.id] != $0.createdAt } ?? false
+        let personsLid = request.existing.map(hasPersonsLid) ?? false
         if lease.level.lid && !personsLid { agentLid[lease.id] = lease.createdAt }
         return lease
     }
@@ -113,6 +122,23 @@ extension RequestHandler {
         guard lease.level.lid else { return lease }
         engine.setLevel(lease.level.withoutLid, forLease: lease.id)
         return engine.leases.first { $0.id == lease.id } ?? lease
+    }
+
+    /// Takes up the record of agent-granted lid saved before a relaunch. Runs after `engine.restore()`: an entry is
+    /// kept only while a restored lease has its id and, within `createdTolerance`, its creation time, and it takes
+    /// that lease's own time, so later checks compare exactly. The filtered record is written back. Then the settings
+    /// are applied once: the settings observation skips the value at launch, and they may have gone to Never (or
+    /// session lid off) while the app wasn't running.
+    func restoreAgentLid() {
+        var restored: [String: Date] = [:]
+        for (id, created) in agentLidRecord.load() {
+            guard let lease = engine.leases.first(where: { $0.id == id }),
+                  abs(lease.createdAt.timeIntervalSince(created)) <= AgentLidRecord.createdTolerance else { continue }
+            restored[id] = lease.createdAt
+        }
+        agentLid = restored
+        agentLidRecord.save(restored)
+        applyLidSettings()
     }
 
     /// Takes lid mode back from live leases that got it on an agent's behalf once the settings no longer allow it:
@@ -151,7 +177,9 @@ extension RequestHandler {
                denial.created == existing.createdAt {
                 return .refuse(LidMessage.deniedUntil(denial.until))
             }
-            if asking.contains(request.leaseID) || approver.pending.contains(request.leaseID) {
+            // A person's lid lease is asked about as it is, so for `on` over picked apps the ask is on the app's lease.
+            let asked = [request.leaseID, request.existing?.id].compactMap { $0 }
+            if asked.contains(where: { asking.contains($0) || approver.pending.contains($0) }) {
                 return .refuse(LidMessage.waiting)
             }
             return .ask(agent)
@@ -174,8 +202,11 @@ extension RequestHandler {
                 throw WireError(code: .notFound, message: "\(lease.id) ended before lid mode was approved")
             }
             guard Self.endsAsTold(current, asked: lease) else { throw WireError(code: .denied, message: LidMessage.changed) }
-            engine.setLevel(current.level.union(AwakeLevel(display: false, lid: true)), forLease: current.id)
-            agentLid[current.id] = current.createdAt
+            // Lid the lease already has (a person's, left alone while asking) stays the person's.
+            if !current.level.lid {
+                engine.setLevel(current.level.union(AwakeLevel(display: false, lid: true)), forLease: current.id)
+                agentLid[current.id] = current.createdAt
+            }
             return liveLease(lease.id) ?? current
         case .deny:
             if let current, current.createdAt == lease.createdAt {
@@ -202,13 +233,18 @@ extension RequestHandler {
     /// "<reason> · <with no end time | for 30m | while <process> runs>"; the center adds the agent's name.
     private func approvalBody(_ lease: Lease, reason: String?) -> String {
         let end = if let pid = lease.watch?.pid {
-            "while \(processes.entry(pid)?.name ?? "pid \(pid)") runs"
+            "while \(watchedProgram(pid) ?? "pid \(pid)") runs"
         } else if let expiry = lease.expiresAt {
             "for \(DurationText.remaining(expiry.timeIntervalSince(now())))"
         } else {
             "with no end time"
         }
         return "\(reason ?? lease.reason) · \(end)"
+    }
+
+    /// The program the process runs, so npm Claude Code reads `claude` rather than `node`.
+    private func watchedProgram(_ pid: Int32) -> String? {
+        processes.entry(pid).map { AgentDetection.programName(of: $0, in: processes) }
     }
 
     private func alwaysAllow(_ agent: String) {

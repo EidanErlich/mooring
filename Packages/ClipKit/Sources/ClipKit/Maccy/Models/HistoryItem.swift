@@ -95,9 +95,7 @@ class HistoryItem {
 
   func generateTitle() -> String {
     guard image == nil else {
-      Task {
-        self.performTextRecognition()
-      }
+      performTextRecognition()
       return ""
     }
 
@@ -232,31 +230,48 @@ class HistoryItem {
       .compactMap { $0.value }
   }
 
+  /// Reads the image's data on the caller's thread, decodes it and recognises its text in the background, and
+  /// sets the title on the main actor: the item belongs to the main context, so no other thread may touch it.
   private func performTextRecognition() {
-    guard let cgImage = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+    guard let data = imageData else {
       return
     }
 
+    // Only the main actor touches `item`; the background task sees just the image's data.
+    nonisolated(unsafe) let item = self
+    Task.detached(priority: .utility) {
+      guard let cgImage = NSImage(data: data)?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+            let title = Self.recognizedText(in: cgImage) else {
+        return
+      }
+      await MainActor.run {
+        // The item may have been deleted (a duplicate, Clear) while its text was recognised.
+        guard !item.isDeleted else { return }
+        item.title = title
+      }
+    }
+  }
+
+  private static func recognizedText(in cgImage: CGImage) -> String? {
     let requestHandler = VNImageRequestHandler(cgImage: cgImage)
-    let request = VNRecognizeTextRequest(completionHandler: recognizeTextHandler)
+    let request = VNRecognizeTextRequest()
     request.recognitionLevel = .fast
 
     do {
       try requestHandler.perform([request])
     } catch {
       ClipKitLog.logger.error("Unable to recognise text in an image: \(type(of: error))")
+      return nil
     }
-  }
 
-  private func recognizeTextHandler(request: VNRequest, error: Error?) {
-    guard let observations = request.results as? [VNRecognizedTextObservation] else {
-      return
+    guard let observations = request.results else {
+      return nil
     }
 
     let recognizedStrings = observations.compactMap { observation in
       return observation.topCandidates(1).first?.string
     }
 
-    self.title = recognizedStrings.joined(separator: "\n")
+    return recognizedStrings.joined(separator: "\n")
   }
 }

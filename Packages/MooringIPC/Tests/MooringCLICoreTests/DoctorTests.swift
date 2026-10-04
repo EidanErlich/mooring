@@ -5,14 +5,15 @@ import Testing
 
 private func doctorStatus(
     helper: String = "enabled", helperSleepDisabled: Bool? = false, lidSleepDisabled: Bool = false,
-    notifications: String? = "allowed", agentLidApproval: String? = "askWhenOpenEnded"
+    notifications: String? = "allowed", agentLidApproval: String? = "askWhenOpenEnded", wantsLid: Bool? = nil,
+    agentSessionLid: Bool? = nil
 ) -> StatusResult {
     StatusResult(
         summary: "On · 1h left", effective: LevelInfo(system: true, display: false, lid: lidSleepDisabled),
         systemAssertion: true, displayAssertion: false, lidSleepDisabled: lidSleepDisabled,
-        helperSleepDisabled: helperSleepDisabled, wantsLid: lidSleepDisabled, leases: [],
+        helperSleepDisabled: helperSleepDisabled, wantsLid: wantsLid ?? lidSleepDisabled, leases: [],
         power: PowerInfo(onAC: true, batteryPercent: 90), thermal: "nominal", lidClosed: false, helper: helper, suspensions: [],
-        notifications: notifications, agentLidApproval: agentLidApproval
+        notifications: notifications, agentLidApproval: agentLidApproval, agentSessionLid: agentSessionLid
     )
 }
 
@@ -99,10 +100,59 @@ private let pluginFix = "Settings → Awake → Agents → Install"
 
 @Test func helperNotApprovedFails() throws {
     let bin = try BinFolder()
-    let checks = runChecks(doctorStatus(helper: "requiresApproval"), pathEnv: bin.path, ownBinary: bin.binary)
+    let checks = runChecks(doctorStatus(helper: "requiresApproval", wantsLid: true), pathEnv: bin.path, ownBinary: bin.binary)
     #expect(checks[2] == Doctor.Check(
         name: "Helper", state: "fail", detail: "requiresApproval", fix: "Settings → Lid & Battery → Approve"
     ))
+}
+
+@Test func helperNotRegisteredWithoutLidIsNotNeeded() throws {
+    let bin = try BinFolder()
+    let checks = runChecks(doctorStatus(helper: "notRegistered", wantsLid: false), pathEnv: bin.path, ownBinary: bin.binary)
+    #expect(checks[2] == Doctor.Check(name: "Helper", state: "pass", detail: "not needed", fix: nil))
+}
+
+@Test func helperNotRegisteredWithLidFails() throws {
+    let bin = try BinFolder()
+    let fix = "Settings → Lid & Battery → Approve"
+    let wanted = runChecks(doctorStatus(helper: "notRegistered", wantsLid: true), pathEnv: bin.path, ownBinary: bin.binary)
+    #expect(wanted[2] == Doctor.Check(name: "Helper", state: "fail", detail: "notRegistered", fix: fix))
+    // The Claude hooks ask for lid when a session starts, so an installed plugin with session lid on needs the helper
+    // even though no session is running yet.
+    let hooks = runChecks(
+        doctorStatus(helper: "notRegistered", wantsLid: false, agentSessionLid: true),
+        pathEnv: bin.path, ownBinary: bin.binary, claude: ClaudeSnapshot(
+            version: "2.1.285", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
+    )
+    #expect(hooks[2] == Doctor.Check(name: "Helper", state: "fail", detail: "notRegistered", fix: fix))
+}
+
+@Test func helperNotRegisteredIsNotNeededWithoutHooksWantingLid() throws {
+    let bin = try BinFolder()
+    let installed = ClaudeSnapshot(version: "2.1.285", plugins: [plugin(ClaudeCode.appPluginID)], testedWith: "2.1")
+    let notNeeded = Doctor.Check(name: "Helper", state: "pass", detail: "not needed", fix: nil)
+    func helperCheck(_ status: StatusResult, claude: ClaudeSnapshot?) -> Doctor.Check {
+        runChecks(status, pathEnv: bin.path, ownBinary: bin.binary, claude: claude)[2]
+    }
+    let sessionLid = doctorStatus(helper: "notRegistered", wantsLid: false, agentSessionLid: true)
+    #expect(helperCheck(sessionLid, claude: nil) == notNeeded)
+    #expect(helperCheck(sessionLid, claude: ClaudeSnapshot(version: "2.1.285", plugins: [], testedWith: nil)) == notNeeded)
+    let off = doctorStatus(helper: "notRegistered", wantsLid: false, agentSessionLid: false)
+    #expect(helperCheck(off, claude: installed) == notNeeded)
+    let never = doctorStatus(helper: "notRegistered", agentLidApproval: "never", wantsLid: false, agentSessionLid: true)
+    #expect(helperCheck(never, claude: installed) == notNeeded)
+    // An older app doesn't report the setting.
+    #expect(helperCheck(doctorStatus(helper: "notRegistered", wantsLid: false), claude: installed) == notNeeded)
+}
+
+@Test func notFoundStillFails() throws {
+    let bin = try BinFolder()
+    let checks = runChecks(doctorStatus(helper: "notFound", wantsLid: false), pathEnv: bin.path, ownBinary: bin.binary)
+    #expect(checks[2] == Doctor.Check(
+        name: "Helper", state: "fail", detail: "notFound", fix: "Settings → Lid & Battery → Approve"
+    ))
+    let unapproved = runChecks(doctorStatus(helper: "requiresApproval", wantsLid: false), pathEnv: bin.path, ownBinary: bin.binary)
+    #expect(unapproved[2].state == "fail")
 }
 
 @Test func stuckLidSleepFails() throws {
@@ -113,10 +163,16 @@ private let pluginFix = "Settings → Awake → Agents → Install"
     }
     #expect(lidCheck(doctorStatus(helperSleepDisabled: true, lidSleepDisabled: false))
         == Doctor.Check(name: "Lid sleep", state: "fail", detail: "stuck disabled", fix: fix))
-    #expect(lidCheck(doctorStatus(helperSleepDisabled: false, lidSleepDisabled: true))
-        == Doctor.Check(name: "Lid sleep", state: "fail", detail: "mismatch", fix: fix))
     #expect(lidCheck(doctorStatus(helperSleepDisabled: true, lidSleepDisabled: true)).state == "pass")
     #expect(lidCheck(doctorStatus(helperSleepDisabled: nil)).state == "skip")
+}
+
+@Test func lidBelievedButNotActualSaysToggle() throws {
+    let bin = try BinFolder()
+    let status = doctorStatus(helperSleepDisabled: false, lidSleepDisabled: true)
+    #expect(runChecks(status, pathEnv: bin.path, ownBinary: bin.binary)[3] == Doctor.Check(
+        name: "Lid sleep", state: "fail", detail: "mismatch", fix: "Turn lid mode off and on again"
+    ))
 }
 
 @Test func pluginFromAppPasses() {
@@ -200,6 +256,19 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
 @Test func notificationsCheckPassesWhenAllowed() throws {
     #expect(try notificationsCheck("allowed", "askWhenOpenEnded")
         == Doctor.Check(name: "Notifications", state: "pass", detail: "allowed", fix: nil))
+}
+
+@Test func notificationsCheckFailsWhenAlertsAreOffAndApprovalsAreNeeded() throws {
+    let expected = Doctor.Check(name: "Notifications", state: "fail", detail: "alerts off",
+                                fix: "System Settings → Notifications → Mooring")
+    #expect(try notificationsCheck("alerts off", "askWhenOpenEnded") == expected)
+    #expect(try notificationsCheck("alerts off", "alwaysAsk") == expected)
+}
+
+@Test func notificationsCheckSkipsWhenAlertsAreOffButNotNeeded() throws {
+    let expected = Doctor.Check(name: "Notifications", state: "skip", detail: "alerts off (not needed)", fix: nil)
+    #expect(try notificationsCheck("alerts off", "alwaysAllow") == expected)
+    #expect(try notificationsCheck("alerts off", "never") == expected)
 }
 
 @Test func notificationsCheckSkipsWhenNotAskedYet() throws {
@@ -293,7 +362,7 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
 @Test func doctorNamesWhyTheAppIsDown() async throws {
     let bin = try BinFolder()
     let cases: [(CLIError, String)] = [
-        (.unreachable, "not running"), (.noAnswer, "didn't answer"), (.blocked, "permission denied")
+        (.unreachable, "not running"), (.noAnswer, "didn't answer"), (.busy, "didn't answer"), (.blocked, "permission denied")
     ]
     for (error, detail) in cases {
         let harness = Harness(client: RecordingClient(reply: .failure(error)), ownBinaryPath: bin.binary, pathEnv: bin.path)
@@ -315,7 +384,7 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
 @Test func doctorJSON() async throws {
     let bin = try BinFolder()
     let harness = Harness(
-        client: RecordingClient(reply: .success(.success(id: "r", .status(doctorStatus(helper: "notRegistered"))))),
+        client: RecordingClient(reply: .success(.success(id: "r", .status(doctorStatus(helper: "notRegistered", wantsLid: true))))),
         ownBinaryPath: bin.binary, pathEnv: bin.path
     )
     #expect(await harness.run(["doctor", "--json"]) == 1)
@@ -327,61 +396,4 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
     let object = try #require(try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: [[String: String]]])
     #expect(object["checks"]?.count == 8)
     #expect(object["checks"]?[2]["fix"] == "Settings → Lid & Battery → Approve")
-}
-
-// MARK: - Check 8: MCP clients
-
-/// A temp home whose client folders exist, each holding a config that names `command` as the mooring server.
-private final class MCPHome {
-    let url: URL
-
-    init() throws {
-        url = URL(fileURLWithPath: try makeTempFolder())
-    }
-
-    deinit { try? FileManager.default.removeItem(at: url) }
-
-    /// Creates the client's folder and, when `command` is given, a config file whose mooring entry runs it.
-    func install(_ client: MCPClientConfig.Client, command: String? = nil) throws {
-        let config = MCPClientConfig(client: client, home: url)
-        try FileManager.default.createDirectory(at: config.folderURL, withIntermediateDirectories: true)
-        guard let command else { return }
-        let root = ["mcpServers": ["mooring": ["command": command, "args": ["mcp"]]]]
-        try JSONSerialization.data(withJSONObject: root).write(to: config.fileURL)
-    }
-}
-
-private func mcpCheck(home: MCPHome, helperPath: String = "/Apps/mooring") -> Doctor.Check {
-    Doctor.checks(
-        status: nil, pathEnv: nil, ownBinary: "/nowhere/mooring", resolve: { $0 }, claude: nil,
-        home: home.url, helperPath: helperPath
-    )[7]
-}
-
-@Test func mcpCheckPassesWithAddedClients() throws {
-    let home = try MCPHome()
-    try home.install(.claudeDesktop, command: "/Apps/mooring")
-    try home.install(.cursor, command: "/Apps/mooring")
-    #expect(mcpCheck(home: home) == Doctor.Check(name: "MCP clients", state: "pass", detail: "Claude Desktop, Cursor", fix: nil))
-    try FileManager.default.removeItem(at: MCPClientConfig(client: .claudeDesktop, home: home.url).folderURL)
-    #expect(mcpCheck(home: home).detail == "Cursor")
-}
-
-@Test func mcpCheckSkipsWhenNoneAdded() throws {
-    let home = try MCPHome()
-    #expect(mcpCheck(home: home) == Doctor.Check(name: "MCP clients", state: "skip", detail: "none added", fix: nil))
-    try home.install(.cursor)
-    #expect(mcpCheck(home: home).state == "skip")
-}
-
-@Test func mcpCheckFailsWhenNeedsUpdate() throws {
-    let home = try MCPHome()
-    try home.install(.claudeDesktop, command: "/Old/mooring")
-    try home.install(.cursor, command: "/Old/mooring")
-    #expect(mcpCheck(home: home) == Doctor.Check(
-        name: "MCP clients", state: "fail", detail: "Claude Desktop needs update, Cursor needs update",
-        fix: "Settings → Agents → Update"
-    ))
-    try home.install(.claudeDesktop, command: "/Apps/mooring")
-    #expect(mcpCheck(home: home).detail == "Cursor needs update")
 }

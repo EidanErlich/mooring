@@ -1,8 +1,11 @@
+import Foundation
+
 /// Tells agent callers from people by walking the caller's process ancestry.
 ///
 /// Names match the agent CLIs exactly, case included, so the Claude and Codex desktop apps (`Claude`, `Codex`) and
 /// the terminals inside them count as people. The trade-off: a process a desktop app launches directly (an MCP
-/// server Claude.app starts, say) counts as a person too, unless it runs under one of the CLIs.
+/// server Claude.app starts, say) counts as a person too, unless it runs under one of the CLIs. Claude Code installed
+/// with npm runs as `node`, so a `node` running Claude Code's script, or titled `claude`, counts as `claude`.
 public enum AgentDetection {
     /// Process names of the agent CLIs, exactly as they run, and the name shown for each.
     public static let agents: [String: String] = [
@@ -22,7 +25,7 @@ public enum AgentDetection {
         // The cap guards against a table that loops.
         for _ in 0..<64 {
             guard current > 1, let entry = table.entry(current) else { return nil }
-            if let name = agents[normalized(entry.name)] { return (name, entry.pid) }
+            if let name = agents[normalized(programName(of: entry, in: table))] { return (name, entry.pid) }
             current = entry.parent
         }
         return nil
@@ -39,6 +42,20 @@ public enum AgentDetection {
         }
         return false
     }
+
+    /// The program `entry` runs: its process name, or `claude` for a `node` running Claude Code. That is a `node` whose
+    /// script (the first argument after node's own `-` options) ends in `/claude` or lies in the
+    /// `@anthropic-ai/claude-code` package, or one whose argv[0] is exactly `claude`: Claude Code sets its process
+    /// title to that at start-up, which overwrites argv in place and leaves no script to read.
+    public static func programName(of entry: ProcessEntry, in table: some ProcessTable) -> String {
+        guard normalized(entry.name) == "node", let arguments = table.arguments(entry.pid) else { return entry.name }
+        if let title = arguments.first, title.trimmingCharacters(in: titlePadding) == "claude" { return "claude" }
+        guard let script = arguments.dropFirst().first(where: { !$0.hasPrefix("-") }) else { return entry.name }
+        return script.hasSuffix("/claude") || script.contains("/@anthropic-ai/claude-code/") ? "claude" : entry.name
+    }
+
+    /// What can pad a process title in argv: spaces and NULs.
+    private static let titlePadding = CharacterSet(charactersIn: " \0")
 
     /// Without the leading `-` that marks a login shell; case is kept.
     public static func normalized(_ name: String) -> String {

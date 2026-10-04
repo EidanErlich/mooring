@@ -68,13 +68,18 @@ struct StatusHeader: View {
     let engine: AwakeEngine
     let model: DropdownModel
 
+    /// The line, which is also the row's menu title.
+    static func text(_ engine: AwakeEngine, now: Date) -> String {
+        StatusLine.text(leases: engine.leases, state: engine.state, now: now)
+    }
+
     var body: some View {
         TimelineView(.animation(minimumInterval: 1, paused: !model.isOpen)) { context in
             HStack(spacing: 6) {
                 Image(systemName: engine.state.systemAssertion ? "circle.fill" : "circle")
                     .foregroundStyle(engine.state.systemAssertion ? .green : .secondary)
                     .imageScale(.small)
-                Text(StatusLine.text(leases: engine.leases, state: engine.state, now: context.date))
+                Text(Self.text(engine, now: context.date))
                     .font(.headline)
             }
             .padding(.horizontal, 14)
@@ -96,6 +101,12 @@ struct LeaseRow: View {
     /// The time text, or the approval wait that replaces it.
     static func trailingText(for lease: Lease, pending: Bool, now: Date) -> String {
         pending ? "waiting for your approval" : LeaseText.timeLeft(lease, now: now)
+    }
+
+    /// The row's text in reading order, for its menu title: "Terminal, make test, 5m left".
+    static func text(for lease: Lease, pending: Bool, now: Date) -> String {
+        [LeaseText.owner(lease.owner), lease.reason, trailingText(for: lease, pending: pending, now: now)]
+            .joined(separator: ", ")
     }
 
     var body: some View {

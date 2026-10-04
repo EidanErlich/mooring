@@ -28,15 +28,29 @@ enum SocketServerError: LocalizedError, Equatable {
 final class SocketServer: @unchecked Sendable {
     static var defaultPath: String { WireProtocol.defaultSocketPath }
 
+    /// `accept(2)` on a listening descriptor: the new descriptor, or -1 and the `errno`.
+    typealias Accept = @Sendable (Int32) -> (descriptor: Int32, error: Int32)
+
+    static let liveAccept: Accept = { listening in
+        let descriptor = Darwin.accept(listening, nil, nil)
+        return (descriptor, descriptor < 0 ? errno : 0)
+    }
+
     private let path: String
     private let readTimeout: TimeInterval
     private let maxConnections: Int
     private let isAllowed: @Sendable (uid_t) -> Bool
+    private let accept: Accept
     private let handle: @Sendable (Request, Caller) async -> Response
     private let queue = DispatchQueue(label: "dev.mooring.ipc.socket")
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
 
     private var listener: DispatchSourceRead?
+    /// Resumes `listener`, suspended while out of descriptors; set only while it's suspended.
+    private var acceptRetry: DispatchWorkItem?
+    /// Whether accepting is out of descriptors and has been logged, until a connection is accepted again.
+    private var outOfDescriptors = false
+    private var episodes = 0
     private var connections: [UInt64: Connection] = [:]
     private var nextID: UInt64 = 0
 
@@ -61,12 +75,14 @@ final class SocketServer: @unchecked Sendable {
     init(
         path: String, readTimeout: TimeInterval = 5, maxConnections: Int = 16,
         isAllowed: @escaping @Sendable (uid_t) -> Bool = { $0 == getuid() },
+        accept: @escaping Accept = SocketServer.liveAccept,
         handle: @escaping @Sendable (Request, Caller) async -> Response
     ) {
         self.path = path
         self.readTimeout = readTimeout
         self.maxConnections = maxConnections
         self.isAllowed = isAllowed
+        self.accept = accept
         self.handle = handle
     }
 
@@ -90,6 +106,12 @@ final class SocketServer: @unchecked Sendable {
         queue.sync {
             guard let listener else { return }
             listener.cancel()
+            // A suspended source never runs its cancel handler, and freeing one crashes.
+            if let acceptRetry {
+                acceptRetry.cancel()
+                self.acceptRetry = nil
+                listener.resume()
+            }
             self.listener = nil
             for id in Array(connections.keys) { drop(id) }
             unlink(path)
@@ -99,12 +121,38 @@ final class SocketServer: @unchecked Sendable {
 
     // MARK: - Accepting
 
+    /// How many times accepting has run out of descriptors, each logged once however long it lasts; for tests.
+    var backOffEpisodes: Int { queue.sync { episodes } }
+
     private func acceptPending(on listening: Int32) {
         while true {
-            let descriptor = accept(listening, nil, nil)
-            guard descriptor >= 0 else { return }
+            let (descriptor, error) = accept(listening)
+            guard descriptor >= 0 else {
+                if error == EMFILE || error == ENFILE { pauseAccepting() }
+                return
+            }
+            outOfDescriptors = false
             admit(descriptor)
         }
+    }
+
+    /// Out of descriptors, the connection stays queued and the listener would fire again at once: it waits 100 ms
+    /// instead, then tries again. Logged once until a connection is accepted.
+    private func pauseAccepting() {
+        guard let listener, acceptRetry == nil else { return }
+        if !outOfDescriptors {
+            outOfDescriptors = true
+            episodes += 1
+            log.error("out of file descriptors; retrying accept every 100 ms")
+        }
+        listener.suspend()
+        // Resumes exactly once: here, or in `stop()`, which cancels this first.
+        let retry = DispatchWorkItem { [weak self] in
+            self?.acceptRetry = nil
+            listener.resume()
+        }
+        acceptRetry = retry
+        queue.asyncAfter(deadline: .now() + .milliseconds(100), execute: retry)
     }
 
     private func admit(_ descriptor: Int32) {

@@ -58,7 +58,13 @@ struct RequestHandlerWindowsTests {
             .appendingPathComponent("RequestHandlerWindowsTests-\(UUID().uuidString)", isDirectory: true)
             .appendingPathComponent("layouts.json")
         fixture.knobs.arranger = Arranger(system: fake, layoutsURL: layoutsURL, locateApp: { _ in nil },
+                                          appName: Self.appName,
                                           launchTimeout: .milliseconds(100), pollInterval: .milliseconds(10))
+    }
+
+    /// Names only Chrome, in place of the installed apps.
+    static func appName(_ bundleID: String) -> String {
+        bundleID == "com.google.Chrome" ? "Google Chrome" : bundleID
     }
 
     var approver: FakeWindowApprover { fixture.windowApprover }

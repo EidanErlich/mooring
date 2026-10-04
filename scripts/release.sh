@@ -19,7 +19,7 @@ usage() {
 Usage: scripts/release.sh [--dry-run --app PATH] [--check-git] [--publish]
   --dry-run   use --app, skip make test, the Release build and signing (the appcast signature stays empty)
   --app PATH  a built Mooring.app (required with --dry-run)
-  --check-git also check the tree and tag in a dry run (a real run always does)
+  --check-git also check the tree and local tag in a dry run (a real run always does, and asks origin too)
   --publish   print the tag, gh release, appcast and tap commands; runs none of them (not with --dry-run)
 USAGE
 }
@@ -80,6 +80,19 @@ check_signature() { # app
     fi
 }
 
+# Refuses a tag that exists on origin. Not being able to ask (offline, no origin) is a warning, not a pass.
+check_remote_tag() { # repo root, version
+    local code=0
+    # Never wait on a password or host-key prompt: a stalled check becomes the warning below.
+    GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes}" \
+        git -C "$1" ls-remote --exit-code --tags origin "refs/tags/v$2" </dev/null >/dev/null 2>&1 || code=$?
+    case "$code" in
+        0) die "Tag v$2 already exists on origin" ;;
+        2) ;;
+        *) echo "release.sh: warning: Couldn't check origin for tag v$2 (git ls-remote exited $code); look at the repo's tags yourself" >&2 ;;
+    esac
+}
+
 find_sign_update() { # repo root
     if [ -n "${SIGN_UPDATE:-}" ]; then
         [ -x "$SIGN_UPDATE" ] || die "SIGN_UPDATE is not executable: $SIGN_UPDATE"
@@ -93,10 +106,11 @@ find_sign_update() { # repo root
 }
 
 write_appcast() { # file, version, build, min system, length, signature
-    local version build minos length signature pub url
+    local version build minos length signature pub url notes
     version="$(xml_escape "$2")"; build="$(xml_escape "$3")"; minos="$(xml_escape "$4")"
     length="$(xml_escape "$5")"; signature="$(xml_escape "$6")"
     url="$(xml_escape "$REPO_URL/releases/download/v$2/Mooring-$2.zip")"
+    notes="$(xml_escape "$REPO_URL/releases/tag/v$2")"
     pub="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
     cat > "$1" <<APPCAST
 <?xml version="1.0" encoding="utf-8"?>
@@ -112,6 +126,7 @@ write_appcast() { # file, version, build, min system, length, signature
       <sparkle:version>$build</sparkle:version>
       <sparkle:shortVersionString>$version</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>$minos</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>$notes</sparkle:releaseNotesLink>
       <enclosure url="$url" sparkle:edSignature="$signature" length="$length" type="application/octet-stream"/>
     </item>
   </channel>
@@ -214,6 +229,10 @@ main() {
         [ -z "$(git -C "$root" status --porcelain)" ] || die "the working tree is not clean; commit or stash first"
         if git -C "$root" rev-parse -q --verify "refs/tags/v$tag_version" >/dev/null; then
             die "tag v$tag_version already exists"
+        fi
+        # A real run also asks origin, which can have a tag this clone hasn't fetched.
+        if [ "$dry_run" -eq 0 ]; then
+            check_remote_tag "$root" "$tag_version"
         fi
     fi
 

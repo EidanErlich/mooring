@@ -1,12 +1,16 @@
 import CoreGraphics
 import Foundation
 import MooringIPC
+import os
 import WindowKit
 
 /// Saved layouts in `layouts.json`: `{ "<name>": [WinPlacement] }`, each placement a bundle-id `app`, a screen index
 /// and a `frame` of screen fractions.
 struct LayoutStore {
     let url: URL
+    /// Names a corrupt file when it's set aside.
+    var now: () -> Date = Date.init
+    private static let log = Logger(subsystem: "dev.mooring", category: "windows")
 
     /// `~/Library/Application Support/Mooring/layouts.json`.
     static var defaultURL: URL {
@@ -14,14 +18,44 @@ struct LayoutStore {
         return support.appendingPathComponent("Mooring", isDirectory: true).appendingPathComponent("layouts.json")
     }
 
-    /// The saved layouts; none when the file doesn't exist yet.
+    /// The saved layouts; none when the file doesn't exist yet, or when it won't decode, which sets it aside.
     func load() throws -> [String: [WinPlacement]] {
         guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        let data: Data
         do {
-            return try JSONDecoder().decode([String: [WinPlacement]].self, from: Data(contentsOf: url))
+            data = try Data(contentsOf: url)
         } catch {
-            throw WireError(code: .internal, message: "Couldn't read saved layouts: \(error.localizedDescription)")
+            throw Self.unreadable(error)
         }
+        do {
+            return try JSONDecoder().decode([String: [WinPlacement]].self, from: data)
+        } catch {
+            try setAside(decodingError: error)
+            return [:]
+        }
+    }
+
+    /// Renames the file to `layouts.corrupt-<unix time>.json` in the same folder (adding `-1`, `-2`, … when that's
+    /// taken), so it no longer blocks saving and a save can't overwrite it.
+    private func setAside(decodingError: Error) throws {
+        let folder = url.deletingLastPathComponent()
+        let stem = url.deletingPathExtension().lastPathComponent + ".corrupt-\(Int(now().timeIntervalSince1970))"
+        var target = folder.appendingPathComponent(stem + ".json")
+        var suffix = 0
+        while FileManager.default.fileExists(atPath: target.path) {
+            suffix += 1
+            target = folder.appendingPathComponent("\(stem)-\(suffix).json")
+        }
+        do {
+            try FileManager.default.moveItem(at: url, to: target)
+        } catch {
+            throw Self.unreadable(decodingError)
+        }
+        Self.log.error("Saved layouts didn't decode; set aside as \(target.lastPathComponent, privacy: .public)")
+    }
+
+    private static func unreadable(_ error: Error) -> WireError {
+        WireError(code: .internal, message: "Couldn't read saved layouts: \(error.localizedDescription)")
     }
 
     func save(_ layouts: [String: [WinPlacement]]) throws {

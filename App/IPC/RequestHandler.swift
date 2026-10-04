@@ -68,8 +68,12 @@ final class RequestHandler {
     var deniedLid: [String: (created: Date, until: Date)] = [:]
     /// Leases with an ask under way, from before its first suspension until it's answered: at most one ask per lease.
     var asking: Set<String> = []
-    /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back.
-    var agentLid: [String: Date] = [:]
+    /// Leases given lid mode on an agent's behalf, with their creation time, so the settings can take it back. Saved
+    /// to `agentLidRecord` on every change, so it survives a relaunch.
+    var agentLid: [String: Date] = [:] {
+        didSet { if agentLid != oldValue { agentLidRecord.save(agentLid) } }
+    }
+    let agentLidRecord: AgentLidRecord
     /// When each caller last posted with `notify`, by name (and by `pid-<pid>` for an MCP client), for the rate limit.
     var lastNotified: [String: Date] = [:]
     private let log = Logger(subsystem: "dev.mooring", category: "ipc")
@@ -81,7 +85,7 @@ final class RequestHandler {
         approver: any LidApproving, updateSettings: @escaping @MainActor ((inout AwakeSettings) -> Void) -> Void,
         notificationStatus: @escaping @MainActor () async -> String?, poster: any NotificationPosting,
         windowsState: @escaping @MainActor () -> WindowsController.State, arranger: @escaping @MainActor () -> Arranger?,
-        windowApprover: any WindowApproving
+        windowApprover: any WindowApproving, agentLidRecord: AgentLidRecord
     ) {
         self.engine = engine
         self.settings = settings
@@ -96,6 +100,7 @@ final class RequestHandler {
         self.windowsState = windowsState
         self.arranger = arranger
         self.windowApprover = windowApprover
+        self.agentLidRecord = agentLidRecord
     }
 
     func handle(_ request: Request, from caller: Caller) async -> Response {
@@ -204,15 +209,17 @@ final class RequestHandler {
         return LidRequest(leaseID: plan.id, agent: agent, hasEnd: ends, existing: existing, existingCovers: existing?.level.lid == true)
     }
 
-    /// Creates or updates the lease `plan` describes, merging with a named lease that exists.
+    /// Creates or updates the lease `plan` describes, merging with a live named lease.
     private func grant(_ args: AcquireArgs, plan: Plan) throws -> (lease: Lease, clamped: Bool) {
         var plan = plan
         let current = now()
-        let existing = args.kind == .lease ? engine.leases.first { $0.id == plan.id } : nil
-        if let existing { plan = plan.merged(with: existing, args: args) }
+        // An expired lease not yet ticked away is replaced, not revived.
+        let existing = args.kind == .lease ? liveLease(plan.id) : nil
+        // The policy reads the request's own end, before merging: a watch kept from the lease doesn't stand in for one.
         let requested = try grantedDuration(
             for: plan, liveLeases: engine.leases.filter { $0.isLive(at: current) }.count, exists: existing != nil
         )
+        if let existing { plan = plan.merged(with: existing, args: args) }
         var granted = requested
         var renewLength = requested
         if let existing {
@@ -236,7 +243,8 @@ final class RequestHandler {
     private func turnOn(_ args: AcquireArgs, from caller: Caller) async throws -> MooringIPC.AcquireResult {
         let ttl = try positive(args.ttl)
         let level = try args.level.map(parseLevel)
-        let session = engine.menuLease ?? engine.sessionApps.first
+        // An expired session not yet ticked away counts as none.
+        let session = (engine.menuLease ?? engine.sessionApps.first).flatMap { liveLease($0.id) }
         let lease: Lease
         if ttl == nil && level == nil && args.untilOff != true, let session {
             lease = session
@@ -250,15 +258,14 @@ final class RequestHandler {
                 liveLeases: engine.leases.filter { $0.isLive(at: current) }.count, exists: engine.hasMenuSession
             )
             let defaults = settings()
-            let requested = level ?? engine.sessionLevel ?? defaults.clickLevel
+            let requested = level ?? session?.level ?? defaults.clickLevel
             // `untilOff` asks for no end, which the click duration would otherwise fill in.
             let duration = ttl ?? (args.untilOff == true ? nil : defaults.clickDuration)
-            let existing = session.flatMap { liveLease($0.id) }
             // `on` replaces the session, and may drop its end, so only an open-ended lid session already covers it.
-            let covers = existing.map { $0.level.lid && $0.expiresAt == nil && $0.watch == nil } ?? false
+            let covers = session.map { $0.level.lid && $0.expiresAt == nil && $0.watch == nil } ?? false
             let request = LidRequest(
                 leaseID: AwakeEngine.menuLeaseID, agent: agentProcess(of: caller)?.name, hasEnd: duration != nil,
-                existing: existing, existingCovers: covers
+                existing: session, existingCovers: covers
             )
             // The menu session keeps its own reason; the person is told what the agent ran.
             lease = try await approvingLid(requested.lid ? request : nil, reason: cleaned(args.reason) ?? "mooring on") { withLid in

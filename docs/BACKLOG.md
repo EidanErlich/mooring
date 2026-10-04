@@ -8,7 +8,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - SPEC.md's Esc paragraph says an interrupted turn keeps its lease "up to 15 min"; with renewals that only extend, it can last until a long Bash hold or the waiting timeout ends.
 - No tests for the installer failing at `marketplace remove` (must stop before `add`) or at `add` after a successful remove.
 - The moved-app check compares standardized paths without resolving symlinks, so a symlinked app path triggers a needless remove and reinstall.
-- **An npm-installed Claude shows as "node"** for leases the skill creates (`LeaseCommands.swift` `agentName`). Hook leases are fine, because the owner is passed explicitly.
 - **Async renew after the sync `Stop`.** An async `PostToolUse`, `PostToolBatch` or `SubagentStop` can land after the sync `Stop` for a very short final reply, which turns the 2 min grace into 15 min.
 - **"Only when asked" mid-session** also skips the `Stop` and `SessionEnd` releases, so a lease made just before the switch lives out its expiry.
 - **The internal-agent rule** relies on undocumented Claude Code behaviour (a helper agent with an `agent_id` and no `agent_type`). A typed helper agent would renew after every turn.
@@ -22,26 +21,17 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 ## Lid approvals (2c-1 leftovers)
 
 - **Agent-granted mark survives menu changes.** If an agent's `on` got lid and you then change that session from the menu, it still counts as agent-granted, so switching to Never takes its lid. Fix: a counter bumped by the menu entry points, stored with the mark.
-- **Under Never, an agent re-acquiring a person's named lease** drops that lease's lid.
 - **The `claude-` session prefix** is duplicated in `GuardrailNotifier` and `RequestHandler.sessionLeasePrefix`.
 - **No test for `AgentDetection.descends`** walking past 64 steps (the cycle case is tested).
 - **Agent detection is advisory.** An agent escapes it by detaching itself (`(mooring on --level lid &)` reparents to `launchd`), by launching `mooring` through Terminal or `osascript`, or by naming a binary `claude` to inherit "Always allow Claude Code". It guards against accidents, not a hostile agent.
 - **The first-run permission prompt runs outside the 60 s budget:** the timer starts after `authorize()` returns, so the first ask can outlast the CLI's 65 s ("didn't answer") and a later Allow still adds lid.
-- **Which leases got lid on an agent's behalf** is kept in memory, so after a relaunch Never and session lid off don't take lid back from restored named leases (session leases lose it on their next hook event).
-- **Authorized but alerts off** isn't treated as unavailable: the ask posts nothing visible and runs out its 60 s.
-- **A failed notification post** (`center.add` throws) means a timeout instead of "unavailable".
 - **An unwatched hook session under Always ask** can be falsely refused ("the request changed") when it renews during the ask, because "expiry no later" fails after a renewal.
 - **Compare the whole watch** (pid and start time) when checking that the request is unchanged, not just the pid.
-- **Under Never,** an agent's refused `on --level lid` downgrades a person's lid session.
 - **Session acquires on battery** still log a guardrail notice (the notification is skipped).
 - **The decision tests** are tables, not a full exhaustive product of every input.
 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 
-- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.6; read the bundle version.
-- The helper path written to MCP client configs comes from `Bundle.main`; running from a DMG or a translocated location writes a path that later vanishes.
-- An agent sending a raw `untilOff` acquire can make a person's timed menu session open-ended (without lid).
-- `mooring mcp` handles one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
 - The known MCP client names (`claude-ai`, `cursor-vscode`) are unverified until a real `initialize` is recorded.
 - **Small leftovers:**
   - `HandlerGateTests` may not exercise the wait path;
@@ -82,13 +72,9 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## Agent windows (3b leftovers)
 
-- **Accessory apps** (menu-bar-only apps with no Dock presence) are left out of `win list`, so they can't be arranged.
 - **A just-launched app** with no window yet reports `not_found` rather than "didn't open in time".
 - **Left and right screens** are picked by the screen's right edge, which can prefer a diagonal screen over the true neighbour.
-- **Layouts:**
-  - a layout saved with an exact title breaks when that title changes;
-  - a corrupt `layouts.json` blocks save and list instead of being set aside;
-  - the ask text for a layout shows bundle ids, not app names.
+- **Layouts:** a layout saved with an exact title breaks when that title changes.
 - **App search** scans the top level of the Applications folders only.
 - **Results:** `WinStatus` has no fallback for a status a newer app might send; the folded region-name uniqueness is untested; `partial` ignores position clamps, so an off-position window can report `ok`.
 - **Accessibility timeouts:** setting the timeout (process-wide and per element) ignores its error.
@@ -110,7 +96,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 ## Clipboard (4 leftovers)
 
 - **Shortcut text:** `KeyboardShortcuts`' own rendering of Space and the F-keys may not match `ShortcutChord`'s forms ("␣", "F11"), so the Shortcuts page could miss a conflict with Spotlight or another macOS shortcut for the clipboard chord. Check it against the keys macOS reserves.
-- **Upstream flake:** Maccy's `HistoryItemTests` (for example `testSeveralItemsCanHaveEmptyPin`) crashed once with SwiftData's "Already have an objectID registered for this persistent identifier". It didn't recur in 14 reruns; it looks like a rare flake in upstream's test, not in Mooring's code.
 - **Tests:**
   - wall-clock performance thresholds may flake on CI, and the popup performance test measures load plus `recent`, not row rendering;
   - `offMeansNoStoreNoPolling`'s real-singleton line can't fail with the fake, so its comment overstates it, and `turnOffUnregistersHotkey`'s name overstates what it checks;
@@ -138,14 +123,8 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Uninstall:** stopping the socket server as step 0 would be tidier, so an agent can't take a new lease while the uninstall runs. It isn't needed for safety: `LidController.apply` refuses to disable sleep once shutdown has begun, and assertions die at quit.
 - **Uninstall scope:** a Claude plugin installed from GitHub (`mooring@mooring`) is left installed, by design. The in-app CLI step removes only a link to this app's own bundled `mooring`, while `make uninstall` removes any link under `/Applications/Mooring.app/`.
 - **Uninstall tests:** `make uninstall`'s refusal guard in `scripts/test-make-uninstall.sh` can't fire (isolation comes from the overrides, which is sound); the test log shows "Unable to find service status" noise that predates stage 5.
-- **Updater:**
-  - the misleading `#require` message in `ClaudePluginFilesTests`;
-  - the appcast has no `<sparkle:releaseNotesLink>`, so the update alert shows no notes; it could point at the GitHub release page;
-  - WindowKit's `appBuild` (reads `CFBundleVersion` as an Int) is now always nil, and unused.
-- **Release script:**
-  - the tag check is local only, so a tag that exists only on the remote isn't caught;
-  - `make release` passes no flags (no `ARGS`); use `bash scripts/release.sh --publish` directly;
-  - a real (non-dry) run was never exercised end to end by an agent: it needs the owner's signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`). The key and signature checks are tested with fixtures and a shimmed `make`.
+- **Updater:** the misleading `#require` message in `ClaudePluginFilesTests`.
+- **Release script:** a real (non-dry) run was never exercised end to end by an agent: it needs the owner's signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`). The key and signature checks, and the check of `origin`'s tags, are tested with fixtures and shimmed `make` and `git`.
 - **Owner checks, not yet done:**
   - Sparkle keys (and the offline backup), `bash scripts/release.sh --publish` and a look at the `dist/` it built (`docs/RELEASING.md`);
   - with the owner's identity, the embedded Sparkle.framework still passes `codesign --verify --deep --strict` after Xcode re-signs it;
@@ -158,38 +137,26 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 - **Re-acquire edge cases (from the 2b-prep fixes):**
   - re-acquiring a lease whose watched process just died fails with "Process N isn't running", even when only `--ttl` was given;
-  - re-acquiring an expired, not-yet-ticked lease silently revives its old watch, level and reason;
-  - a raw wire client can re-acquire a watched lease without `ttl` or `watchPid`, because the merged watch satisfies the policy check (the CLI blocks this);
   - a pre-`ttl` lease re-acquired with `--ttl 60` gets a 60 s renew length.
-- **Connect failures from a full backlog** (`ECONNREFUSED` or `EAGAIN` at the 16-connection cap) still say "isn't running" rather than "didn't answer".
 - **Small code and test leftovers:**
   - `Plan.reasonGiven` duplicates the handler's `cleaned(_:)`;
   - the `blocked` socket test returns early as root instead of using `.enabled(if:)`;
   - there's no test for `anchor -- cmd --json` keeping anchor's own errors human, or for the ttl after a longer re-acquire.
 
-- **`on` can reply with an expired session.** With no flags, it can reply with a just-expired, not-yet-ticked menu lease, a window of up to 5 s. Filter with `isLive(at:)`.
-- **SPEC 2.2's exit-2 wording** should say "held but paused by a guardrail", not "refused".
-- **`doctor`:**
-  - its "mismatch" fix text is wrong in one direction, and a transient mismatch can show during a helper call;
-  - the Helper check fails for people who never use lid mode.
-- **Settings and install:**
-  - A regular file at `~/.local/bin/mooring` reads "Points to <own path>" in Settings; say "Not a link".
+- **`doctor`:** a transient lid-sleep mismatch can show during a helper call.
 - **"End my session after the Mac sleeps"** now also ends a CLI `on`, which follows from the one-switch decision. Note it in the release notes.
 - **A Terminal-started menu session** shows the reason "Turned on from the menu bar".
 - **`anchor`:**
   - Hardening: a microsecond gap between spawn and forwarding (pre-install `SIG_IGN` plus `POSIX_SPAWN_SETSIGDEF`), and a pid-reuse window in `wait()`.
   - SIGQUIT isn't handled.
 - **Robustness:**
-  - The launch deadline uses the wall clock; use `ContinuousClock`.
   - Unknown client errors drop the underlying error.
-  - `printJSON` returns 0 after an encode failure.
 - **Display:**
   - `p_comm` truncates process names to 16 characters.
   - `status` columns count characters, not display width.
 - **Socket server:**
   - `withDeadline`'s timer lives the full second on success.
   - There's no total per-connection deadline after the read.
-  - `accept` spins on `EMFILE`.
   - There's no `deinit` guard if the server is released without `stop()`.
 - **Wire format:**
   - `Request` can pair a mismatched op and args.
@@ -201,7 +168,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - A renew no-op looks like a real renewal.
   - Reserved ids are string literals mirroring the engine constants; add a drift test.
   - Tests use magic numbers instead of `maxLeaseLength` / `maxNamedLease`.
-- **`scripts/cli-smoke.sh`** has no cleanup trap.
 - **`CLI/main.swift`'s comment** says "flushes"; the writes are unbuffered.
 - **Test gaps:**
   - shorten to the past followed by a tick;
@@ -219,7 +185,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Highlight:** `highlightedID` is shared across submenus, so a submenu closing can leave a stale highlight or wipe it.
 - **Keyboard:** arrow keys stop on switch and lease rows, which draw no highlight. Return on a hosted row does nothing.
 - **Width:** a long "While … run" title can widen the menu past 300 pt, and Awake uses three different text insets.
-- **VoiceOver:** hosted menu items have empty titles, so VoiceOver may read them as blank.
 - **Status header:** it doesn't shrink back when the countdown shortens the line.
 - **Code:**
   - `show(_:)` has no re-entrancy guard;
@@ -230,3 +195,29 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - lease-row sync has an unreachable "move" branch, and builds and strips "lease." strings.
 - **Tests:** no expiry-while-open test, and the 300 pt check skips the header.
 - **Docs:** the native-menu design spec header still says "awaiting owner review".
+
+## Stage 6 leftovers
+
+Found while hardening v0.1 and deferred. Still deferred from before, as the stage 6 spec's "Not in this stage" says: WindowKit's `appBuild` (reads `CFBundleVersion` as an Int; now always nil and unused, but vendored, so a re-fetch restores it), accessory apps (menu-bar-only, no Dock presence) left out of `win list` so they can't be arranged, and `mooring mcp` handling one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
+
+- **Lid approvals:**
+  - an agent's `on --level system|display`, or an `anchor` without lid, over a person's lid lease still replaces the level (it isn't a refused or asked path);
+  - a deny or timeout after asking about a person's lease gives no "unchanged" hint, and policy errors come after a person-lid refusal;
+  - `AwakeEngine.acquire` keeps `createdAt` when it replaces an expired, not-yet-ticked lease; give it a fresh one.
+- **CLI:**
+  - `--no-launch` doesn't consult the app-running check, so a busy app reads "isn't running" there;
+  - `node --require <file>` before the script isn't recognised as Claude Code;
+  - each process lookup allocates a 1 MB `KERN_PROCARGS2` buffer;
+  - no MCP test that `busy` isn't reported as lost.
+- **Settings:**
+  - Copy config isn't gated on a transient bundle;
+  - an install on an external volume (`/Volumes/…`) reads as transient;
+  - `.notALink` shows "Reinstall" (disabled) for something never installed;
+  - `ensureCLILinked` has no transient guard of its own (only the install path reaches it).
+- **Dropdown and socket:**
+  - hosted rows' countdown titles update per sync, not per second;
+  - VoiceOver may read switch rows twice (an owner check);
+  - a pre-existing Sendable warning at `DropdownMenu.swift:131`;
+  - `SocketServer.stop()` doesn't reset the accept back-off's episode flag.
+- **Notify:** the rate limit counts a post that wasn't shown.
+- **Small leftovers:** `CLIInstaller.install`'s doc comment still says "regular file" (it also refuses a folder); no test decodes an older status without `agentSessionLid`; `SocketServer` tests don't assert stop-while-suspended explicitly; an image's data is read on the main thread before text recognition (a file read for a Universal Clipboard image).

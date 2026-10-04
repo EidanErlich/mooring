@@ -44,7 +44,9 @@ fresh_repo() {
     echo "$repo"
 }
 
-# Shims that fail loudly (and leave a trace) when release.sh would publish. Others pass through to git.
+# Shims that fail loudly (and leave a trace) when release.sh would publish. `git ls-remote` never reaches the
+# network: it logs its arguments to ls-remote.log and exits with the code in ls-remote.exit (default 2, no such
+# tag). Other git commands pass through.
 shims() {
     local bin="$WORK/$1/bin"
     mkdir -p "$bin"
@@ -56,6 +58,12 @@ for arg in "\$@"; do
         echo "git \$*" >> "$WORK/$1/forbidden.log"
         echo "git push was called" >&2
         exit 97
+    fi
+    if [ "\$arg" = ls-remote ]; then
+        echo "\$*" >> "$WORK/$1/ls-remote.log"
+        code=2
+        [ -f "$WORK/$1/ls-remote.exit" ] && code="\$(cat "$WORK/$1/ls-remote.exit")"
+        exit "\$code"
     fi
 done
 exec "$REAL_GIT" "\$@"
@@ -104,6 +112,8 @@ check "appcast has the zip length" "$(grep -q "length=\"$size\"" "$dist/appcast.
 check "appcast has the release URL" "$(grep -q 'url="https://github.com/EidanErlich/mooring/releases/download/v9.9.9/Mooring-9.9.9.zip"' "$dist/appcast.xml"; echo $?)"
 check "appcast has the minimum system version" "$(grep -q '<sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>' "$dist/appcast.xml"; echo $?)"
 check "dry-run appcast has an empty signature" "$(grep -q 'sparkle:edSignature=""' "$dist/appcast.xml"; echo $?)"
+check "appcast links the release notes" "$(grep -q '<sparkle:releaseNotesLink>https://github.com/EidanErlich/mooring/releases/tag/v9.9.9</sparkle:releaseNotesLink>' "$dist/appcast.xml"; echo $?)"
+check "dry run doesn't ask origin for the tag" "$([ ! -e "$WORK/happy/ls-remote.log" ]; echo $?)"
 
 sha="$(shasum -a 256 "$zip" | awk '{print $1}')"
 cask="$dist/homebrew/mooring.rb"
@@ -246,6 +256,26 @@ codesign -s - "$fixture" 2>/dev/null
 (cd "$repo" && PATH="$WORK/real/bin:$PATH" DERIVED="$WORK/real/derived" SIGN_UPDATE="$WORK/real/bin/sign_update" bash "$RELEASE") >"$WORK/real/out" 2>&1
 check "real run with an ad-hoc app refused before zipping" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/real/out" && [ ! -e "$repo/dist" ]; echo $?)"
 check "nothing published (real runs)" "$([ ! -e "$WORK/real/forbidden.log" ]; echo $?)"
+check "real run asks origin for the tag" "$(grep -q ' ls-remote --exit-code --tags origin refs/tags/v9.9.9$' "$WORK/real/ls-remote.log"; echo $?)"
+
+# --- a tag on origin is refused; a failed check of origin warns and goes on -------------------------
+# `make` here only logs that it ran: a refused run must stop before it.
+repo="$(fresh_repo remote)"; shims remote >/dev/null
+printf '#!/bin/sh\necho "make $*" >> "%s/make.log"\nexit 0\n' "$WORK/remote" > "$WORK/remote/bin/make"
+chmod +x "$WORK/remote/bin/make"
+echo 0 > "$WORK/remote/ls-remote.exit"
+(cd "$repo" && PATH="$WORK/remote/bin:$PATH" DERIVED="$WORK/remote/derived" bash "$RELEASE") >"$WORK/remote/out" 2>&1
+check "tag on origin refused" "$([ $? -ne 0 ] && grep -q 'Tag v9.9.9 already exists on origin' "$WORK/remote/out"; echo $?)"
+check "tag on origin: refused before testing or building" "$([ ! -e "$WORK/remote/make.log" ] && [ ! -e "$repo/dist" ]; echo $?)"
+echo 128 > "$WORK/remote/ls-remote.exit"
+(cd "$repo" && PATH="$WORK/remote/bin:$PATH" DERIVED="$WORK/remote/derived" bash "$RELEASE") >"$WORK/remote/out" 2>&1
+check "unreachable origin warns" "$(grep -q "Couldn't check origin for tag v9.9.9" "$WORK/remote/out"; echo $?)"
+check "unreachable origin: the run goes on" "$(grep -q '^== make test$' "$WORK/remote/out" && grep -q 'test' "$WORK/remote/make.log"; echo $?)"
+check "nothing published (origin checks)" "$([ ! -e "$WORK/remote/forbidden.log" ]; echo $?)"
+
+# --- make release passes ARGS through -------------------------------------------------------------
+make -n -C "$ROOT" release ARGS='--dry-run --app /tmp/X.app' >"$WORK/remote/make-n" 2>&1
+check "make release passes ARGS" "$(grep -qx 'bash scripts/release.sh --dry-run --app /tmp/X.app' "$WORK/remote/make-n"; echo $?)"
 
 # --- the escaping helpers -------------------------------------------------------------------------
 check "xml_escape" "$([ "$(xml_escape 'a&b<c>"d'"'"'e')" = 'a&amp;b&lt;c&gt;&quot;d&apos;e' ]; echo $?)"

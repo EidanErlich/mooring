@@ -7,12 +7,15 @@ private func proc(_ pid: Int32, _ parent: Int32, _ name: String) -> ProcessEntry
 
 private struct FakeTable: ProcessTable {
     let entries: [Int32: ProcessEntry]
+    let commandLines: [Int32: [String]]
 
-    init(_ rows: [ProcessEntry]) {
+    init(_ rows: [ProcessEntry], arguments: [Int32: [String]] = [:]) {
         entries = Dictionary(uniqueKeysWithValues: rows.map { ($0.pid, $0) })
+        commandLines = arguments
     }
 
     func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
+    func arguments(_ pid: Int32) -> [String]? { commandLines[pid] }
 }
 
 @Test func zshThenClaudeIsClaudeCode() {
@@ -39,6 +42,52 @@ private struct FakeTable: ProcessTable {
 @Test func claudeCodeCLIIsAnAgent() {
     let table = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "claude")])
     #expect(AgentDetection.agent(for: 100, in: table) == "Claude Code")
+}
+
+@Test func npmClaudeWithProcessTitleIsAnAgent() {
+    // Claude Code sets `process.title = "claude"`, which overwrites argv in place: node's script is gone.
+    let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]
+    for titled in [["claude", "", ""], ["claude"], ["claude  ", "", ""], ["claude\0\0", ""]] {
+        let table = FakeTable(rows, arguments: [90: titled])
+        #expect(AgentDetection.agent(for: 100, in: table) == "Claude Code")
+        #expect(AgentDetection.programName(of: proc(90, 1, "node"), in: table) == "claude")
+    }
+    // Only the exact title counts, and only for node.
+    for other in [["claude-helper"], ["claude daemon", ""], ["Claude", ""], ["claudex"], ["", "claude"]] {
+        #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: other])) == nil)
+    }
+    let python = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "python3")], arguments: [90: ["claude", "", ""]])
+    #expect(AgentDetection.agent(for: 100, in: python) == nil)
+}
+
+@Test func npmClaudeIsAnAgent() {
+    // Claude Code installed with npm runs as `node` with its script as the first argument.
+    let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]
+    let npmLink = FakeTable(rows, arguments: [90: ["node", "/opt/homebrew/bin/claude", "--resume"]])
+    #expect(AgentDetection.agentProcess(for: 100, in: npmLink)?.name == "Claude Code")
+    #expect(AgentDetection.agentProcess(for: 100, in: npmLink)?.pid == 90)
+    let package = FakeTable(rows, arguments: [90: ["node", "/usr/local/lib/node_modules/@anthropic-ai/claude-code/cli.js"]])
+    #expect(AgentDetection.agent(for: 100, in: package) == "Claude Code")
+    // Any other node script, a node whose arguments can't be read and a script merely named like Claude are people.
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node", "/usr/local/bin/vite"]])) == nil)
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows)) == nil)
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node"]])) == nil)
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node", "/srv/claude-notes/app.js"]])) == nil)
+    // Only node's script counts: another program run with a Claude path is still itself.
+    let python = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "python3")], arguments: [90: ["python3", "/usr/local/bin/claude"]])
+    #expect(AgentDetection.agent(for: 100, in: python) == nil)
+}
+
+@Test func npmClaudeBehindNodeOptionsIsAnAgent() {
+    // Options to node itself come before the script.
+    let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]
+    let options = ["node", "--max-old-space-size=4096", "--no-warnings", "/opt/homebrew/bin/claude", "-p", "hi"]
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: options])) == "Claude Code")
+    // Only options, no script: a person.
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: ["node", "--no-warnings"]])) == nil)
+    // A script after the options that isn't Claude's: a person, even with a Claude path later on its command line.
+    let other = ["node", "--no-warnings", "/usr/local/bin/vite", "/usr/local/bin/claude"]
+    #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: other])) == nil)
 }
 
 @Test func codexDesktopIsAPerson() {
