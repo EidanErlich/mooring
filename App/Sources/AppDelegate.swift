@@ -91,6 +91,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let windows = WindowsController.live()
         windows.launch()
         self.windows = windows
+        SettingsWindowController.shared.windows = windows
 
         let statusItem = StatusItemController(engine: engine, windows: windows)
         let dropdown = DropdownController(

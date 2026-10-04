@@ -120,20 +120,28 @@ private struct Harness {
     var running: Bool { made.runtimes.last?.isRunning == true }
 }
 
+extension WindowKitGlobalStateTests {
+    /// Serialized with the Settings tests that build Loop's pages, which create Loop's singletons.
+    @Suite
+    @MainActor
+    struct WindowsControllerOffTests {
+        /// The real singleton counter catches any of Loop's managers created by launching.
+        @Test func offMeansOff() {
+            let before = WindowKit.instantiatedSingletons
+            let harness = Harness(enabled: false, trusted: true)
+            harness.controller.launch()
+            harness.clock.advance(600)
+            #expect(harness.trust.calls == 0)
+            #expect(harness.runtimes.isEmpty)
+            #expect(WindowKit.instantiatedSingletons == before)
+            #expect(harness.clock.interval == nil)
+            #expect(harness.controller.state == .off)
+        }
+    }
+}
+
 @MainActor
 struct WindowsControllerTests {
-    /// The real singleton counter catches any of Loop's managers created by linking or launching.
-    @Test func offMeansOff() {
-        let harness = Harness(enabled: false, trusted: true)
-        harness.controller.launch()
-        harness.clock.advance(600)
-        #expect(harness.trust.calls == 0)
-        #expect(harness.runtimes.isEmpty)
-        #expect(WindowKit.instantiatedSingletons == 0)
-        #expect(harness.clock.interval == nil)
-        #expect(harness.controller.state == .off)
-    }
-
     @Test func launchEnabledAndTrustedStarts() {
         let harness = Harness(enabled: true, trusted: true)
         harness.controller.launch()
