@@ -56,4 +56,19 @@ extension RequestHandlerWindowsTests {
         #expect(frame(WindowFixture.slackMain) == CGRect(x: 0, y: 25, width: 1440, height: 437.5))
         #expect(approver.calls.first?.body == "Layout “wide”: slack → 100% × 50% at 0%, 0% on screen 0\n\(Self.openLine)")
     }
+
+    /// A layout's apps are saved by bundle id; the ask names them, keeping an id it can't name.
+    @Test func layoutAskNamesApps() async throws {
+        mode(.askFirst)
+        approver.answers = [.deny]
+        try writeLayouts(["coding": [WinPlacement(app: "com.google.Chrome", region: "right-half"),
+                                     WinPlacement(app: "com.example.gone", region: "left-half")]])
+        _ = await send(.winLayout(WinLayoutArgs(action: "apply", name: "coding")))
+        #expect(approver.calls.map(\.body) == [
+            "Layout “coding”: Google Chrome → right half · com.example.gone → left half\n\(Self.openLine)"
+        ])
+        // The live names come from the installed app, without ".app".
+        #expect(AppLocator.displayName(for: "com.apple.finder") == "Finder")
+        #expect(AppLocator.displayName(for: "com.example.gone") == "com.example.gone")
+    }
 }

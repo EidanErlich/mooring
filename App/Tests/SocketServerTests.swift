@@ -207,6 +207,31 @@ struct SocketServerTests {
         }
     }
 
+    /// Out of descriptors, the pending connection stays queued: the listener waits 100 ms instead of spinning on it,
+    /// then tries again. Stopping while it waits is safe.
+    @Test func acceptBacksOffOnEMFILE() async throws {
+        try await withSocketPath { path in
+            let calls = OSAllocatedUnfairLock(initialState: 0)
+            let server = SocketServer(path: path, accept: { _ in
+                calls.withLock { $0 += 1 }
+                return (descriptor: -1, error: EMFILE)
+            }, handle: Self.released)
+            try server.start()
+            defer { server.stop() }
+            let client = try RawClient.connect(path)
+            defer { Darwin.close(client) }
+
+            try await Task.sleep(for: .milliseconds(50))
+            let early = calls.withLock { $0 }
+            #expect(early >= 1 && early < 5)
+            let deadline = Date().addingTimeInterval(2)
+            while calls.withLock({ $0 }) < early + 1, Date() < deadline {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            #expect(calls.withLock { $0 } > early)
+        }
+    }
+
     @Test func stopRemovesTheSocket() throws {
         try withSocketPath { path in
             let server = SocketServer(path: path, handle: Self.released)

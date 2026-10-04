@@ -59,6 +59,14 @@ enum AppLocator {
         return nil
     }
 
+    /// The installed app's name, as Finder shows it but without ".app", or `bundleID` itself when no app has it.
+    static func displayName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        let name = FileManager.default.displayName(atPath: url.path)
+        let bare = name.hasSuffix(".app") ? String(name.dropLast(".app".count)) : name
+        return bare.isEmpty ? bundleID : bare
+    }
+
     private static var searchDirectories: [URL] {
         let home = FileManager.default.homeDirectoryForCurrentUser
         return ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities"]
