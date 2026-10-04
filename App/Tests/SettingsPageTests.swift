@@ -11,11 +11,11 @@ struct SettingsPageTests {
 
     @Test func pagesAndGroupsMatchSpec() {
         #expect(SettingsPage.allCases.map(\.title) == [
-            "General", "Keep Awake", "Lid & Battery", "Agents",
+            "General", "Shortcuts", "Keep Awake", "Lid & Battery", "Agents",
             "Behavior", "Keybinds", "Gestures", "Radial Menu", "Preview", "Excluded Apps", "Advanced"
         ])
         #expect(SettingsPage.allCases.map(\.group) == [
-            "General", "Awake", "Awake", "Awake",
+            "General", "General", "Awake", "Awake", "Awake",
             "Windows", "Windows", "Windows", "Windows", "Windows", "Windows", "Mooring"
         ])
     }

@@ -1,10 +1,9 @@
 import AwakeKit
 import SwiftUI
 
-/// The Settings sidebar (docs/SPEC.md, "Settings window"). Clipboard and
-/// Shortcuts pages arrive with their stages.
+/// The Settings sidebar (docs/SPEC.md, "Settings window"). The Clipboard page arrives with its stage.
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, keepAwake, lidAndBattery, agents
+    case general, shortcuts, keepAwake, lidAndBattery, agents
     case windowsBehavior, windowsKeybinds, windowsGestures, windowsRadialMenu, windowsPreview, windowsExcludedApps
     case advanced
 
@@ -13,6 +12,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: "General"
+        case .shortcuts: "Shortcuts"
         case .keepAwake: "Keep Awake"
         case .lidAndBattery: "Lid & Battery"
         case .agents: "Agents"
@@ -28,7 +28,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
     var group: String {
         switch self {
-        case .general: "General"
+        case .general, .shortcuts: "General"
         case .keepAwake, .lidAndBattery, .agents: "Awake"
         case .windowsBehavior, .windowsKeybinds, .windowsGestures, .windowsRadialMenu, .windowsPreview,
              .windowsExcludedApps: "Windows"
@@ -39,6 +39,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .general: "gearshape"
+        case .shortcuts: "command"
         case .keepAwake: "sun.max"
         case .lidAndBattery: "laptopcomputer"
         case .agents: "sparkles"
@@ -109,6 +110,7 @@ struct SettingsView: View {
             let page = navigation.selection ?? .general
             switch page {
             case .general: GeneralSettingsPage()
+            case .shortcuts: ShortcutsSettingsPage(windows: windows)
             case .keepAwake: KeepAwakeSettingsPage()
             case .lidAndBattery: LidBatterySettingsPage()
             case .agents: AgentsSettingsPage()
