@@ -242,3 +242,9 @@ Mooring-written:
 - `Sources/ClipKit/ClipKit.swift`: `ClipItem.isImage` (the decorator's `hasImage`), so the dropdown can name untitled image rows; internal `setStoreLocation(_:)`, the guard above. Tested in `LifecycleTests.recentMarksImages`, `PopupTests.pasteHintRefreshesWhenPanelBecomesKey` and `StoreTests.storeLocationIsSetOnlyBeforeItOpens` (an exit test: without the guard it stops on the assertion).
 
 - `Sources/ClipKit/ClipKit.swift`: `discardLoadedHistory()` drops the history a stopped ClipKit loaded earlier in the process (Maccy's `History.clearAll()`), for Settings' "Delete Clipboard History…"; it does nothing while one runs or if none ever started, so it creates no singleton. Tested in `ClearTests` and `IsolationTests.noSingletonsBeforeStart`.
+
+#### Stage 6: v0.1 hardening
+
+Vendored edit:
+
+- `Maccy/Models/HistoryItem.swift`: an image's text recognition no longer touches the item off the main thread. In Maccy, `generateTitle()` started a `Task` that read `image` and set `title` from Vision's completion handler. `HistoryItem` isn't actor-isolated here, so that task ran on the global executor, and its write raced the main context's saves: SwiftData stopped with "Already have an objectID registered for this persistent identifier", which crashed the ClipKit tests now and then. Now `imageData` is read on the caller's thread, a detached task decodes the image and runs the same `.fast` request, and the title is set on the main actor. As before, a failed request leaves the title alone. Tested in `TextRecognitionTests.imageTitleIsSetOnTheMainThread`.
