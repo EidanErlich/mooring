@@ -23,6 +23,9 @@ public struct WinFrame: Codable, Sendable, Equatable {
 /// Where one app's window goes: a `region` (a WindowKit action name) or a `frame` (fractions), never both.
 /// `screen` is `main`, `left`, `right` or a 0-based index; `title` picks a window by a substring of its title.
 public struct WinPlacement: Codable, Sendable, Equatable {
+    /// The `app` that means the frontmost app other than Mooring, which `win do` sends when no app is given.
+    public static let frontmostApp = "@frontmost"
+
     public var app: String
     public var region: String?
     public var frame: WinFrame?

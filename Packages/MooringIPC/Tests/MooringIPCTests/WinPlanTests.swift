@@ -79,4 +79,11 @@ import Testing
         let plan = WinPlan(placements: [WinPlacement(app: " chrome ", region: " left-half\n")])
         #expect(try plan.validated().placements == [WinPlacement(app: "chrome", region: "left-half")])
     }
+
+    /// `win do` without `--app` sends this, and the app resolves it to the frontmost app other than Mooring.
+    @Test func acceptsFrontmost() throws {
+        #expect(WinPlacement.frontmostApp == "@frontmost")
+        let plan = WinPlan(placements: [WinPlacement(app: WinPlacement.frontmostApp, region: "left-half")])
+        #expect(try plan.validated().placements.first?.app == "@frontmost")
+    }
 }

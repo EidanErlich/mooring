@@ -63,12 +63,16 @@ public struct WSScreen: Sendable, Equatable {
 @MainActor
 public protocol WindowSystem {
     func apps() -> [WSApp]
+    /// The pids of apps with windows on screen, front to back.
+    func appsFrontToBack() -> [pid_t]
     func screens() -> [WSScreen]
     /// Every region name `apply(region:to:on:)` accepts.
     func regions() -> [String]
     func frame(of window: WSWindow) -> CGRect?
     func move(_ window: WSWindow, to frame: CGRect) async -> CGRect?
     func apply(region: String, to window: WSWindow, on screen: WSScreen) async -> CGRect?
+    /// The frame `apply(region:to:on:)` aims for, without moving anything; nil when it can't say ahead (screen switches).
+    func target(region: String, for window: WSWindow, on screen: WSScreen) async -> CGRect?
     /// Unminimizes the window and unhides its app. Returns whether it's no longer minimized.
     func restore(_ window: WSWindow) async -> Bool
     /// Opens the app. Returns whether it launched (or was already running).
@@ -123,6 +127,23 @@ public final class LiveWindowSystem: WindowSystem {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    /// The owners of normal-layer windows in `CGWindowListCopyWindowInfo` order (front to back), each once.
+    public func appsFrontToBack() -> [pid_t] {
+        guard isRunning else { return [] }
+        let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+            as? [[String: AnyObject]] ?? []
+        var seen = Set<pid_t>()
+        return list.compactMap { info -> pid_t? in
+            guard (info[kCGWindowLayer as String] as? Int) == 0,
+                  let pid = info[kCGWindowOwnerPID as String] as? pid_t,
+                  seen.insert(pid).inserted
+            else {
+                return nil
+            }
+            return pid
+        }
+    }
+
     /// `NSScreen.screens` in order (the primary first), framed with Loop's `displayBounds` and `cgSafeScreenFrame`.
     public func screens() -> [WSScreen] {
         guard isRunning else { return [] }
@@ -166,6 +187,22 @@ public final class LiveWindowSystem: WindowSystem {
             return nil
         }
         return target.frame
+    }
+
+    /// The padded target frame of a `ResizeContext` for the region, as `WindowEngine.performResize` computes it.
+    public func target(region: String, for window: WSWindow, on screen: WSScreen) async -> CGRect? {
+        guard isRunning,
+              let direction = WindowRegion.direction(named: region, among: WindowRegion.offered),
+              !direction.willChangeScreen,
+              let nsScreen = Self.nsScreen(for: screen)
+        else {
+            return nil
+        }
+        let context = ResizeContext(window: loopWindow(for: window), screen: nsScreen)
+        context.setAction(to: WindowAction(direction), parent: nil)
+        await context.refreshResolvedState()
+        let frame = context.getTargetFrame().padded
+        return frame.width > 0 && frame.height > 0 ? frame : nil
     }
 
     /// Loop's `Window.setHidden(false)` and `Window.minimized`.
