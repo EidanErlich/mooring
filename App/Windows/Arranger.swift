@@ -225,7 +225,8 @@ extension Arranger {
         }
     }
 
-    /// The window whose title contains `title` (any case), or with no title the app's frontmost window.
+    /// The window titled exactly `title` (any case), else the one whose title contains it; two or more at the tier that
+    /// decides is ambiguous. With no title, the app's frontmost window.
     private static func window(for placement: WinPlacement, in app: WSApp) throws -> WSWindow {
         let label = placement.app
         guard let title = placement.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
@@ -234,7 +235,8 @@ extension Arranger {
             }
             return frontmost
         }
-        let matches = app.windows.filter { $0.title.range(of: title, options: .caseInsensitive) != nil }
+        let exact = app.windows.filter { $0.title.caseInsensitiveCompare(title) == .orderedSame }
+        let matches = exact.isEmpty ? app.windows.filter { $0.title.range(of: title, options: .caseInsensitive) != nil } : exact
         guard matches.count < 2 else {
             throw Refusal(result: .init(app: label, status: .ambiguous, candidates: matches.map(\.title)))
         }

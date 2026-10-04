@@ -46,7 +46,8 @@ extension MCPTools {
                             ]),
                             "title": .object([
                                 "type": .string("string"),
-                                "description": .string("Picks the window whose title contains this text.")
+                                "description": .string("Picks the window with this title (any case), or else the one whose "
+                                    + "title contains it.")
                             ])
                         ])
                     ])
