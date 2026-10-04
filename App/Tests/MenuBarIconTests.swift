@@ -9,7 +9,7 @@ private let everyState: [MenuBarState] = [
     .awake(lid: false, kind: .task), .awake(lid: true, kind: .task),
     .awake(lid: false, kind: .timed(4320)), .awake(lid: true, kind: .timed(4320)),
     .awake(lid: false, kind: .timed(nil)), .awake(lid: true, kind: .timed(nil)),
-    .attention(.suspension(.lowBatteryLid)), .attention(.helperNeedsApproval)
+    .attention(.suspension(.lowBatteryLid)), .attention(.helperNeedsApproval), .attention(.windowsNeedAccessibility)
 ]
 
 private func width(_ state: MenuBarState) -> CGFloat { MenuBarIcon.image(for: state).size.width }

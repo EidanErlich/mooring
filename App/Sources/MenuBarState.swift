@@ -12,9 +12,11 @@ enum AwakeKind: Equatable {
 enum Attention: Equatable {
     case suspension(Suspension)
     case helperNeedsApproval
+    case windowsNeedAccessibility
 }
 
 /// Everything the menu-bar icon shows. Precedence: attention, then awake, then off.
+/// Attention reasons: suspensions, then the helper, then Windows.
 enum MenuBarState: Equatable {
     case off
     case awake(lid: Bool, kind: AwakeKind)
@@ -22,16 +24,20 @@ enum MenuBarState: Equatable {
 
     private static let attentionPriority: [Suspension] = [.lowBatteryAll, .lowBatteryLid, .thermal, .lidNeedsAC]
 
-    // The spec fixes these six inputs; bundling them only to satisfy the linter would hide them.
+    // The spec fixes these inputs; bundling them only to satisfy the linter would hide them.
     // swiftlint:disable:next function_parameter_count
     static func from(
-        leases: [Lease], state: TargetState, wantsLid: Bool, helperEnabled: Bool, showTimeLeft: Bool, now: Date
+        leases: [Lease], state: TargetState, wantsLid: Bool, helperEnabled: Bool, windowsNeedAccessibility: Bool,
+        showTimeLeft: Bool, now: Date
     ) -> MenuBarState {
         if let suspension = attentionPriority.first(where: state.suspensions.contains) {
             return .attention(.suspension(suspension))
         }
         if wantsLid && !helperEnabled {
             return .attention(.helperNeedsApproval)
+        }
+        if windowsNeedAccessibility {
+            return .attention(.windowsNeedAccessibility)
         }
         guard state.systemAssertion else { return .off }
         return .awake(lid: state.lidSleepDisabled, kind: kind(of: LeaseText.endingLast(leases, now: now),
@@ -75,6 +81,8 @@ enum MenuBarText {
             return "Mooring needs attention: lid mode paused, \(reason(suspension))"
         case .attention(.helperNeedsApproval):
             return "Mooring needs attention: helper needs approval"
+        case .attention(.windowsNeedAccessibility):
+            return "Mooring needs attention: Windows needs Accessibility"
         }
     }
 

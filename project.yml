@@ -13,7 +13,7 @@ packages:
   MooringIPC:
     path: Packages/MooringIPC
   WindowKit:
-    path: Packages/WindowKit   # vendored Loop; listed only, linked into the app in a later task
+    path: Packages/WindowKit   # vendored Loop
 configFiles:
   Debug: Config/Shared.xcconfig
   Release: Config/Shared.xcconfig
@@ -31,6 +31,7 @@ targets:
       - App/IPC
       - App/Links
       - App/Intents
+      - App/Windows
       - path: Helper/dev.mooring.helper.plist
         buildPhase:
           copyFiles:
@@ -53,6 +54,7 @@ targets:
       - package: AwakeKit
         product: AwaykeMonitors
       - package: MooringIPC
+      - package: WindowKit
     postCompileScripts:
       - name: Bundle Claude Code plugin
         script: '"$SRCROOT/scripts/bundle-claude-plugin.sh" "$SRCROOT/Integrations/claude-code-plugin" "$SRCROOT/Integrations/app-marketplace.json" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources/ClaudePlugin"'

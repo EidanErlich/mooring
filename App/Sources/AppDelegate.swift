@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationReplied = false
     private var statusItemController: StatusItemController?
     private var dropdown: DropdownController?
+    private var windows: WindowsController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
@@ -86,7 +87,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { engine.systemDidWake() }
         }
 
-        let statusItem = StatusItemController(engine: engine)
+        // Off by default; starts only if enabled and trusted, and never asks for Accessibility here.
+        let windows = WindowsController.live()
+        windows.launch()
+        self.windows = windows
+
+        let statusItem = StatusItemController(engine: engine, windows: windows)
         let dropdown = DropdownController(engine: engine, approvals: approvals, openSettings: { SettingsWindowController.shared.show() })
         statusItem.onOpenMenu = { [weak statusItem] in
             statusItem.map(dropdown.open(from:))

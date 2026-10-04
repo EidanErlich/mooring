@@ -13,8 +13,12 @@ PACKAGES    := Packages/AwakeKit Packages/MooringIPC Packages/WindowKit
 XCODEBUILD_FLAGS ?=
 
 # -skipMacroValidation: WindowKit's Scribe dependency uses Swift macros, which need it non-interactively.
+# -disableAutomaticPackageResolution: builds use exactly the pins in Config/Package.resolved.
 XCODEBUILD = xcodebuild -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $(DERIVED) \
-	-destination 'platform=macOS,arch=$(shell uname -m)' -skipMacroValidation
+	-destination 'platform=macOS,arch=$(shell uname -m)' -skipMacroValidation -disableAutomaticPackageResolution
+
+# Pins for the gitignored project. Refresh: rm $(RESOLVED); xcodebuild -project $(PROJECT) -resolvePackageDependencies; cp $(RESOLVED) Config/
+RESOLVED    := $(PROJECT)/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
 .PHONY: bootstrap generate build run test lint install reset-sleep uninstall clean
 
@@ -22,9 +26,11 @@ bootstrap:
 	brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
 	brew list swiftlint >/dev/null 2>&1 || brew install swiftlint
 	xcodegen generate
+	mkdir -p $(dir $(RESOLVED)) && cp Config/Package.resolved $(RESOLVED)
 
 generate:
 	xcodegen generate --quiet
+	mkdir -p $(dir $(RESOLVED)) && cp Config/Package.resolved $(RESOLVED)
 
 build: generate
 	$(XCODEBUILD) -configuration Debug build $(XCODEBUILD_FLAGS)
