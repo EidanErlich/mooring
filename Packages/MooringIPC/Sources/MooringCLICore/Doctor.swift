@@ -144,20 +144,19 @@ public enum Doctor {
         return Check(name: name, state: "pass", detail: version, fix: nil)
     }
 
-    /// Notifications carry lid approvals, so a denial only fails when the setting can ask for one.
+    /// Notifications carry lid approvals, so a denial (or alerts turned off) only fails when the setting can ask for one.
     private static func notificationsCheck(_ status: StatusResult?) -> Check {
         let name = "Notifications"
         guard let status else { return Check(name: name, state: "skip", detail: "needs the app", fix: nil) }
         switch status.notifications {
         case "allowed": return Check(name: name, state: "pass", detail: "allowed", fix: nil)
         case "notDetermined": return Check(name: name, state: "skip", detail: "not asked yet", fix: nil)
-        case "alerts off":
-            return Check(name: name, state: "fail", detail: "alerts off", fix: "System Settings → Notifications → Mooring")
-        case "denied":
+        case "denied", "alerts off":
+            let detail = status.notifications ?? ""
             guard ["askWhenOpenEnded", "alwaysAsk"].contains(status.agentLidApproval) else {
-                return Check(name: name, state: "skip", detail: "denied (not needed)", fix: nil)
+                return Check(name: name, state: "skip", detail: "\(detail) (not needed)", fix: nil)
             }
-            return Check(name: name, state: "fail", detail: "denied", fix: "System Settings → Notifications → Mooring")
+            return Check(name: name, state: "fail", detail: detail, fix: "System Settings → Notifications → Mooring")
         default: return Check(name: name, state: "skip", detail: "unknown", fix: nil)
         }
     }

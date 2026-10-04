@@ -202,12 +202,17 @@ private func notificationsCheck(_ notifications: String?, _ approval: String?) t
         == Doctor.Check(name: "Notifications", state: "pass", detail: "allowed", fix: nil))
 }
 
-@Test func notificationsCheckFailsWhenAlertsAreOff() throws {
+@Test func notificationsCheckFailsWhenAlertsAreOffAndApprovalsAreNeeded() throws {
     let expected = Doctor.Check(name: "Notifications", state: "fail", detail: "alerts off",
                                 fix: "System Settings → Notifications → Mooring")
-    for approval in ["askWhenOpenEnded", "alwaysAsk", "alwaysAllow", "never"] {
-        #expect(try notificationsCheck("alerts off", approval) == expected)
-    }
+    #expect(try notificationsCheck("alerts off", "askWhenOpenEnded") == expected)
+    #expect(try notificationsCheck("alerts off", "alwaysAsk") == expected)
+}
+
+@Test func notificationsCheckSkipsWhenAlertsAreOffButNotNeeded() throws {
+    let expected = Doctor.Check(name: "Notifications", state: "skip", detail: "alerts off (not needed)", fix: nil)
+    #expect(try notificationsCheck("alerts off", "alwaysAllow") == expected)
+    #expect(try notificationsCheck("alerts off", "never") == expected)
 }
 
 @Test func notificationsCheckSkipsWhenNotAskedYet() throws {
