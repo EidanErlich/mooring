@@ -173,6 +173,62 @@ plutil -remove CFBundleVersion "$app/Contents/Info.plist"
 read_build_and_minos "$app/Contents/Info.plist" 1
 check "dry run: missing keys fall back" "$([ "$BUILD" = 1 ] && [ "$MINOS" = 14.0 ]; echo $?)"
 
+# --- a real run refuses an app with no update key or no real signature -----------------------------
+# check_update_key and check_signature are what a real run calls after the build.
+app="$(fixture_app "$WORK/bad/nokey" 9.9.9)"
+(check_update_key "$app/Contents/Info.plist") >"$WORK/bad/key1" 2>&1
+check "real run: no SUPublicEDKey is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SPARKLE_PUBLIC_KEY in Config/Local.xcconfig — see docs/RELEASING.md' "$WORK/bad/key1"; echo $?)"
+plutil -insert SUPublicEDKey -string ' ' "$app/Contents/Info.plist"
+(check_update_key "$app/Contents/Info.plist") >"$WORK/bad/key2" 2>&1
+check "real run: a blank SUPublicEDKey is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SPARKLE_PUBLIC_KEY' "$WORK/bad/key2"; echo $?)"
+plutil -replace SUPublicEDKey -string 'dGVzdC1wdWJsaWMta2V5' "$app/Contents/Info.plist"
+(check_update_key "$app/Contents/Info.plist") >"$WORK/bad/key3" 2>&1
+check "real run: an app with a key passes the key check" "$?"
+
+# Ad-hoc (codesign -s -, never a real identity) and unsigned fixtures fail; a shimmed codesign that reports
+# an Authority and a TeamIdentifier stands in for a real certificate.
+adhoc="$(fixture_app "$WORK/bad/adhoc" 9.9.9)"
+chmod +x "$adhoc/Contents/MacOS/Mooring"
+codesign -s - "$adhoc" 2>/dev/null
+(check_signature "$adhoc") >"$WORK/bad/sig1" 2>&1
+check "real run: an ad-hoc signature is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/bad/sig1"; echo $?)"
+unsigned="$(fixture_app "$WORK/bad/unsigned" 9.9.9)"
+(check_signature "$unsigned") >"$WORK/bad/sig2" 2>&1
+check "real run: an unsigned app is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/bad/sig2"; echo $?)"
+signer="$WORK/bad/signer"
+mkdir -p "$signer"
+printf '#!/bin/sh\nprintf "Authority=Apple Development: Test (TEST000000)\\nTeamIdentifier=TEAM000000\\n" >&2\n' > "$signer/codesign"
+chmod +x "$signer/codesign"
+(PATH="$signer:$PATH"; check_signature "$unsigned") >"$WORK/bad/sig3" 2>&1
+check "real run: a certificate signature passes" "$?"
+printf '#!/bin/sh\nprintf "Authority=Apple Development: Test (TEST000000)\\nTeamIdentifier=not set\\n" >&2\n' > "$signer/codesign"
+(PATH="$signer:$PATH"; check_signature "$unsigned") >"$WORK/bad/sig4" 2>&1
+check "real run: no TeamIdentifier is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/bad/sig4"; echo $?)"
+
+# A real run end to end, with `make` shimmed to "build" a fixture: it stops at the key, then at the signature,
+# before anything is zipped.
+repo="$(fresh_repo real)"; shims real >/dev/null
+built="$WORK/real/derived/Build/Products/Release"
+cat > "$WORK/real/bin/make" <<SHIM
+#!/bin/sh
+case "\$*" in
+    *build-release*) mkdir -p "$built" && rm -rf "$built/Mooring.app" && ditto "$WORK/real/fixture/Mooring.app" "$built/Mooring.app" ;;
+esac
+exit 0
+SHIM
+# sign_update must never run here (it would read the Keychain key): a shim that fails loudly.
+printf '#!/bin/sh\necho "sign_update $*" >> "%s/forbidden.log"\nexit 97\n' "$WORK/real" > "$WORK/real/bin/sign_update"
+chmod +x "$WORK/real/bin/make" "$WORK/real/bin/sign_update"
+fixture="$(fixture_app "$WORK/real/fixture" 9.9.9)"
+(cd "$repo" && PATH="$WORK/real/bin:$PATH" DERIVED="$WORK/real/derived" SIGN_UPDATE="$WORK/real/bin/sign_update" bash "$RELEASE") >"$WORK/real/out" 2>&1
+check "real run without a key refused before zipping" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SPARKLE_PUBLIC_KEY' "$WORK/real/out" && [ ! -e "$repo/dist" ]; echo $?)"
+plutil -insert SUPublicEDKey -string 'dGVzdC1wdWJsaWMta2V5' "$fixture/Contents/Info.plist"
+chmod +x "$fixture/Contents/MacOS/Mooring"
+codesign -s - "$fixture" 2>/dev/null
+(cd "$repo" && PATH="$WORK/real/bin:$PATH" DERIVED="$WORK/real/derived" SIGN_UPDATE="$WORK/real/bin/sign_update" bash "$RELEASE") >"$WORK/real/out" 2>&1
+check "real run with an ad-hoc app refused before zipping" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/real/out" && [ ! -e "$repo/dist" ]; echo $?)"
+check "nothing published (real runs)" "$([ ! -e "$WORK/real/forbidden.log" ]; echo $?)"
+
 # --- the escaping helpers -------------------------------------------------------------------------
 check "xml_escape" "$([ "$(xml_escape 'a&b<c>"d'"'"'e')" = 'a&amp;b&lt;c&gt;&quot;d&apos;e' ]; echo $?)"
 

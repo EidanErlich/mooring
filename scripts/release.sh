@@ -58,6 +58,28 @@ read_build_and_minos() { # plist, dry_run (1 or 0)
     fi
 }
 
+# A real release must be able to update itself: the built app needs the Sparkle public key.
+check_update_key() { # plist
+    local key
+    key="$(plist_value "$1" SUPublicEDKey || true)"
+    case "$key" in
+        *[![:space:]]*) ;;
+        *) die "the built app has no SUPublicEDKey, so it could never update itself. Set MOORING_SPARKLE_PUBLIC_KEY in Config/Local.xcconfig — see docs/RELEASING.md" ;;
+    esac
+}
+
+# A real release is signed with the maintainer's own certificate: not ad-hoc, with an Authority and a team.
+check_signature() { # app
+    local info
+    info="$(codesign -dv "$1" 2>&1 || true)"
+    if printf '%s\n' "$info" | grep -q '^Signature=adhoc' \
+        || ! printf '%s\n' "$info" | grep -q '^Authority=' \
+        || ! printf '%s\n' "$info" | grep -q '^TeamIdentifier=' \
+        || printf '%s\n' "$info" | grep -q '^TeamIdentifier=not set'; then
+        die "$1 is not signed with a certificate (ad-hoc or unsigned). Set MOORING_SIGN_IDENTITY and MOORING_TEAM in Config/Local.xcconfig — see docs/RELEASING.md"
+    fi
+}
+
 find_sign_update() { # repo root
     if [ -n "${SIGN_UPDATE:-}" ]; then
         [ -x "$SIGN_UPDATE" ] || die "SIGN_UPDATE is not executable: $SIGN_UPDATE"
@@ -211,6 +233,9 @@ main() {
     fi
 
     if [ "$dry_run" -eq 0 ]; then
+        echo "== update key and signature"
+        check_update_key "$plist"
+        check_signature "$app"
         echo "== codesign verify"
         codesign --verify --deep --strict "$app" || die "codesign verification failed for $app"
     fi
