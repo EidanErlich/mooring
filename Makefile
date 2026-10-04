@@ -25,7 +25,7 @@ XCODEBUILD = xcodebuild -project $(PROJECT) -scheme $(SCHEME) -derivedDataPath $
 # Pins for the gitignored project. Refresh: rm $(RESOLVED); xcodebuild -project $(PROJECT) -packageAuthorizationProvider netrc -resolvePackageDependencies; cp $(RESOLVED) Config/
 RESOLVED    := $(PROJECT)/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 
-.PHONY: bootstrap generate build run test lint install reset-sleep uninstall clean
+.PHONY: bootstrap generate build run test lint install build-release release reset-sleep uninstall clean
 
 bootstrap:
 	brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
@@ -51,16 +51,24 @@ test: generate
 	@for pkg in $(PACKAGES); do echo "== swift test $$pkg"; (cd $$pkg && swift test) || exit 1; done
 	bash scripts/test-mooring-hook.sh
 	bash scripts/test-make-uninstall.sh
+	bash scripts/test-release.sh
 	$(XCODEBUILD) -configuration Debug test $(XCODEBUILD_FLAGS)
 
 lint:
 	swiftlint lint --quiet
 
-install: generate
+build-release: generate
 	$(XCODEBUILD) -configuration Release build $(XCODEBUILD_FLAGS)
+
+install: build-release
 	-pkill -x Mooring
 	rm -rf $(INSTALL_DIR)/$(APP)
 	ditto $(DERIVED)/Build/Products/Release/$(APP) $(INSTALL_DIR)/$(APP)
+
+# Builds dist/ (zip, appcast, cask) with the Local.xcconfig identity and your Sparkle key. Publishes nothing;
+# scripts/release.sh --publish prints the commands to run by hand.
+release:
+	bash scripts/release.sh
 
 # Manual safety valve if lid sleep is ever left disabled.
 reset-sleep:

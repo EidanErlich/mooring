@@ -11,6 +11,9 @@ xcuserdata/
 # Machine-specific signing (see Config/Local.xcconfig.example)
 Config/Local.xcconfig
 
+# Release output (scripts/release.sh)
+dist/
+
 # Upstream clones made by scripts/fetch-upstream.sh
 .upstream/
 
