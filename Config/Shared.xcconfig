@@ -6,7 +6,8 @@ SWIFT_VERSION = 6.0
 
 // One version for every target (the app and the embedded helper).
 MARKETING_VERSION = 0.0.6
-CURRENT_PROJECT_VERSION = 1
+// The build number follows the version, so CFBundleVersion (Sparkle's sparkle:version) rises with each release.
+CURRENT_PROJECT_VERSION = $(MARKETING_VERSION)
 
 // Ad-hoc signing ("Sign to Run Locally") unless Local.xcconfig names a certificate.
 MOORING_SIGN_IDENTITY = -

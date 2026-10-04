@@ -4,7 +4,7 @@
 #
 #   scripts/release.sh                       checks, tests, builds Release, signs (Sparkle key in your Keychain)
 #   scripts/release.sh --dry-run --app APP   uses an already-built app; no tests, build or signing
-#   scripts/release.sh ... --publish         also prints the publishing commands
+#   scripts/release.sh --publish             a real run that also prints the publishing commands (not with --dry-run)
 #   scripts/release.sh --dry-run --check-git --app APP    dry run that still checks the tree and tag
 #
 # Environment: DERIVED (default build/DerivedData) says where the Release build goes;
@@ -20,7 +20,7 @@ Usage: scripts/release.sh [--dry-run --app PATH] [--check-git] [--publish]
   --dry-run   use --app, skip make test, the Release build and signing (the appcast signature stays empty)
   --app PATH  a built Mooring.app (required with --dry-run)
   --check-git also check the tree and tag in a dry run (a real run always does)
-  --publish   print the tag, gh release, appcast and tap commands; runs none of them
+  --publish   print the tag, gh release, appcast and tap commands; runs none of them (not with --dry-run)
 USAGE
 }
 
@@ -43,6 +43,19 @@ xcconfig_version() {
 
 plist_value() { # plist, key
     plutil -extract "$2" raw -o - "$1" 2>/dev/null
+}
+
+# Sets BUILD and MINOS from the bundle. A real run needs both keys; a dry run (a fixture or CI app) falls back.
+read_build_and_minos() { # plist, dry_run (1 or 0)
+    BUILD="$(plist_value "$1" CFBundleVersion || true)"
+    MINOS="$(plist_value "$1" LSMinimumSystemVersion || true)"
+    if [ "$2" -eq 0 ]; then
+        [ -n "$BUILD" ] || die "no CFBundleVersion in $1"
+        [ -n "$MINOS" ] || die "no LSMinimumSystemVersion in $1"
+    else
+        [ -n "$BUILD" ] || BUILD=1
+        [ -n "$MINOS" ] || MINOS=14.0
+    fi
 }
 
 find_sign_update() { # repo root
@@ -100,9 +113,9 @@ cask "mooring" do
   app "Mooring.app"
 
   caveats <<~EOS
-    Mooring is not notarized. If macOS refuses to open it, run:
+    Mooring is not notarized. If macOS blocks it on first open, go to
+    System Settings > Privacy & Security > Open Anyway, or run:
       xattr -dr com.apple.quarantine /Applications/Mooring.app
-    or open it once with right-click > Open.
   EOS
 end
 CASK
@@ -145,6 +158,10 @@ main() {
         esac
         shift
     done
+    if [ "$dry_run" -eq 1 ] && [ "$publish" -eq 1 ]; then
+        echo "release.sh: --dry-run --publish is refused: a dry run's appcast is unsigned and must not be published" >&2
+        exit 2
+    fi
     if [ "$dry_run" -eq 1 ] && [ -z "$app" ]; then
         echo "release.sh: --dry-run needs --app PATH (a built Mooring.app)" >&2
         exit 2
@@ -184,8 +201,8 @@ main() {
     # The built bundle is authoritative.
     local version build minos
     version="$(plist_value "$plist" CFBundleShortVersionString)" || die "no CFBundleShortVersionString in $plist"
-    build="$(plist_value "$plist" CFBundleVersion || echo 1)"
-    minos="$(plist_value "$plist" LSMinimumSystemVersion || echo 14.0)"
+    read_build_and_minos "$plist" "$dry_run"
+    build="$BUILD"; minos="$MINOS"
     case "$version" in
         ""|[!0-9A-Za-z]*|*[!0-9A-Za-z._+-]*) die "unusable version '$version' in $plist" ;;
     esac
@@ -236,7 +253,6 @@ main() {
     echo "  $dist/homebrew/mooring.rb"
 
     if [ "$publish" -eq 1 ]; then
-        if [ "$dry_run" -eq 1 ]; then echo "(dry run: this appcast is unsigned and must not be published)"; fi
         print_publish "$version"
     fi
 }

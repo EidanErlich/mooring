@@ -101,7 +101,8 @@ cask="$dist/homebrew/mooring.rb"
 check "cask sha256 matches the zip" "$(grep -q "^  sha256 \"$sha\"$" "$cask"; echo $?)"
 check "cask has the version and URL" "$(grep -q '^  version "9.9.9"$' "$cask" && grep -q 'releases/download/v#{version}/Mooring-#{version}.zip' "$cask"; echo $?)"
 check "cask has the app and macOS floor" "$(grep -q '^  app "Mooring.app"$' "$cask" && grep -q 'depends_on macos: ">= :sonoma"' "$cask"; echo $?)"
-check "cask mentions the quarantine fix" "$(grep -q 'xattr -dr com.apple.quarantine' "$cask"; echo $?)"
+check "cask mentions Open Anyway and the xattr fix" "$(grep -q 'Open Anyway' "$cask" && grep -q 'xattr -dr com.apple.quarantine /Applications/Mooring.app' "$cask"; echo $?)"
+check "cask no longer suggests right-click Open" "$(! grep -qi 'right-click' "$cask"; echo $?)"
 if command -v ruby >/dev/null 2>&1; then
     check "cask is valid Ruby" "$(ruby -c "$cask" >/dev/null 2>&1; echo $?)"
 fi
@@ -128,12 +129,17 @@ run_release "$repo" --dry-run --check-git --app "$app"
 check "existing tag refused" "$([ "$CODE" -ne 0 ] && grep -q 'v9.9.9 already exists' "$WORK/tagged/out"; echo $?)"
 check "existing tag: nothing written" "$([ ! -e "$repo/dist" ]; echo $?)"
 
-# --- --publish only prints ------------------------------------------------------------------------
+# --- --dry-run --publish is refused -----------------------------------------------------------------
 repo="$(fresh_repo publish)"; shims publish >/dev/null
 app="$(fixture_app "$WORK/publish/built" 9.9.9)"
 run_release "$repo" --dry-run --publish --app "$app"
-out="$WORK/publish/out"
-check "publish: exits 0" "$([ "$CODE" -eq 0 ]; echo $?)"
+check "dry run + publish refused" "$([ "$CODE" -eq 2 ] && grep -q -- '--dry-run --publish is refused' "$WORK/publish/out" && [ ! -e "$repo/dist" ]; echo $?)"
+check "dry run + publish ran no gh or git push" "$([ ! -e "$WORK/publish/forbidden.log" ]; echo $?)"
+
+# --- print_publish only prints (a real run can't be tested: it builds and signs) --------------------
+. "$RELEASE"
+out="$WORK/publish/printed"
+PATH="$WORK/publish/bin:$PATH" print_publish 9.9.9 >"$out" 2>&1
 check "publish prints the tag and push" "$(grep -q '^git tag v9.9.9 && git push origin v9.9.9$' "$out"; echo $?)"
 check "publish prints gh release create" "$(grep -q '^gh release create v9.9.9 dist/Mooring-9.9.9.zip --title ' "$out"; echo $?)"
 check "publish prints the appcast step" "$(grep 'gh-pages' "$out" | grep -q . && grep -q 'dist/appcast.xml' "$out"; echo $?)"
@@ -154,9 +160,20 @@ run_release "$repo" --dry-run --app "$app"
 check "odd version refused" "$([ "$CODE" -ne 0 ] && [ ! -e "$repo/dist" ]; echo $?)"
 check "nothing published (bad invocations)" "$([ ! -e "$WORK/bad/forbidden.log" ]; echo $?)"
 
+# --- real runs need CFBundleVersion and LSMinimumSystemVersion (read_build_and_minos is what a real run calls)
+app="$(fixture_app "$WORK/bad/nokeys" 9.9.9)"
+plutil -remove CFBundleVersion "$app/Contents/Info.plist"
+(read_build_and_minos "$app/Contents/Info.plist" 0) >"$WORK/bad/real1" 2>&1
+check "real run: missing CFBundleVersion is an error" "$([ $? -ne 0 ] && grep -q 'no CFBundleVersion' "$WORK/bad/real1"; echo $?)"
+plutil -insert CFBundleVersion -string 7 "$app/Contents/Info.plist"
+plutil -remove LSMinimumSystemVersion "$app/Contents/Info.plist"
+(read_build_and_minos "$app/Contents/Info.plist" 0) >"$WORK/bad/real2" 2>&1
+check "real run: missing LSMinimumSystemVersion is an error" "$([ $? -ne 0 ] && grep -q 'no LSMinimumSystemVersion' "$WORK/bad/real2"; echo $?)"
+plutil -remove CFBundleVersion "$app/Contents/Info.plist"
+read_build_and_minos "$app/Contents/Info.plist" 1
+check "dry run: missing keys fall back" "$([ "$BUILD" = 1 ] && [ "$MINOS" = 14.0 ]; echo $?)"
+
 # --- the escaping helpers -------------------------------------------------------------------------
-# shellcheck source=release.sh
-. "$RELEASE"
 check "xml_escape" "$([ "$(xml_escape 'a&b<c>"d'"'"'e')" = 'a&amp;b&lt;c&gt;&quot;d&apos;e' ]; echo $?)"
 
 if [ "$failures" -ne 0 ]; then
