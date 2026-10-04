@@ -38,7 +38,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 
-- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.5; read the bundle version.
+- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.6; read the bundle version.
 - The helper path written to MCP client configs comes from `Bundle.main`; running from a DMG or a translocated location writes a path that later vanishes.
 - An agent sending a raw `untilOff` acquire can make a person's timed menu session open-ended (without lid).
 - `mooring mcp` handles one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
@@ -106,6 +106,31 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - The process-wide 1.5 s Accessibility timeout set when Windows starts isn't reset when it stops.
 - The ask notification sanitizes app and title but shows `region` and `screen` as sent.
 
+
+## Clipboard (4 leftovers)
+
+- **Shortcut text:** `KeyboardShortcuts`' own rendering of Space and the F-keys may not match `ShortcutChord`'s forms ("␣", "F11"), so the Shortcuts page could miss a conflict with Spotlight or another macOS shortcut for the clipboard chord. Check it against the keys macOS reserves.
+- **Upstream flake:** Maccy's `HistoryItemTests` (for example `testSeveralItemsCanHaveEmptyPin`) crashed once with SwiftData's "Already have an objectID registered for this persistent identifier". It didn't recur in 14 reruns; it looks like a rare flake in upstream's test, not in Mooring's code.
+- **Tests:**
+  - wall-clock performance thresholds may flake on CI, and the popup performance test measures load plus `recent`, not row rendering;
+  - `offMeansNoStoreNoPolling`'s real-singleton line can't fail with the fake, so its comment overstates it, and `turnOffUnregistersHotkey`'s name overstates what it checks;
+  - the read-only-parent store test assumes the tests don't run as root;
+  - the Settings tests include a Finder-dependent case;
+  - nothing tests that `AppDelegate` passes `showClipboardHistory` to `ClipboardController.live`.
+- **ClipKit code:**
+  - `History.load`'s task isn't cancelled on stop;
+  - `ModifierFlags`' `deinit` and statics aren't main-actor isolated (theoretical);
+  - the Storage fallback log may include its own path.
+- **Settings pages:**
+  - `ClipboardOnPage` builds a model on every parent re-render, and the model caches values;
+  - `@_exported import KeyboardShortcuts` in ClipKit stands in for linking it from the app;
+  - the ignored-app picker removes ".app" with `replacingOccurrences` and silently does nothing for a bundle with no id;
+  - "Ignore all apps except listed" and the preview delay aren't exposed.
+- **Agent wall:**
+  - the parenthesis matcher ignores parentheses inside strings and comments, and trailing closures;
+  - there is no `OSAScriptingDefinition` key check in `Info.plist`;
+  - the scan reads Swift source text only, not non-Swift files or linked symbols.
+- **Owner checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint.
 
 ## CLI and IPC (stage 2a leftovers)
 
