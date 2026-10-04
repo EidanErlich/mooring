@@ -48,6 +48,7 @@ let environment = CLIEnvironment(
     readInput: readStandardInput(limit:),
     hookClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 1.5, launchWait: 0, launcher: {}),
     lidClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 65),
+    windowClient: SocketClient(path: SocketClient.defaultPath, replyTimeout: 120),
     claude: { probeClaude(pathEnv: ProcessInfo.processInfo.environment["PATH"]) },
     // `mooring mcp` calls this from a background queue, never the main thread.
     readLine: { Swift.readLine(strippingNewline: true) },

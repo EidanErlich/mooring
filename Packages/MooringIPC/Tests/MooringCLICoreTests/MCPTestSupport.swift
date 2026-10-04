@@ -36,6 +36,12 @@ func plausibleReply(to request: Request) -> Response {
     case .status: return .success(id: request.id, .status(statusResult(leases: [])))
     case .renew(let args): return .success(id: request.id, .renew(leaseInfo(id: args.id)))
     case .hook: return .success(id: request.id, .hook(HookResult(action: "ignore")))
+    case .winList: return .success(id: request.id, .winList(WinListResult(apps: [], screens: [], regions: [])))
+    case .winArrange(let plan):
+        let results = plan.placements.map { WinPlacementResult(app: $0.app, status: .ok) }
+        return .success(id: request.id, .winArrange(WinArrangeResult(results: results, undoAvailable: true)))
+    case .winUndo: return .success(id: request.id, .winUndo(WinArrangeResult(results: [], undoAvailable: false)))
+    case .winLayout: return .success(id: request.id, .winLayout(WinLayoutResult(names: [], arrange: nil)))
     }
 }
 
@@ -70,6 +76,7 @@ struct MCPHarness {
     var ownPID = defaultPID
     var client = ScriptedClient()
     var lidClient = ScriptedClient()
+    var windowClient = ScriptedClient()
     let capture = Capture()
 
     func run(_ lines: [String]) async -> Int32 {
@@ -80,7 +87,7 @@ struct MCPHarness {
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
             home: URL(fileURLWithPath: "/nowhere/home"),
-            readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, claude: { nil },
+            readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, windowClient: windowClient, claude: { nil },
             readLine: { feed.next() }, appVersion: Self.appVersion
         )
         return await MCPServer(environment: environment).run()
@@ -118,7 +125,7 @@ struct MCPHarness {
         toolResult(id)?["structuredContent"] as? [String: Any]
     }
 
-    var allRequests: [Request] { client.requests + lidClient.requests }
+    var allRequests: [Request] { client.requests + lidClient.requests + windowClient.requests }
 }
 
 /// A JSON-RPC request line.

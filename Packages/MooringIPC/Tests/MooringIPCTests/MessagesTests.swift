@@ -70,7 +70,7 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
     if case .failure(let error) = WireCoding.decodeRequest(Data(repeating: UInt8(ascii: "a"), count: 70_000)) {
         #expect(error.code == .badRequest && error.message == "Request too long")
     }
-    let unknownOp = Data(#"{"v":1,"id":"x","op":"win.list","args":{}}"#.utf8)
+    let unknownOp = Data(#"{"v":1,"id":"x","op":"approve.wait","args":{}}"#.utf8)
     #expect((try? WireCoding.decodeRequest(unknownOp).get()) == nil)
     let wrongArgs = Data(#"{"v":1,"id":"x","op":"renew","args":{}}"#.utf8)
     #expect((try? WireCoding.decodeRequest(wrongArgs).get()) == nil)

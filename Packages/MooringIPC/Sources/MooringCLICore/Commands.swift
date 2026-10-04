@@ -82,7 +82,7 @@ struct MooringCommand: ParsableCommand {
         version: "mooring \(MooringCLI.version)",
         subcommands: [
             OnCommand.self, Off.self, Anchor.self, LeaseGroup.self, Status.self, DoctorCommand.self, HookCommand.self, MCPCommand.self,
-            NotifyCommand.self
+            NotifyCommand.self, WinGroup.self
         ]
     )
 }
@@ -136,7 +136,8 @@ struct CommandRunner {
     let env: CLIEnvironment
     let options: OutputOptions
 
-    func run(_ makeArgs: () throws -> RequestArgs) async -> Int32 {
+    /// `render` replaces the usual human text for a successful result, for a command that shows part of one.
+    func run(_ makeArgs: () throws -> RequestArgs, render: ((ResponseResult) -> String)? = nil) async -> Int32 {
         let args: RequestArgs
         do {
             args = try makeArgs()
@@ -148,7 +149,7 @@ struct CommandRunner {
         let request = Request(v: WireProtocol.version, id: env.newID(), op: Self.op(of: args), args: args)
         do {
             let response = try await client(for: args).send(request, launch: !options.noLaunch)
-            return report(response, to: request)
+            return report(response, to: request, render: render)
         } catch let error as CLIError where error.unavailableMessage != nil {
             return unavailable(error)
         } catch CLIError.usage(let message) {
@@ -160,20 +161,30 @@ struct CommandRunner {
     }
 
     /// An acquire that may need the user's approval waits for it, so it uses the client with the long reply timeout.
+    /// So does a window request that changes something (it may ask, wait its turn and launch apps), and listing windows,
+    /// which can wait on several hung apps.
     private func client(for args: RequestArgs) -> any RequestSending {
-        guard case .acquire(let acquire) = args else { return env.client }
-        return env.acquireClient(kind: acquire.kind, level: acquire.level)
+        switch args {
+        case .acquire(let acquire): env.acquireClient(kind: acquire.kind, level: acquire.level)
+        case .winList, .winArrange, .winUndo: env.windowClient
+        case .winLayout(let layout): layout.action == "list" ? env.client : env.windowClient
+        default: env.client
+        }
     }
 
-    private func report(_ response: Response, to request: Request) -> Int32 {
+    private func report(_ response: Response, to request: Request, render: ((ResponseResult) -> String)?) -> Int32 {
+        var response = response
+        if response.ok, case .winUndo(let undone)? = response.result, undone.results.isEmpty {
+            response = .failure(id: response.id, .notFound, WinText.nothingToUndo)
+        }
         if response.ok, let result = response.result {
             if options.json {
                 printJSON(result)
             } else {
-                let text = CLIText.human(result, for: request.args, now: env.now(), processes: env.processes)
+                let text = render?(result) ?? CLIText.human(result, for: request.args, now: env.now(), processes: env.processes)
                 env.write(text + trailingNewline(for: result))
             }
-            return 0
+            return WinText.exitStatus(for: result)
         }
         let error = response.error ?? WireError(code: .internal, message: "Unexpected reply from Mooring")
         if options.json {
@@ -228,6 +239,10 @@ struct CommandRunner {
         case .status: .status
         case .hook: .hook
         case .notify: .notify
+        case .winList: .winList
+        case .winArrange: .winArrange
+        case .winUndo: .winUndo
+        case .winLayout: .winLayout
         }
     }
 }

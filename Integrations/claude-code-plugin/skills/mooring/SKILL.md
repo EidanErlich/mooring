@@ -1,9 +1,9 @@
 ---
 name: mooring
-description: Use when a job may outlive the turn or needs the Mac to stay awake, such as long builds, big downloads, background commands or multi-step analyses.
+description: Use when a job may outlive the turn or needs the Mac to stay awake, such as long builds, big downloads, background commands or multi-step analyses, or when asked to move, resize or lay out windows (mooring win).
 ---
 
-# Mooring: keeping the Mac awake
+# Mooring: keeping the Mac awake and arranging windows
 
 Mooring is a menu-bar app that stops the Mac sleeping. Its plugin already holds a lease while you work in this session, so the Mac stays awake without any action from you. Do not disable Mooring or change its settings.
 
@@ -27,6 +27,16 @@ mooring lease release job-<slug>
 To keep the Mac awake with the lid closed, prefer a hold, `mooring lease acquire job-<slug> --level lid --watch-pid auto`, which needs no approval. `mooring on --level lid` with no end time asks the user first and may be declined (exit 2).
 
 When a long job finishes and the user may be away, `mooring notify "Done" "<what finished>"` tells them (rate-limited to one every 30 s).
+
+## Arranging windows
+
+When the user asks you to move, resize or lay out windows:
+
+1. Run `mooring win list --json` first.
+2. Then send one `mooring win arrange …` for the whole request, such as `mooring win arrange chrome=right-half iterm=bottom-left@main`. To pick a window by title, use `--plan -` with JSON: `{"placements":[{"app":"chrome","title":"Docs","region":"left-half"}]}`.
+3. Tell the user every placement that isn't `ok`, and ask about `ambiguous` ones.
+4. Offer `mooring win undo`.
+5. If the reply says Windows is off, ask the user to turn it on from the menu bar.
 
 ## Rules
 

@@ -72,6 +72,9 @@ public struct CLIEnvironment: Sendable {
     public var hookClient: any RequestSending
     /// What an acquire whose level includes lid goes through: it waits long enough for the user to answer an approval.
     public var lidClient: any RequestSending
+    /// What `mooring win list` and a mutating `mooring win` request go through: an ask (60 s), a wait in the queue and
+    /// launching apps can add up to more than `lidClient`'s 65 s, and a list can wait on several hung apps.
+    public var windowClient: any RequestSending
     /// Asks Claude Code about itself, for doctor. Blocks for a few seconds at most; nil when `claude` isn't found.
     public var claude: @Sendable () -> ClaudeSnapshot?
     /// Reads one line from stdin without its newline, blocking until it arrives; nil at end of input. For `mooring mcp`.
@@ -93,7 +96,7 @@ public struct CLIEnvironment: Sendable {
         newID: @escaping @Sendable () -> String, now: @escaping @Sendable () -> Date,
         ownBinaryPath: String, pathEnv: String?, home: URL,
         readInput: @escaping @Sendable (Int) -> Data, hookClient: any RequestSending,
-        lidClient: any RequestSending, claude: @escaping @Sendable () -> ClaudeSnapshot?,
+        lidClient: any RequestSending, windowClient: any RequestSending, claude: @escaping @Sendable () -> ClaudeSnapshot?,
         readLine: @escaping @Sendable () -> String?, appVersion: String
     ) {
         self.client = client
@@ -110,6 +113,7 @@ public struct CLIEnvironment: Sendable {
         self.readInput = readInput
         self.hookClient = hookClient
         self.lidClient = lidClient
+        self.windowClient = windowClient
         self.claude = claude
         self.readLine = readLine
         self.appVersion = appVersion

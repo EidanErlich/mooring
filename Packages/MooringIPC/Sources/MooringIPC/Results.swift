@@ -198,6 +198,10 @@ public enum ResponseResult: Encodable, Sendable, Equatable {
     case renew(LeaseInfo)
     case hook(HookResult)
     case notify(NotifyResult)
+    case winList(WinListResult)
+    case winArrange(WinArrangeResult)
+    case winUndo(WinArrangeResult)
+    case winLayout(WinLayoutResult)
 
     public func encode(to encoder: any Encoder) throws {
         switch self {
@@ -207,6 +211,9 @@ public enum ResponseResult: Encodable, Sendable, Equatable {
         case .renew(let result): try result.encode(to: encoder)
         case .hook(let result): try result.encode(to: encoder)
         case .notify(let result): try result.encode(to: encoder)
+        case .winList(let result): try result.encode(to: encoder)
+        case .winArrange(let result), .winUndo(let result): try result.encode(to: encoder)
+        case .winLayout(let result): try result.encode(to: encoder)
         }
     }
 
@@ -218,6 +225,10 @@ public enum ResponseResult: Encodable, Sendable, Equatable {
         case .renew: .renew(try container.decode(LeaseInfo.self, forKey: .result))
         case .hook: .hook(try container.decode(HookResult.self, forKey: .result))
         case .notify: .notify(try container.decode(NotifyResult.self, forKey: .result))
+        case .winList: .winList(try container.decode(WinListResult.self, forKey: .result))
+        case .winArrange: .winArrange(try container.decode(WinArrangeResult.self, forKey: .result))
+        case .winUndo: .winUndo(try container.decode(WinArrangeResult.self, forKey: .result))
+        case .winLayout: .winLayout(try container.decode(WinLayoutResult.self, forKey: .result))
         }
     }
 }

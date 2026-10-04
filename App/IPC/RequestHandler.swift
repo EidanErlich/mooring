@@ -56,6 +56,13 @@ final class RequestHandler {
     let notificationStatus: @MainActor () async -> String?
     /// Posts `notify`'s notifications.
     let poster: any NotificationPosting
+    /// Whether Windows is on; no `win.*` op touches WindowKit otherwise.
+    let windowsState: @MainActor () -> WindowsController.State
+    /// The app's arranger, which exists only while Windows is on.
+    let arranger: @MainActor () -> Arranger?
+    let windowApprover: any WindowApproving
+    /// Applies one arrangement at a time.
+    let windowLock = SerialLock()
     /// Leases whose lid ask was denied, by id, with the creation time of the lease that was denied and when the
     /// denial ends: it isn't asked again in that lifetime until then.
     var deniedLid: [String: (created: Date, until: Date)] = [:]
@@ -72,7 +79,9 @@ final class RequestHandler {
         helperStatus: @escaping @MainActor () -> String, readHelperSleepDisabled: @escaping @MainActor () async -> Bool?,
         now: @escaping @MainActor () -> Date = { Date() }, processes: any ProcessTable = SystemProcessTable(),
         approver: any LidApproving, updateSettings: @escaping @MainActor ((inout AwakeSettings) -> Void) -> Void,
-        notificationStatus: @escaping @MainActor () async -> String?, poster: any NotificationPosting
+        notificationStatus: @escaping @MainActor () async -> String?, poster: any NotificationPosting,
+        windowsState: @escaping @MainActor () -> WindowsController.State, arranger: @escaping @MainActor () -> Arranger?,
+        windowApprover: any WindowApproving
     ) {
         self.engine = engine
         self.settings = settings
@@ -84,6 +93,9 @@ final class RequestHandler {
         self.updateSettings = updateSettings
         self.notificationStatus = notificationStatus
         self.poster = poster
+        self.windowsState = windowsState
+        self.arranger = arranger
+        self.windowApprover = windowApprover
     }
 
     func handle(_ request: Request, from caller: Caller) async -> Response {
@@ -99,6 +111,8 @@ final class RequestHandler {
             case .hook(let args): return .success(id: request.id, .hook(try hook(args, from: caller)))
             case .notify(let args):
                 return .success(id: request.id, .notify(try await notify(args, from: identified(caller, client: args.client))))
+            case .winList, .winArrange, .winUndo, .winLayout:
+                return .success(id: request.id, try await windowsResult(request.args, from: caller))
             }
         } catch {
             let wire = error as? WireError ?? WireError(code: .internal, message: "Internal error")
@@ -299,7 +313,11 @@ final class RequestHandler {
         case .failure(.denied(let message)): throw WireError(code: .denied, message: message)
         }
     }
+}
 
+// MARK: - Guardrails
+
+extension RequestHandler {
     /// The guardrail `message` plus what the caller must know: the lease exists even though the
     /// reply is a refusal, so it applies later and, for `on` and `lease`, still needs ending. An MCP client
     /// (`mcp`) ends it with its `release_awake` tool, not the CLI.

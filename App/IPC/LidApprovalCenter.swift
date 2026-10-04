@@ -22,12 +22,12 @@ protocol NotificationPosting: AnyObject {
     func authorize() async -> Bool
     /// "allowed", "notDetermined" or "denied"; nil if the settings can't be read.
     func notificationStatus() async -> String?
-    /// Posts a notification; `category` is set only when given (the lid approvals' actions).
+    /// Posts a notification; `category` is set only when given (the approvals' actions).
     func post(id: String, title: String, body: String, userInfo: [String: String], category: String?) async
     /// Removes a delivered notification whose ask is over.
     func withdraw(id: String)
-    /// The ids of delivered lid-approval notifications.
-    func deliveredApprovalIDs() async -> [String]
+    /// The ids of delivered approval notifications in `category`.
+    func deliveredApprovalIDs(category: String) async -> [String]
 }
 
 /// `NotificationPosting` over `UNUserNotificationCenter`.
@@ -71,9 +71,9 @@ final class SystemNotificationPoster: NotificationPosting {
         center.removeDeliveredNotifications(withIdentifiers: [id])
     }
 
-    func deliveredApprovalIDs() async -> [String] {
+    func deliveredApprovalIDs(category: String) async -> [String] {
         await center.deliveredNotifications()
-            .filter { $0.request.content.categoryIdentifier == LidApprovalCenter.categoryID }
+            .filter { $0.request.content.categoryIdentifier == category }
             .map(\.request.identifier)
     }
 }
@@ -155,7 +155,7 @@ final class LidApprovalCenter: LidApproving {
     /// Withdraws approvals that no ask is waiting for, such as those left from before a restart: their buttons
     /// would answer nothing.
     func removeStaleApprovals() async {
-        for id in await poster.deliveredApprovalIDs() where waiting[id] == nil {
+        for id in await poster.deliveredApprovalIDs(category: Self.categoryID) where waiting[id] == nil {
             poster.withdraw(id: id)
         }
     }

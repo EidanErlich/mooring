@@ -38,7 +38,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## MCP, links and Shortcuts (2c-2 leftovers)
 
-- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.4; read the bundle version.
+- `mooring --version` and MCP `serverInfo.version` report 0.2.0-dev while the app is 0.0.5; read the bundle version.
 - The helper path written to MCP client configs comes from `Bundle.main`; running from a DMG or a translocated location writes a path that later vanishes.
 - An agent sending a raw `untilOff` acquire can make a person's timed menu session open-ended (without lid).
 - `mooring mcp` handles one request at a time, so an approval wait (up to 60 s) blocks that client's other calls.
@@ -78,6 +78,33 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - `gesturesAvailable` sits between `menuActions(primary:)` and its doc comment, so the comment attaches to the wrong declaration.
 - `everyLoaderSymbolIsChecked` doesn't include the MultitouchSupport symbol list.
 - Turn On without Accessibility shows macOS's own Accessibility alert alongside Mooring's sheet; confirm in the owner check that this reads well.
+
+
+## Agent windows (3b leftovers)
+
+- **Accessory apps** (menu-bar-only apps with no Dock presence) are left out of `win list`, so they can't be arranged.
+- **A just-launched app** with no window yet reports `not_found` rather than "didn't open in time".
+- **Left and right screens** are picked by the screen's right edge, which can prefer a diagonal screen over the true neighbour.
+- **Layouts:**
+  - a layout saved with an exact title breaks when that title changes;
+  - a corrupt `layouts.json` blocks save and list instead of being set aside;
+  - the ask text for a layout shows bundle ids, not app names.
+- **App search** scans the top level of the Applications folders only.
+- **Results:** `WinStatus` has no fallback for a status a newer app might send; the folded region-name uniqueness is untested; `partial` ignores position clamps, so an off-position window can report `ok`.
+- **Accessibility timeouts:** setting the timeout (process-wide and per element) ignores its error.
+- **Gating:** a request that started under Automatic isn't asked if agents switch to Ask first while it waits its turn (Off and Windows off are checked again).
+- **Regions:** `win do` refuses minimize, hide, Space moves and the other non-frame actions for people too, since `win.*` offers only frame regions; the Windows menu still has them.
+- **Matching:** two instances of one app give identical candidate names; a result from an older app without an ambiguous `reason` prints "matches several: …".
+- **CLI:**
+  - the message for a plan that can't be decoded at the root path ends in a dangling "at";
+  - the plan file is read before the size cap is checked;
+  - `CommandRunner` has a speculative undo rewrite;
+  - error prefixes are mixed;
+  - the root `mooring --help` doesn't list `win`.
+- **MCP:** the "Unexpected reply" text is hard-coded with a default branch, and the undo or-pattern and the path helper are hard to read.
+- **Code and tests:** a dead `.launch` branch and a catch-all in the Arranger; test temp folders and a lingering task are not cleaned up; `FakeNotificationPoster` ignores the category, so there is no cross-category withdraw test; the unsigned-build helper warning in the test log is environmental.
+- The process-wide 1.5 s Accessibility timeout set when Windows starts isn't reset when it stops.
+- The ask notification sanitizes app and title but shows `region` and `screen` as sent.
 
 
 ## CLI and IPC (stage 2a leftovers)

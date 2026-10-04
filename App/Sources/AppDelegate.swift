@@ -2,8 +2,10 @@ import AppKit
 @preconcurrency import AwaykeMonitors
 import AwakeKit
 import Defaults
+import Observation
 import os
 import UserNotifications
+import WindowKit
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -20,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
     private let approvals = LidApprovalCenter()
+    private lazy var windowApprovals = WindowApprovalCenter(poster: poster)
+    /// Agents' window arrangements, built when first needed while Windows is on and dropped (with its undo stack)
+    /// when Windows stops.
+    private var arranger: Arranger?
     private var notificationResponder: NotificationResponder?
     private var lidSettingUpdates: Task<Void, Never>?
     /// Posts `notify`'s notifications and link errors.
@@ -92,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windows.launch()
         self.windows = windows
         SettingsWindowController.shared.windows = windows
+        observeWindowsForArranger()
 
         let statusItem = StatusItemController(engine: engine, windows: windows)
         let dropdown = DropdownController(
@@ -130,14 +137,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.update(thermal: ProcessInfo.processInfo.thermalState)
     }
 
-    /// Registers the lid-approval actions, removes approvals left from a previous
-    /// run, and routes responses to the approval center. Nothing is posted here;
+    /// The arranger while Windows is on, built on first use over the live windows.
+    private func currentArranger() -> Arranger? {
+        guard windows?.state == .on else { return nil }
+        if let arranger { return arranger }
+        let made = Arranger(system: LiveWindowSystem(), layoutsURL: LayoutStore.defaultURL)
+        arranger = made
+        return made
+    }
+
+    /// Drops the arranger whenever Windows leaves on.
+    private func observeWindowsForArranger() {
+        withObservationTracking {
+            _ = windows?.state
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.windows?.state != .on { self.arranger = nil }
+                self.observeWindowsForArranger()
+            }
+        }
+    }
+
+    /// Registers the approval actions, removes approvals left from a previous
+    /// run, and routes responses to the approval centers. Nothing is posted here;
     /// permission is asked on first need.
     private func startNotificationResponses() {
         let center = UNUserNotificationCenter.current()
-        center.setNotificationCategories([LidApprovalCenter.category])
-        Task { [approvals] in await approvals.removeStaleApprovals() }
-        let responder = NotificationResponder(approvals: approvals)
+        center.setNotificationCategories([LidApprovalCenter.category, WindowApprovalCenter.category])
+        Task { [approvals, windowApprovals] in
+            await approvals.removeStaleApprovals()
+            await windowApprovals.removeStaleApprovals()
+        }
+        let responder = NotificationResponder(approvals: approvals, windowApprovals: windowApprovals)
         center.delegate = responder
         notificationResponder = responder
     }
@@ -158,7 +190,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Defaults[.awake] = settings
             },
             notificationStatus: { [approvals] in await approvals.notificationStatus() },
-            poster: poster
+            poster: poster,
+            windowsState: { [weak self] in self?.windows?.state ?? .off },
+            arranger: { [weak self] in self?.currentArranger() },
+            windowApprover: windowApprovals
         )
         gate.set(handler)
         // Never, or session lid switched off, takes lid mode back from live agent leases right away.
@@ -202,13 +237,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// Forwards notification responses to the approval center. Tapping an
+/// Forwards notification responses to the approval centers. Tapping an
 /// approval's body opens Settings → Agents; it and dismissal don't answer.
 private final class NotificationResponder: NSObject, UNUserNotificationCenterDelegate {
     private let approvals: LidApprovalCenter
+    private let windowApprovals: WindowApprovalCenter
 
-    init(approvals: LidApprovalCenter) {
+    init(approvals: LidApprovalCenter, windowApprovals: WindowApprovalCenter) {
         self.approvals = approvals
+        self.windowApprovals = windowApprovals
     }
 
     nonisolated func userNotificationCenter(
@@ -216,16 +253,19 @@ private final class NotificationResponder: NSObject, UNUserNotificationCenterDel
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let request = response.notification.request
-        guard request.content.categoryIdentifier == LidApprovalCenter.categoryID else {
+        let category = request.content.categoryIdentifier
+        guard category == LidApprovalCenter.categoryID || category == WindowApprovalCenter.categoryID else {
             completionHandler()
             return
         }
         let action = response.actionIdentifier
         let requestID = request.identifier
-        let approvals = approvals
+        let (approvals, windowApprovals) = (approvals, windowApprovals)
         Task { @MainActor in
             if action == UNNotificationDefaultActionIdentifier {
                 SettingsWindowController.shared.show(page: .agents)
+            } else if category == WindowApprovalCenter.categoryID {
+                windowApprovals.handle(actionIdentifier: action, requestID: requestID)
             } else {
                 approvals.handle(actionIdentifier: action, requestID: requestID)
             }
