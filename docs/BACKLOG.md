@@ -75,6 +75,10 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - the `PrivateApis.swift` header still talks about `@_silgen_name`;
   - the `WindowsController` live pieces could move to their own file.
 - **Build noise and docs:** the vendored code gives deprecation warnings (macOS 13 to 14) and an upstream `swiftui-introspect` manifest warning; the Scribe comment in `Packages/WindowKit/Package.swift` says `Package.resolved` fixes the revision, but the app's pin is `Config/Package.resolved`; `UPSTREAM.md` words the test-suite condition for Loop's settings loosely (the code checks `XCTestConfigurationFilePath`).
+- `gesturesAvailable` sits between `menuActions(primary:)` and its doc comment, so the comment attaches to the wrong declaration.
+- `everyLoaderSymbolIsChecked` doesn't include the MultitouchSupport symbol list.
+- Turn On without Accessibility shows macOS's own Accessibility alert alongside Mooring's sheet; confirm in the owner check that this reads well.
+
 
 ## CLI and IPC (stage 2a leftovers)
 
