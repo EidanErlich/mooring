@@ -63,15 +63,32 @@ struct ClaudePluginFilesTests {
     }
 
     /// Every file under `folder` as a path relative to it, with its bytes. `.DS_Store` is Finder noise and never counts.
+    /// Symlinks are resolved on both sides first, so the paths are right from any location (e.g. /tmp → /private/tmp).
     private func contents(of folder: URL) throws -> [String: Data] {
-        let enumerator = try #require(FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey]))
+        let resolved = folder.resolvingSymlinksInPath().standardizedFileURL
+        let base = resolved.pathComponents
+        let enumerator = try #require(FileManager.default.enumerator(at: resolved, includingPropertiesForKeys: [.isRegularFileKey]))
         var files: [String: Data] = [:]
         for case let url as URL in enumerator {
             guard url.lastPathComponent != ".DS_Store", (try url.resourceValues(forKeys: [.isRegularFileKey])).isRegularFile == true
             else { continue }
-            files[String(url.path.dropFirst(folder.path.count + 1))] = try Data(contentsOf: url)
+            let components = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+            try #require(components.starts(with: base), "\(url.path) is under \(folder.path)")
+            files[components.dropFirst(base.count).joined(separator: "/")] = try Data(contentsOf: url)
         }
         return files
+    }
+
+    /// Paths stay relative to the folder when it's reached through a symlink (such as /tmp → /private/tmp).
+    @Test func contentsAreRelativeThroughASymlink() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("mooring-plugin-files-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: base) }
+        let real = base.appendingPathComponent("real-plugin")
+        try FileManager.default.createDirectory(at: real.appendingPathComponent("scripts"), withIntermediateDirectories: true)
+        try Data("hi".utf8).write(to: real.appendingPathComponent("scripts/hook"))
+        let link = base.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        #expect(try contents(of: link) == ["scripts/hook": Data("hi".utf8)])
     }
 
     @Test func bundledPluginMatchesTheSource() throws {

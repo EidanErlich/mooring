@@ -7,3 +7,8 @@
 
 MOORING_SIGN_IDENTITY = Apple Development: Your Name (XXXXXXXXXX)
 MOORING_TEAM = XXXXXXXXXX
+
+// Optional: turns on the Sparkle updater (Settings → Mooring → Advanced). Paste the public key that
+// Sparkle's generate_keys prints; the private key stays in your Keychain and never goes in this file.
+// Leave it out and the updater stays off, with no update checks.
+// MOORING_SPARKLE_PUBLIC_KEY = <base64 public EdDSA key>

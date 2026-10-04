@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dropdown: DropdownController?
     private var windows: WindowsController?
     private var clipboard: ClipboardController?
+    private var updates: UpdatesController?
     private var tickTimer: Timer?
     private var wakeObserver: NSObjectProtocol?
     private var socketServer: SocketServer?
@@ -112,13 +113,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.clipboard = clipboard
         SettingsWindowController.shared.clipboard = clipboard
 
+        startDropdown(engine: engine, windows: windows, clipboard: clipboard, statusItem: statusItem)
+        startUpdates()
+    }
+
+    /// The status item's menu. "Update Available…" shows while the updater has a scheduled update waiting.
+    private func startDropdown(engine: AwakeEngine, windows: WindowsController, clipboard: ClipboardController,
+                               statusItem: StatusItemController) {
         let dropdown = DropdownController(
             engine: engine, approvals: approvals, windows: windows, clipboard: clipboard,
-            openSettings: { SettingsWindowController.shared.show() })
+            openSettings: { SettingsWindowController.shared.show() },
+            updateAvailable: { [weak self] in self?.updates?.updateAvailable ?? false },
+            checkForUpdate: { [weak self] in self?.updates?.checkNow() })
         statusItem.onOpenMenu = { [weak statusItem] in
             statusItem.map(dropdown.open(from:))
         }
         self.dropdown = dropdown
+    }
+
+    /// Off without a Sparkle key: no updater, no alert, no network. With one, the consent alert is asked
+    /// once, after launching finishes.
+    private func startUpdates() {
+        let updates = UpdatesController.live(poster: poster)
+        self.updates = updates
+        SettingsWindowController.shared.updates = updates
+        DispatchQueue.main.async { updates.launch() }
     }
 
     /// Battery, lid and thermal state feed the guardrails (docs/SPEC.md 1.7).
@@ -225,6 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
         clipboard?.willTerminate()
+        // After an uninstall, whatever was written on the way out goes too.
+        SettingsDomainsRemover.shared.removeAgainAtQuit()
     }
 
     /// Never quit with lid sleep disabled (docs/SPEC.md 1.6, layer 4). The

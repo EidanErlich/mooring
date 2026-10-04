@@ -52,4 +52,13 @@ enum CLIInstaller {
         }
         try fileManager.createSymbolicLink(at: link, withDestinationURL: target)
     }
+
+    /// For Uninstall: removes `link` only when it's a link to `target`, leaving anything else there alone.
+    /// Returns whether it removed the link.
+    @discardableResult
+    static func removeIfOurs(link: URL, target: URL) throws -> Bool {
+        guard state(link: link, target: target) == .installed else { return false }
+        try FileManager.default.removeItem(at: link)
+        return true
+    }
 }

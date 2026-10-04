@@ -12,6 +12,7 @@ final class SettingsWindowController {
     var lid: LidController?
     var windows: WindowsController?
     var clipboard: ClipboardController?
+    var updates: UpdatesController?
     private let navigation = SettingsNavigation()
 
     private lazy var window: NSWindow = {
@@ -23,7 +24,8 @@ final class SettingsWindowController {
         )
         window.title = "Mooring Settings"
         window.contentViewController = NSHostingController(
-            rootView: SettingsView(engine: engine, windows: windows, clipboard: clipboard, navigation: navigation))
+            rootView: SettingsView(
+                engine: engine, windows: windows, clipboard: clipboard, updates: updates, navigation: navigation))
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 640, height: 420))
         window.center()

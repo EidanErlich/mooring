@@ -133,6 +133,27 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - hardening idea: also assert the app declares no `NSServices` in `Info.plist` and donates nothing to Core Spotlight (`CSSearchableIndex`), two more routes by which history could leave the app.
 - **Owner checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint (now refreshed when the popup becomes key); holding ⌥ in the open Clipboard submenu swaps Clear for Clear All (the rows are hosted SwiftUI views, and only the `isAlternate` setup is unit-tested); Delete Clipboard History… removes the folder.
 
+## Release (5 leftovers)
+
+- **Uninstall:** stopping the socket server as step 0 would be tidier, so an agent can't take a new lease while the uninstall runs. It isn't needed for safety: `LidController.apply` refuses to disable sleep once shutdown has begun, and assertions die at quit.
+- **Uninstall scope:** a Claude plugin installed from GitHub (`mooring@mooring`) is left installed, by design. The in-app CLI step removes only a link to this app's own bundled `mooring`, while `make uninstall` removes any link under `/Applications/Mooring.app/`.
+- **Uninstall tests:** `make uninstall`'s refusal guard in `scripts/test-make-uninstall.sh` can't fire (isolation comes from the overrides, which is sound); the test log shows "Unable to find service status" noise that predates stage 5.
+- **Updater:**
+  - the misleading `#require` message in `ClaudePluginFilesTests`;
+  - the appcast has no `<sparkle:releaseNotesLink>`, so the update alert shows no notes; it could point at the GitHub release page;
+  - WindowKit's `appBuild` (reads `CFBundleVersion` as an Int) is now always nil, and unused.
+- **Release script:**
+  - the tag check is local only, so a tag that exists only on the remote isn't caught;
+  - `make release` passes no flags (no `ARGS`); use `bash scripts/release.sh --publish` directly;
+  - a real (non-dry) run was never exercised end to end by an agent: it needs the owner's signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`). The key and signature checks are tested with fixtures and a shimmed `make`.
+- **Owner checks, not yet done:**
+  - Sparkle keys (and the offline backup), `bash scripts/release.sh --publish` and a look at the `dist/` it built (`docs/RELEASING.md`);
+  - with the owner's identity, the embedded Sparkle.framework still passes `codesign --verify --deep --strict` after Xcode re-signs it;
+  - a clean install on a second user account: the Gatekeeper block, **Open Anyway** and the `xattr` fix, and the first-launch update consent;
+  - **Uninstall Mooring…** on a real install, including that `claude plugin marketplace remove mooring-app` (which also uninstalls the plugin) reads right;
+  - the tap repo, Pages and the printed publish commands (the first one tags `v0.1.0`);
+  - with 0.1.1: a scheduled update found while Mooring is in the background posts the notification and shows **Update Available…**, and the update replaces a bundle whose helper is running.
+
 ## CLI and IPC (stage 2a leftovers)
 
 - **Re-acquire edge cases (from the 2b-prep fixes):**
@@ -153,7 +174,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - the Helper check fails for people who never use lid mode.
 - **Settings and install:**
   - A regular file at `~/.local/bin/mooring` reads "Points to <own path>" in Settings; say "Not a link".
-  - `make uninstall` doesn't remove the symlink, though SPEC's Repository setup says it does.
 - **"End my session after the Mac sleeps"** now also ends a CLI `on`, which follows from the one-switch decision. Note it in the release notes.
 - **A Terminal-started menu session** shows the reason "Turned on from the menu bar".
 - **`anchor`:**

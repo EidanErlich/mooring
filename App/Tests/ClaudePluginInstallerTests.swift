@@ -260,4 +260,21 @@ struct ClaudePluginInstallerTests {
         #expect(failure(install(runner)) == .command("no such plugin"))
         #expect(runner.calls.count == 4)
     }
+
+    /// Uninstall removes the app's marketplace, which takes its plugin with it, and leaves a GitHub install alone.
+    @Test func uninstallRemovesOnlyTheAppMarketplace() {
+        let registered = FakeRunner([Self.marketplaceList, ToolResult(status: 0)])
+        #expect(failure(ClaudePluginInstaller.uninstall(claude: "/x/claude", runner: registered)) == nil)
+        #expect(registered.calls == [
+            ["/x/claude", "plugin", "marketplace", "list", "--json"],
+            ["/x/claude", "plugin", "marketplace", "remove", "mooring-app"]
+        ])
+
+        let absent = FakeRunner([Self.otherMarketplaces])
+        #expect(failure(ClaudePluginInstaller.uninstall(claude: "/x/claude", runner: absent)) == nil)
+        #expect(absent.calls == [["/x/claude", "plugin", "marketplace", "list", "--json"]])
+
+        let failing = FakeRunner([Self.marketplaceList, ToolResult(status: 1, stderr: "boom\n")])
+        #expect(failure(ClaudePluginInstaller.uninstall(claude: "/x/claude", runner: failing)) == .command("boom"))
+    }
 }

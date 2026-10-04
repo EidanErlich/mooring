@@ -4,9 +4,66 @@ Mooring is a free, open-source macOS menu-bar app that keeps your Mac awake, inc
 
 > **Status:** early development. Mooring keeps your Mac awake (idle and display sleep) from the menu bar: left-click the anchor to turn it on, right-click for durations, "while an app runs" and the list of what's keeping the Mac awake. Lid mode (keep running with the lid closed) works after a one-time approval of Mooring's helper; it pauses itself on low battery or when the Mac runs hot, and if Mooring quits or crashes the helper turns lid sleep back on within a few seconds. Two optional modules, both off until you turn them on, are built in: Windows, a window manager agents can drive, and Clipboard, a clipboard history agents can't read. The full design is in [docs/SPEC.md](docs/SPEC.md).
 
-## Build from source
+## Install
 
-You need macOS 14 or later, Xcode, and [Homebrew](https://brew.sh).
+Mooring needs macOS 14 or later. There is no paid Apple account behind it, so the prebuilt download is not notarized (see the second option).
+
+### Build from source (recommended)
+
+You need Xcode and [Homebrew](https://brew.sh).
+
+```sh
+git clone https://github.com/EidanErlich/mooring.git && cd mooring
+make bootstrap   # installs XcodeGen and SwiftLint, generates Mooring.xcodeproj
+make install     # Release build to /Applications
+```
+
+An app you build yourself isn't quarantined, so macOS never warns about it. To update later, run `git pull && make install`.
+
+Lid mode needs a build signed with your own signing certificate: before `make install`, copy [`Config/Local.xcconfig.example`](Config/Local.xcconfig.example) to `Config/Local.xcconfig` and fill in your identity. Without it the build is ad-hoc signed, and everything but lid mode works.
+
+### Prebuilt download
+
+Download `Mooring-<version>.zip` from [GitHub Releases](https://github.com/EidanErlich/mooring/releases), unzip it and drag `Mooring.app` to `/Applications`. Mooring is signed with the maintainer's own certificate, not notarized, so macOS blocks the first open. Either:
+
+- open System Settings → Privacy & Security and click **Open Anyway**, or
+- run `xattr -dr com.apple.quarantine /Applications/Mooring.app` in Terminal.
+
+### Homebrew
+
+Once the tap is published:
+
+```sh
+brew install --cask eidanerlich/tap/mooring
+```
+
+The cask lives in a project tap (`EidanErlich/homebrew-tap`), because official Homebrew casks reject apps that aren't notarized. It prints the same quarantine advice after installing. Mooring updates itself, so `brew upgrade` leaves it alone (`auto_updates`); `brew uninstall` quits it first, and `brew uninstall --zap` also removes its Application Support folder and preferences.
+
+## Updates
+
+Mooring makes no network requests of its own on a build without an update key, and the Updates settings don't appear. A release build with Sparkle's public key (`MOORING_SPARKLE_PUBLIC_KEY` in `Config/Local.xcconfig`) asks once, on first launch, whether to check for updates automatically; **Not Now** leaves checks off. Settings → Mooring → Advanced then has **Check for updates automatically** and **Check Now**. The updates come from `https://eidanerlich.github.io/mooring/appcast.xml` and are verified with an EdDSA signature (Sparkle 2.10.0). When an automatic check finds an update while you're working in another app, Mooring doesn't pop a window up behind it: it posts a notification and adds **Update Available…** to the menu, which shows the update. If you built from source, update with `git pull && make install` instead.
+
+## Uninstall
+
+Settings → Mooring → Advanced → **Uninstall Mooring…** lists what it will do, then, in order:
+
+1. ends every keep-awake session, so the Mac sleeps normally again;
+2. turns lid sleep back on;
+3. removes Mooring's helper;
+4. stops Mooring opening at login;
+5. removes the `mooring` command from `~/.local/bin`, if it links to this app;
+6. removes the Claude Code plugin that came with the app;
+7. removes Mooring from Claude Desktop and Cursor;
+8. deletes clipboard history, only if you tick **Also delete clipboard history** (off by default);
+9. deletes saved sessions (`leases.json`), saved window layouts (`layouts.json`) and the CLI socket (`mooring.sock`) from `~/Library/Application Support/Mooring`, and that folder too if nothing else is left in it;
+10. deletes Mooring's settings (again as it quits, so nothing written on the way out survives);
+11. moves Mooring to the Trash, then quits.
+
+A step that fails doesn't stop the rest; Mooring lists what didn't finish before it quits. If lid sleep couldn't be turned back on, the list says to run `sudo pmset -a disablesleep 0` in Terminal. If the app is already gone, `make uninstall` quits Mooring, removes `~/.local/bin/mooring` when it links into `/Applications/Mooring.app`, and removes the app. It doesn't touch the helper, login item or settings, so use the in-app button first when you can.
+
+## Develop
+
+You need Xcode and [Homebrew](https://brew.sh).
 
 ```sh
 make bootstrap   # installs XcodeGen and SwiftLint, generates Mooring.xcodeproj
@@ -23,9 +80,14 @@ Other commands:
 | `make build` | Debug build |
 | `make lint` | SwiftLint |
 | `make install` | Release build to `/Applications` |
-| `make uninstall` | Quits Mooring and removes it from `/Applications` |
+| `make uninstall` | Quits Mooring, removes `~/.local/bin/mooring` if it links into the installed app, and removes the app from `/Applications` |
+| `make release` | Builds `dist/` (zip, appcast, Homebrew cask) for a release; publishes nothing. See [docs/RELEASING.md](docs/RELEASING.md) |
 | `make reset-sleep` | Runs `sudo pmset -a disablesleep 0`, in case sleep is ever left disabled |
 | `make clean` | Removes build output and the generated project |
+
+## Releasing
+
+The owner's step-by-step checklist (Sparkle keys, the version, `scripts/release.sh`, the Homebrew tap, GitHub Pages and the tag) is in [docs/RELEASING.md](docs/RELEASING.md). Nothing is published automatically.
 
 ## Use from Raycast, Shortcuts and MCP clients
 

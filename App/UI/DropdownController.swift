@@ -7,12 +7,14 @@ final class DropdownController {
     private let dropdownMenu: DropdownMenu
 
     init(engine: AwakeEngine, approvals: LidApprovalCenter, windows: WindowsController, clipboard: ClipboardController,
-         openSettings: @escaping () -> Void) {
+         openSettings: @escaping () -> Void, updateAvailable: @escaping () -> Bool,
+         checkForUpdate: @escaping () -> Void) {
         dropdownMenu = DropdownMenu(
             engine: engine, model: DropdownModel(),
             helperEnabled: { HelperClient.shared.status == .enabled },
             runningApps: DropdownMenu.regularApps, openSettings: openSettings, windows: windows, clipboard: clipboard,
-            pendingApproval: { approvals.pending.contains($0) }
+            pendingApproval: { approvals.pending.contains($0) },
+            updateAvailable: updateAvailable, checkForUpdate: checkForUpdate
         )
     }
 

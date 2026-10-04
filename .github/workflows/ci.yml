@@ -21,6 +21,16 @@ jobs:
         run: make build XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO"
       - name: Unit tests
         run: make test XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO"
+      - name: Release dry run
+        # Proves the release tooling without secrets: no signing, tests or publishing. The appcast must be XML
+        # and the cask must parse as Ruby.
+        run: |
+          scripts/release.sh --dry-run --app build/DerivedData/Build/Products/Debug/Mooring.app
+          for f in dist/Mooring-*.zip dist/appcast.xml dist/homebrew/mooring.rb; do
+            test -s "$f" || { echo "missing $f"; exit 1; }
+          done
+          xmllint --noout dist/appcast.xml
+          ruby -c dist/homebrew/mooring.rb
       - name: Lint (non-blocking)
         run: make lint
         continue-on-error: true

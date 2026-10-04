@@ -72,8 +72,10 @@ struct AgentWallTests {
         let entries = try FileManager.default.contentsOfDirectory(at: appFolder, includingPropertiesForKeys: [.isDirectoryKey])
         let folders = try entries.filter { try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true }
             .map(\.lastPathComponent).sorted()
+        // Updates is not an agent path: the updater talks only to Sparkle's feed, never to the socket.
         #expect(folders == [
-            "Assets.xcassets", "Clipboard", "Helper", "IPC", "Icon", "Intents", "Links", "Settings", "Sources", "Tests", "UI", "Windows"
+            "Assets.xcassets", "Clipboard", "Helper", "IPC", "Icon", "Intents", "Links", "Settings", "Sources", "Tests", "UI",
+            "Updates", "Windows"
         ])
     }
 

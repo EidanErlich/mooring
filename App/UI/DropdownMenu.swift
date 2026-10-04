@@ -26,6 +26,8 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
     private let pendingApproval: (String) -> Bool
     private let needsLidConfirmation: (PowerSnapshot) -> Bool
     private let confirmLidOnBattery: () -> Void
+    private let updateAvailable: () -> Bool
+    private let checkForUpdate: () -> Void
     private let appsItem = NSMenuItem()
     private var observing = false
     private var headerItem: NSMenuItem?
@@ -38,7 +40,8 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
          windows: WindowsController, windowActions: WindowActions = .live, clipboard: ClipboardController,
          pendingApproval: @escaping (String) -> Bool = { _ in false },
          needsLidConfirmation: @escaping (PowerSnapshot) -> Bool = { LidOptIn.needsConfirmation(power: $0, settings: Defaults[.awake]) },
-         confirmLidOnBattery: @escaping () -> Void = { _ = LidOptIn.confirm() }) {
+         confirmLidOnBattery: @escaping () -> Void = { _ = LidOptIn.confirm() },
+         updateAvailable: @escaping () -> Bool = { false }, checkForUpdate: @escaping () -> Void = {}) {
         self.engine = engine
         self.model = model
         self.helperEnabled = helperEnabled
@@ -47,6 +50,8 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         self.pendingApproval = pendingApproval
         self.needsLidConfirmation = needsLidConfirmation
         self.confirmLidOnBattery = confirmLidOnBattery
+        self.updateAvailable = updateAvailable
+        self.checkForUpdate = checkForUpdate
         self.root = NSMenu()
         super.init()
         windowsSubmenu = WindowsSubmenu(
@@ -66,9 +71,10 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         sync()
     }
 
-    /// Fixes up what the hosted rows can't: the lid rows, the apps item and the lease items.
+    /// Fixes up what the hosted rows can't: the lid rows, the apps item, the lease items and "Update Available…".
     func sync() {
         syncLidRows()
+        syncUpdateItem()
         appsItem.title = AppSessionText.rowTitle(appNames: Self.pickedAppNames(engine))
         appsItem.state = engine.sessionApps.isEmpty ? .off : .on
         syncLeaseItems()
@@ -318,6 +324,16 @@ extension DropdownMenu {
         let item = ClosureMenuItem(title: title, keyEquivalent: key, closure: action)
         item.identifier = NSUserInterfaceItemIdentifier(id)
         return item
+    }
+
+    /// "Update Available…" right after Settings… while a scheduled update waits (Sparkle's gentle reminder).
+    private func syncUpdateItem() {
+        let existing = root.items.firstIndex { $0.identifier?.rawValue == "updateAvailable" }
+        if !updateAvailable(), let existing { root.removeItem(at: existing) }
+        guard updateAvailable(), existing == nil,
+              let settings = root.items.firstIndex(where: { $0.identifier?.rawValue == "settings" }) else { return }
+        root.insertItem(native(id: "updateAvailable", title: "Update Available…") { [checkForUpdate] in checkForUpdate() },
+                        at: settings + 1)
     }
 
     /// Names of the picked apps, from the running app when possible.
