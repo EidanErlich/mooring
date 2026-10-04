@@ -30,7 +30,7 @@ extension MCPTools {
                             "region": .object([
                                 "type": .string("string"),
                                 "description": .string("A region name from list_windows, such as left-half, right-half or "
-                                    + "maximize. Give a region or a frame, not both.")
+                                    + "maximize. Regions only move and resize windows. Give a region or a frame, not both.")
                             ]),
                             "frame": .object([
                                 "type": .string("object"),

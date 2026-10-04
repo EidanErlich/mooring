@@ -35,3 +35,37 @@ struct WindowRegionTests {
         #expect(WindowRegion.direction(named: "--", among: WindowDirection.allCases) == nil)
     }
 }
+
+extension WindowKitGlobalStateTests {
+    /// Agents get only regions that set a window's frame, which `win.undo` can put back.
+    @Suite
+    @MainActor
+    struct AgentRegionTests {
+        static let excluded: [WindowDirection] = [
+            .minimize, .minimizeOthers, .hide, .fullscreen, .nextSpace, .previousSpace, .undo, .initialFrame,
+            .focusUp, .focusDown, .focusLeft, .focusRight, .focusNextInStack, .stash, .unstash, .cycle, .custom
+        ] + WindowDirection.spaceSwitching
+
+        @Test func offeredRegionsAreFrameOnly() {
+            Capabilities.active = .live
+            let offered = WindowRegion.offered
+            for direction in Self.excluded {
+                #expect(!offered.contains(direction), "\(direction) is offered")
+            }
+            for direction in [WindowDirection.leftHalf, .topLeftQuarter, .rightTwoThirds, .firstFourth, .maximize,
+                              .almostMaximize, .center, .larger, .growLeft, .moveUp, .nextScreen] {
+                #expect(offered.contains(direction), "\(direction) isn't offered")
+            }
+        }
+
+        @Test func excludedNamesAreWithheld() {
+            for name in ["minimize-others", "MinimizeOthers", "hide", "fullscreen", "next-space", "undo", "initial-frame",
+                         "stash", "focus-left", "cycle"] {
+                #expect(WindowRegion.isWithheld(name), "\(name)")
+            }
+            for name in ["left-half", "maximize", "next-screen", "sideways", ""] {
+                #expect(!WindowRegion.isWithheld(name), "\(name)")
+            }
+        }
+    }
+}

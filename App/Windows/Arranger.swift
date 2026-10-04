@@ -213,7 +213,8 @@ extension Arranger {
             } else {
                 let region = placement.region ?? ""
                 guard let name = regionName(region) else {
-                    throw Refusal(result: .init(app: label, status: .failed, reason: "unknown region “\(region)”"))
+                    let reason = system.isWithheld(region: region) ? "region isn't available to agents" : "unknown region “\(region)”"
+                    throw Refusal(result: .init(app: label, status: .failed, reason: reason))
                 }
                 goal = .region(name)
             }

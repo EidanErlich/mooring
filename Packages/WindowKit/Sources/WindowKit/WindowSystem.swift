@@ -153,7 +153,7 @@ public final class LiveWindowSystem: WindowSystem {
         }
     }
 
-    /// The window actions the Windows menu offers (`WindowKit.menuActions`), by region name.
+    /// The frame-only window actions the Windows menu offers (`WindowRegion.offered`), by region name.
     public func regions() -> [String] {
         guard isRunning else { return [] }
         return WindowRegion.offered.map(WindowRegion.name(for:))
@@ -290,16 +290,40 @@ public final class LiveWindowSystem: WindowSystem {
     }
 }
 
+extension WindowSystem {
+    /// Whether `region` names a Windows-menu action that does more than set a frame (minimize, hide, Spaces, …),
+    /// which arrangements never run.
+    public func isWithheld(region: String) -> Bool {
+        WindowRegion.isWithheld(region)
+    }
+}
+
 // MARK: - Region names
 
 /// A region is a `WindowDirection` by name: its raw value in kebab case ("LeftHalf" → "left-half"), with the quarters
 /// shortened as SPEC writes them ("TopLeftQuarter" → "top-left"). Lookups ignore case and punctuation, and take the
 /// raw value or the long quarter name too.
 enum WindowRegion {
-    /// The directions the Windows menu offers (so hidden features are left out), in its group order.
+    /// The directions that only set a window's position and size, so `win.undo` can put back what they did: the
+    /// halves, quarters, thirds and fourths, the maximize and center frames, size and move steps, and screen switches.
+    /// Minimizing, hiding, macOS full screen (Loop's `fullscreen` toggles it), Spaces, Loop's own undo and initial
+    /// frame, focus, stash and cycles are left out.
+    static let frameOnly: Set<WindowDirection> = Set(
+        [.maximize, .almostMaximize, .maximizeHeight, .maximizeWidth, .fillAvailableSpace, .center, .macOSCenter]
+            + WindowDirection.halves + WindowDirection.quarters + WindowDirection.horizontalThirds
+            + WindowDirection.verticalThirds + WindowDirection.horizontalFourths + WindowDirection.screenSwitching
+            + WindowDirection.sizeAdjustment + WindowDirection.shrink + WindowDirection.grow + WindowDirection.move
+    )
+
+    /// The frame-only directions the Windows menu offers (so hidden features are left out), in its group order.
     @MainActor static var offered: [WindowDirection] {
         let ids = Set((WindowKit.menuActions(primary: true) + WindowKit.menuActions(primary: false)).map(\.id))
-        return WindowKit.actionGroups.flatMap(\.directions).filter { ids.contains($0.rawValue) }
+        return WindowKit.actionGroups.flatMap(\.directions).filter { ids.contains($0.rawValue) && frameOnly.contains($0) }
+    }
+
+    /// Whether `name` is a direction that isn't frame-only, which `win.*` refuses rather than calling unknown.
+    static func isWithheld(_ name: String) -> Bool {
+        direction(named: name, among: WindowDirection.allCases).map { !frameOnly.contains($0) } ?? false
     }
 
     static func name(for direction: WindowDirection) -> String {

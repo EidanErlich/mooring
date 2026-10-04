@@ -9,7 +9,7 @@ struct WinGroup: ParsableCommand {
         discussion: """
         Windows must be on in Mooring (Windows › Turn On…). Arrange takes one <app>=<region> per window, \
         like chrome=right-half or iterm=bottom-left@left, or a frame as fractions: slack=0,0,0.5,0.5. \
-        `mooring win list-regions` prints every region name.
+        `mooring win list-regions` prints every region name; regions only move and resize windows.
         """,
         subcommands: [WinList.self, WinArrange.self, WinDo.self, WinUndo.self, WinLayoutGroup.self, WinListRegions.self]
     )
