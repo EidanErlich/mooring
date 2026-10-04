@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Search.swift
 import AppKit
 import Defaults
 import Fuse
@@ -14,13 +15,13 @@ class Search {
     var description: String {
       switch self {
       case .exact:
-        return NSLocalizedString("Exact", tableName: "GeneralSettings", comment: "")
+        return NSLocalizedString("Exact", tableName: "GeneralSettings", bundle: .module, comment: "")
       case .fuzzy:
-        return NSLocalizedString("Fuzzy", tableName: "GeneralSettings", comment: "")
+        return NSLocalizedString("Fuzzy", tableName: "GeneralSettings", bundle: .module, comment: "")
       case .regexp:
-        return NSLocalizedString("Regex", tableName: "GeneralSettings", comment: "")
+        return NSLocalizedString("Regex", tableName: "GeneralSettings", bundle: .module, comment: "")
       case .mixed:
-        return NSLocalizedString("Mixed", tableName: "GeneralSettings", comment: "")
+        return NSLocalizedString("Mixed", tableName: "GeneralSettings", bundle: .module, comment: "")
       }
     }
   }

@@ -2,7 +2,7 @@
 import XCTest
 @testable import ClipKit
 
-class ColorImageTests: XCTestCase {
+class ColorImageTests: GeneralPasteboardGuardedTestCase {
   func testColorImageFromShortHex() {
     XCTAssertNotNil(ColorImage.from("fff"))
   }

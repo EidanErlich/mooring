@@ -3,7 +3,7 @@ import XCTest
 import Defaults
 @testable import ClipKit
 
-class SearchTests: XCTestCase {
+class SearchTests: GeneralPasteboardGuardedTestCase {
   let savedSearchMode = Defaults[.searchMode]
   var items: [Search.Searchable]!
 

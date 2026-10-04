@@ -2,7 +2,7 @@
 import XCTest
 @testable import ClipKit
 
-class CollectionSurroundingTests: XCTestCase {
+class CollectionSurroundingTests: GeneralPasteboardGuardedTestCase {
   let items = ["pin1", "pin2", "recent1", "recent2", "recent3"]
 
   func testNearest() {

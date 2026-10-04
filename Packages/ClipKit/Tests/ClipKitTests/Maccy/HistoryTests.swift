@@ -5,7 +5,7 @@ import SwiftData
 @testable import ClipKit
 
 @MainActor
-class HistoryTests: XCTestCase { // swiftlint:disable:this type_body_length
+class HistoryTests: GeneralPasteboardGuardedTestCase { // swiftlint:disable:this type_body_length
   let savedSize = Defaults[.size]
   let savedSortBy = Defaults[.sortBy]
   let savedPinTo = Defaults[.pinTo]

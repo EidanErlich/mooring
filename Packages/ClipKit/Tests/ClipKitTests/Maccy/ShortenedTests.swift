@@ -2,7 +2,7 @@
 import XCTest
 @testable import ClipKit
 
-final class ShortenedTests: XCTestCase {
+final class ShortenedTests: GeneralPasteboardGuardedTestCase {
   func testShortenedReturnsAtMostMaxLength() {
     XCTAssertEqual("abcdef".shortened(to: 3), "abc")
   }

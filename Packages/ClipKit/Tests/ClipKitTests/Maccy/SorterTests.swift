@@ -3,7 +3,7 @@ import XCTest
 import Defaults
 @testable import ClipKit
 
-class SorterTests: XCTestCase {
+class SorterTests: GeneralPasteboardGuardedTestCase {
   let savedPinTo = Defaults[.pinTo]
   let sorter = Sorter()
 

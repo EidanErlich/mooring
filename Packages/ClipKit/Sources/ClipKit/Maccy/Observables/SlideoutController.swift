@@ -65,7 +65,7 @@ enum ResizingMode {
 
 @Observable
 class SlideoutController {
-  let logger = Logger(label: "org.p0deje.Maccy")
+  var logger: Logger { ClipKitLog.logger }
   private static let animationDuration = 0.25
 
   let onContentResize: (CGFloat) -> Void

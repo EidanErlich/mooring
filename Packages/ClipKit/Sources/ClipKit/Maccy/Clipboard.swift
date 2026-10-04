@@ -1,18 +1,28 @@
+// Adapted from Maccy@c376789: Maccy/Clipboard.swift
 import AppKit
 import Defaults
 import Sauce
 
 class Clipboard {
-  static let shared = Clipboard()
+  static let shared = ClipKit.track(Clipboard())
 
   typealias OnNewCopyHook = (HistoryItem) -> Void
 
   private var onNewCopyHooks: [OnNewCopyHook] = []
   var changeCount: Int
 
-  private let pasteboard = NSPasteboard.general
+  var environment: ClipboardEnvironment {
+    didSet { changeCount = pasteboard.changeCount }
+  }
+  private var pasteboard: NSPasteboard { environment.pasteboard }
 
   private var timer: Timer?
+  var pollingTimer: Timer? { timer }
+
+  // SwiftData's insert time grows with the square of an item's contents: 1,000 take ~0.2 s on the
+  // main thread, 10,000 (a 10,000-file copy) ~12 s. Mooring skips copies with more than this, checking
+  // the pasteboard item count first (each item gives at least one content) to avoid reading them all.
+  static let maxRecordedContents = 1_000
 
   private let dynamicTypePrefix = "dyn."
   private let microsoftSourcePrefix = "com.microsoft.ole.source."
@@ -33,10 +43,11 @@ class Clipboard {
   private var enabledTypes: Set<NSPasteboard.PasteboardType> { Defaults[.enabledPasteboardTypes] }
   private var disabledTypes: Set<NSPasteboard.PasteboardType> { supportedTypes.subtracting(enabledTypes) }
 
-  private var sourceApp: NSRunningApplication? { NSWorkspace.shared.frontmostApplication }
+  private var sourceApp: (any SourceApplication)? { environment.sourceApplication() }
 
-  init() {
-    changeCount = pasteboard.changeCount
+  init(environment: ClipboardEnvironment = .default) {
+    self.environment = environment
+    changeCount = environment.pasteboard.changeCount
   }
 
   func onNewCopy(_ hook: @escaping OnNewCopyHook) {
@@ -48,6 +59,7 @@ class Clipboard {
   }
 
   func start() {
+    timer?.invalidate()
     timer = Timer.scheduledTimer(
       timeInterval: Defaults[.clipboardCheckInterval],
       target: self,
@@ -58,8 +70,15 @@ class Clipboard {
   }
 
   func restart() {
+    guard timer != nil else { return }
     timer?.invalidate()
     start()
+  }
+
+  func stop() {
+    timer?.invalidate()
+    timer = nil
+    clearHooks()
   }
 
   @MainActor
@@ -111,7 +130,8 @@ class Clipboard {
 
   // Based on https://github.com/Clipy/Clipy/blob/develop/Clipy/Sources/Services/PasteService.swift.
   func paste() {
-    Accessibility.check()
+    // Without Accessibility the item is only copied; Mooring never asks for it from here.
+    guard environment.accessibilityTrusted() else { return }
 
     // Add flag that left/right modifier key has been pressed.
     // See https://github.com/TermiT/Flycut/pull/18 for details.
@@ -155,6 +175,11 @@ class Clipboard {
 
     changeCount = pasteboard.changeCount
 
+    // Nothing listening (stopped): nothing is read or recorded.
+    guard !onNewCopyHooks.isEmpty else {
+      return
+    }
+
     if pasteboard.pasteboardItems?.contains(where: { $0.types.contains(.fromMaccy) }) != true {
       // External copy occurred. Stop the current paste stack.
       // Maybe queue it into the paste stack? Configurable behaviour?
@@ -170,6 +195,11 @@ class Clipboard {
       return
     }
 
+    // Whatever is typed into a password field while Secure Keyboard Entry is on.
+    if environment.secureInputEnabled() {
+      return
+    }
+
     // Reading types on NSPasteboard gives all the available
     // types - even the ones that are not present on the NSPasteboardItem.
     // See https://github.com/p0deje/Maccy/issues/241.
@@ -178,6 +208,12 @@ class Clipboard {
     }
 
     if let sourceAppBundle = sourceApp?.bundleIdentifier, shouldIgnore(sourceAppBundle) {
+      return
+    }
+
+    let itemCount = pasteboard.pasteboardItems?.count ?? 0
+    guard itemCount <= Self.maxRecordedContents else {
+      ClipKitLog.logger.info("Skipping a copy of \(itemCount) pasteboard items")
       return
     }
 
@@ -217,6 +253,11 @@ class Clipboard {
       return
     }
 
+    guard contents.count <= Self.maxRecordedContents else {
+      ClipKitLog.logger.info("Skipping a copy of \(contents.count) contents")
+      return
+    }
+
     let historyItem = HistoryItem(contents: contents)
 
     if #unavailable(macOS 15.0) {
@@ -231,8 +272,11 @@ class Clipboard {
   }
 
   private func shouldIgnore(_ types: Set<NSPasteboard.PasteboardType>) -> Bool {
-    let ignoredTypes = self.ignoredTypes
+    var ignoredTypes = self.ignoredTypes
       .union(Defaults[.ignoredPasteboardTypes].map({ NSPasteboard.PasteboardType($0) }))
+    if !Defaults[.recordUniversalClipboard] {
+      ignoredTypes.insert(.universalClipboard)
+    }
 
     return types.isDisjoint(with: enabledTypes) ||
       !types.isDisjoint(with: ignoredTypes)

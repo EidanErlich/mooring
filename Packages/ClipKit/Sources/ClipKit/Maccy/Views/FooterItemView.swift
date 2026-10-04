@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/FooterItemView.swift
 import SwiftUI
 
 struct FooterItemView: View {
@@ -11,9 +12,9 @@ struct FooterItemView: View {
         selectionId: item.id,
         shortcuts: item.shortcuts,
         isSelected: item.isSelected,
-        accessibilityLabel: NSLocalizedString(item.title, comment: "")
+        accessibilityLabel: NSLocalizedString(item.title, bundle: .module, comment: "")
       ) {
-        Text(LocalizedStringKey(item.title))
+        Text(LocalizedStringKey(item.title), bundle: .module)
       }
     }
     .onHover { hovering in

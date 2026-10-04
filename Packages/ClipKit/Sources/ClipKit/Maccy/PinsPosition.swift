@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/PinsPosition.swift
 import Foundation
 import Defaults
 
@@ -10,9 +11,9 @@ enum PinsPosition: String, CaseIterable, Identifiable, CustomStringConvertible, 
   var description: String {
     switch self {
     case .top:
-      return NSLocalizedString("PinToTop", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PinToTop", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .bottom:
-      return NSLocalizedString("PinToBottom", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PinToBottom", tableName: "AppearanceSettings", bundle: .module, comment: "")
     }
   }
 }

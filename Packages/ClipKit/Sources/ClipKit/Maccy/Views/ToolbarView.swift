@@ -13,7 +13,7 @@ private struct KeyboardShortcutHelpModifier: ViewModifier {
 
   // Use the same localized description for visual help and the accessibility label.
   private var resolvedText: Text? {
-    let localized = NSLocalizedString(key, tableName: tableName, comment: comment)
+    let localized = NSLocalizedString(key, tableName: tableName, bundle: .module, comment: comment)
     guard let name else {
       return Text(localized)
     }
@@ -162,7 +162,7 @@ struct ToolbarView: View {
         } label: {
           Image(systemName: "stop")
         }
-        .accessibilityLabel(Text("toolbar_remove_paste_stack_action"))
+        .accessibilityLabel(Text("toolbar_remove_paste_stack_action", bundle: .module))
       }
     }
   }

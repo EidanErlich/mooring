@@ -51,16 +51,44 @@ class Popup {
   }
 
   private var eventsMonitor: Any?
+  var hasEventsMonitor: Bool { eventsMonitor != nil }
 
   private var state: PopupState = .toggle
 
-  init() {
-    KeyboardShortcuts.onKeyDown(for: .popup, action: handleFirstKeyDown)
-    initEventsMonitor()
-  }
+  // Maccy registered the hotkey and the events monitor here; ClipKit.start() and stop() do instead.
+  private(set) var isStarted = false
+  private static var hotkeyHandlerInstalled = false
+
+  init() {}
 
   deinit {
     deinitEventsMonitor()
+  }
+
+  func start() {
+    guard !isStarted else { return }
+    isStarted = true
+    if !Self.hotkeyHandlerInstalled {
+      // KeyboardShortcuts 2.0.2 can't remove a single handler, so this one stays and checks isStarted.
+      Self.hotkeyHandlerInstalled = true
+      KeyboardShortcuts.onKeyDown(for: .popup) { AppState.shared.popup.handleFirstKeyDownIfStarted() }
+    }
+    ClipKitShortcuts.enable(.popup)
+    initEventsMonitor()
+  }
+
+  func stop() {
+    guard isStarted else { return }
+    isStarted = false
+    state = .toggle
+    ClipKitShortcuts.disable(.popup)
+    deinitEventsMonitor()
+    close()
+  }
+
+  private func handleFirstKeyDownIfStarted() {
+    guard isStarted else { return }
+    handleFirstKeyDown()
   }
 
   func initEventsMonitor() {
@@ -76,6 +104,7 @@ class Popup {
     guard let eventsMonitor else { return }
 
     NSEvent.removeMonitor(eventsMonitor)
+    self.eventsMonitor = nil
   }
 
   func open(height: CGFloat, at popupPosition: PopupPosition = Defaults[.popupPosition]) {
@@ -84,7 +113,8 @@ class Popup {
 
   func reset() {
     state = .toggle
-    KeyboardShortcuts.enable(.popup)
+    guard isStarted else { return }
+    ClipKitShortcuts.enable(.popup)
   }
 
   func close() {
@@ -124,7 +154,7 @@ class Popup {
     if isClosed() {
       open(height: height)
       state = .opening
-      KeyboardShortcuts.disable(.popup)  // Handle events via eventsMonitor. Re-enable on popup close
+      ClipKitShortcuts.disable(.popup)  // Handle events via eventsMonitor. Re-enable on popup close
       return
     }
 

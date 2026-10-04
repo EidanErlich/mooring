@@ -4,7 +4,7 @@ import Defaults
 @testable import ClipKit
 
 @MainActor
-class HistoryItemDecoratorTests: XCTestCase {
+class HistoryItemDecoratorTests: GeneralPasteboardGuardedTestCase {
   let boldFont = NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)
   let savedHighlightMatch = Defaults[.highlightMatch]
   let savedImageMaxHeight = Defaults[.imageMaxHeight]

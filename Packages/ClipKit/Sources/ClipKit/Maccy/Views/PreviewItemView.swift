@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/PreviewItemView.swift
 import AppKit
 import KeyboardShortcuts
 import SwiftUI
@@ -74,7 +75,7 @@ struct PreviewItemView: View {
 
       if let application = item.application {
         HStack(spacing: 3) {
-          Text("Application", tableName: "PreviewItemView")
+          Text("Application", tableName: "PreviewItemView", bundle: .module)
           AppImageView(
             appImage: item.applicationImage,
             size: NSSize(width: 11, height: 11)
@@ -85,25 +86,25 @@ struct PreviewItemView: View {
 
       if item.hasImage, let image = item.item.image {
         HStack(spacing: 3) {
-          Text("Dimensions", tableName: "PreviewItemView")
+          Text("Dimensions", tableName: "PreviewItemView", bundle: .module)
           Text("\(Int(image.pixelSize.width))×\(Int(image.pixelSize.height))")
         }
       }
 
       HStack(spacing: 3) {
-        Text("FirstCopyTime", tableName: "PreviewItemView")
+        Text("FirstCopyTime", tableName: "PreviewItemView", bundle: .module)
         Text(item.item.firstCopiedAt, style: .date)
         Text(item.item.firstCopiedAt, style: .time)
       }
 
       HStack(spacing: 3) {
-        Text("LastCopyTime", tableName: "PreviewItemView")
+        Text("LastCopyTime", tableName: "PreviewItemView", bundle: .module)
         Text(item.item.lastCopiedAt, style: .date)
         Text(item.item.lastCopiedAt, style: .time)
       }
 
       HStack(spacing: 3) {
-        Text("NumberOfCopies", tableName: "PreviewItemView")
+        Text("NumberOfCopies", tableName: "PreviewItemView", bundle: .module)
         Text(String(item.item.numberOfCopies))
       }
     }

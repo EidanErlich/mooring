@@ -1,5 +1,6 @@
+// Adapted from Maccy@c376789: Maccy/ApplicationImageCache.swift
 class ApplicationImageCache {
-  static let shared = ApplicationImageCache()
+  static let shared = ClipKit.track(ApplicationImageCache())
 
   private let universalClipboardIdentifier: String =
   "com.apple.finder.Open-iCloudDrive"

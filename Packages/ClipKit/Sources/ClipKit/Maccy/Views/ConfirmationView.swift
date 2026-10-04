@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/ConfirmationView.swift
 import SwiftUI
 
 struct ConfirmationView<Content: View>: View {
@@ -14,13 +15,15 @@ struct ConfirmationView<Content: View>: View {
             item.showConfirmation = true
           }
         }
-        .confirmationDialog(confirmation.message, isPresented: $item.showConfirmation) {
-          Text(confirmation.comment)
-          Button(confirmation.confirm, role: .destructive) {
+        .confirmationDialog(Text(confirmation.message, bundle: .module), isPresented: $item.showConfirmation) {
+          Text(confirmation.comment, bundle: .module)
+          Button(role: .destructive) {
             item.action()
+          } label: {
+            Text(confirmation.confirm, bundle: .module)
           }
           .accessibilityIdentifier("confirmation-confirm")
-          Button(confirmation.cancel, role: .cancel) {}
+          Button(role: .cancel) {} label: { Text(confirmation.cancel, bundle: .module) }
         }
         .dialogSuppressionToggle(isSuppressed: suppressConfirmation)
     } else {

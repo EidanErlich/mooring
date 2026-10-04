@@ -12,18 +12,8 @@ struct StorageType {
 }
 
 extension Defaults.Keys {
-#if DEBUG
-  // UI Tests bundle preferences
-  static let testingSuiteName = "\(Bundle.main.bundleIdentifier ?? "org.p0deje.Maccy").uitests"
-
-  // When UI tests run with the `enable-testing` argument, window and pin
-  // preferences are stored in a separate xcuitest bundle
-  private static let preferencesSuite: UserDefaults = TestHost.isActive
-    ? (UserDefaults(suiteName: testingSuiteName) ?? .standard)
-    : .standard
-#else
-  private static let preferencesSuite: UserDefaults = .standard
-#endif
+  // `dev.mooring.clipboard`, or `dev.mooring.clipboard.tests` under a test host.
+  private static let preferencesSuite: UserDefaults = .clipKit
 
   static let clearOnQuit = Key<Bool>("clearOnQuit", default: false, suite: preferencesSuite)
   static let clearSystemClipboard = Key<Bool>("clearSystemClipboard", default: false, suite: preferencesSuite)
@@ -36,7 +26,20 @@ extension Defaults.Keys {
   static let ignoreEvents = Key<Bool>("ignoreEvents", default: false, suite: preferencesSuite)
   static let ignoreOnlyNextEvent = Key<Bool>("ignoreOnlyNextEvent", default: false, suite: preferencesSuite)
   static let ignoreRegexp = Key<[String]>("ignoreRegexp", default: [], suite: preferencesSuite)
-  static let ignoredApps = Key<[String]>("ignoredApps", default: [], suite: preferencesSuite)
+  static let ignoredApps = Key<[String]>("ignoredApps", default: passwordManagers, suite: preferencesSuite)
+  // Copies from these apps are never recorded unless the user removes them.
+  static let passwordManagers = [
+    "com.agilebits.onepassword7", // 1Password 7
+    "com.1password.1password", // 1Password 8
+    "com.bitwarden.desktop",
+    "com.dashlane.dashlanephonefinal", // Dashlane
+    "com.lastpass.LastPass",
+    "org.keepassxc.keepassxc",
+    "com.apple.keychainaccess",
+    "com.apple.Passwords"
+  ]
+  // Copies that arrive from another device by Universal Clipboard. Mooring addition, off by default.
+  static let recordUniversalClipboard = Key<Bool>("recordUniversalClipboard", default: false, suite: preferencesSuite)
   static let ignoredPasteboardTypes = Key<Set<String>>(
     "ignoredPasteboardTypes",
     default: Set([

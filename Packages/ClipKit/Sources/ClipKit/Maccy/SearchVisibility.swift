@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/SearchVisibility.swift
 import Defaults
 import Foundation
 
@@ -10,9 +11,9 @@ enum SearchVisibility: String, CaseIterable, Identifiable, CustomStringConvertib
   var description: String {
     switch self {
     case .always:
-      return NSLocalizedString("SearchVisibilityAlways", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("SearchVisibilityAlways", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .duringSearch:
-      return NSLocalizedString("SearchVisibilityDuringSearch", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("SearchVisibilityDuringSearch", tableName: "AppearanceSettings", bundle: .module, comment: "")
     }
   }
 }

@@ -19,6 +19,7 @@ Copied as plain files (no git history) into `Packages/ClipKit`, keeping Maccy's 
 - `Maccy/en.lproj/Localizable.strings` → `Packages/ClipKit/Sources/ClipKit/Resources/en.lproj/Localizable.strings`.
 - `Maccy/Views/en.lproj/PreviewItemView.strings` → `Packages/ClipKit/Sources/ClipKit/Resources/en.lproj/PreviewItemView.strings`.
 - `Maccy/Sounds/Knock.caf`, `Maccy/Sounds/Write.caf` → `Packages/ClipKit/Sources/ClipKit/Resources/Sounds/`.
+- `Maccy/Settings/en.lproj/AppearanceSettings.strings`, `GeneralSettings.strings`, `StorageSettings.strings` → `Packages/ClipKit/Sources/ClipKit/Resources/en.lproj/` (stage 4 task 2): the kept `PopupPosition`, `PinsPosition`, `SearchVisibility`, `HighlightMatch`, `Search.Mode` and `Sorter.By` descriptions look up these tables.
 - `MaccyTests/<file>` → `Packages/ClipKit/Tests/ClipKitTests/Maccy/<file>`, all ten: `ClipboardTests.swift`, `CollectionSurroundingTests.swift`, `ColorImageTests.swift`, `HistoryDecoratorTests.swift`, `HistoryItemTests.swift`, `HistoryTests.swift`, `SearchTests.swift`, `ShortenedTests.swift`, `SorterTests.swift`, `UnsafeForTitleLayoutTests.swift` (91 tests). No test was dropped.
 - `MaccyTests/Fixtures/guy.jpeg` → `Packages/ClipKit/Tests/ClipKitTests/Maccy/Fixtures/guy.jpeg`.
 
@@ -114,7 +115,7 @@ Source files (paths relative to `Maccy/` upstream and to `Sources/ClipKit/Maccy/
 
 ### Left out
 
-- `Intents/` (all six: `AppIntentError.swift`, `Clear.swift`, `Delete.swift`, `Get.swift`, `HistoryItemAppEntity.swift`, `Select.swift`), `SoftwareUpdater.swift`, `AppStoreReview.swift`, `About.swift`, `MenuIcon.swift`, `Settings/` (all panes and their strings; rebuilt later as Mooring's Clipboard pages), `AppDelegate.swift` and `MaccyApp.swift` (wiring reference only).
+- `Intents/` (all six: `AppIntentError.swift`, `Clear.swift`, `Delete.swift`, `Get.swift`, `HistoryItemAppEntity.swift`, `Select.swift`), `SoftwareUpdater.swift`, `AppStoreReview.swift`, `About.swift`, `MenuIcon.swift`, `Settings/` (all panes, and their strings apart from the three English tables above; rebuilt later as Mooring's Clipboard pages), `AppDelegate.swift` and `MaccyApp.swift` (wiring reference only).
 - `FloatingPanel.swift`: not needed to compile; the views reach the panel through `PopupPanel` (see Modifications). Stage 4 adapts it into `App/UI/`.
 - `GlobalHotKey.swift`: not in Maccy's own build target and referenced by nothing; it calls `KeyboardShortcuts.Shortcut.toKeyEquivalent()` / `toEventModifiers()`, which no KeyboardShortcuts release has (2.0.2 to 2.4.0 checked), so it does not compile.
 - `Extensions/Settings.PaneIdentifier+Panes.swift`: only Maccy's Settings window uses it, and it needs the Settings package.
@@ -155,15 +156,50 @@ Each changed file starts with `// Adapted from Maccy@c376789: <original path>`. 
 - `Maccy/Observables/Popup.swift`, `Maccy/Observables/SlideoutController.swift`, `Maccy/Views/SlideoutView.swift`, `Maccy/Views/ToolbarView.swift`: `AppState.shared.appDelegate?.panel` / `appState.appDelegate?.panel` → `AppState.shared.panel` / `appState.panel` (seven call sites).
 - `Maccy/Observables/History.swift`: removed the unused `import Settings`.
 - `Maccy/Extensions/Defaults.Keys+Names.swift`: `AppDelegate.isTesting` → `TestHost.isActive`; removed the `menuIcon` key (its type, `MenuIcon`, isn't taken).
-- `Maccy/Storage.swift`: `AppDelegate.isTesting` → `TestHost.isActive`, so the store is in memory under any test host. Maccy keyed this on the `enable-testing` launch argument that its test plan passes.
+- `Maccy/Storage.swift`: `AppDelegate.isTesting` → `TestHost.isActive`, so the store is in memory under any test host. Maccy keyed this on the `enable-testing` launch argument that its test plan passes. (Reworked in task 2, below.)
 - `Maccy/Extensions/NSSound+Named.swift`: `Bundle.main` → `Bundle.module` for `Knock.caf` and `Write.caf`.
-- `Maccy/Notifier.swift`: `notify(body:sound:)` returns early unless the main bundle is an `.app`. `UNUserNotificationCenter.current()` raises an exception in `swift test`'s bare `xctest` tool, which crashed the test run.
+- `Maccy/Notifier.swift`: `notify(body:sound:)` returns early unless the main bundle is an `.app`. `UNUserNotificationCenter.current()` raises an exception in `swift test`'s bare `xctest` tool, which crashed the test run. (Replaced in task 2 by a no-op, below.)
 - `MaccyTests/*.swift` (all ten): `@testable import Maccy` → `@testable import ClipKit`.
 - `MaccyTests/HistoryItemTests.swift`: the fixture is read with `Bundle.module` instead of `Bundle(for: type(of: self))`.
 - `MaccyTests/HistoryDecoratorTests.swift`: `testImage` used Maccy's 16-point `StatusBarMenuImage` asset (not taken); it now builds a 16 × 16 bitmap image.
-- `MaccyTests/ClipboardTests.swift`: `testIgnoreApplication` and `testIgnoreAllApplicationsExcept` also list the frontmost app's bundle id in `ignoredApps`. Maccy assumed Xcode or Finder is frontmost while tests run, which isn't so under `swift test` from a terminal.
+- `MaccyTests/ClipboardTests.swift`: `testIgnoreApplication` and `testIgnoreAllApplicationsExcept` also list the frontmost app's bundle id in `ignoredApps`. Maccy assumed Xcode or Finder is frontmost while tests run, which isn't so under `swift test` from a terminal. (Replaced in task 2 by an injected source app, below.)
+
+#### Stage 4 task 2: isolation and hardening
+
+Behaviour changes, each for privacy or for off-means-off:
+
+- `Maccy/Clipboard.swift`:
+  - `static let shared` goes through `ClipKit.track(_:)`.
+  - `private let pasteboard = NSPasteboard.general` and the frontmost-app lookup → an injected `ClipboardEnvironment` (pasteboard, source app, Secure Keyboard Entry probe, Accessibility probe). `ClipKit` passes `.general` and the real probes; under a test host the default is a private named pasteboard, no source app, no secure input and no Accessibility.
+  - New `stop()`: invalidates the timer, nils it and clears the hooks. `start()` invalidates any previous timer first; `restart()` does nothing unless running. New read-only `pollingTimer`.
+  - `checkForChangesInPasteboard()` returns without reading anything when no hook is installed (stopped); skips copies while Secure Keyboard Entry is on; skips Universal Clipboard copies (`com.apple.is-remote-clipboard`) unless `recordUniversalClipboard` is on; skips copies with more than `maxRecordedContents` (1,000) pasteboard items or contents, because SwiftData's insert time grows with the square of the contents (a 10,000-file copy took ~12 s on the main thread).
+  - `paste()` posts ⌘V only if the Accessibility probe says trusted; otherwise the item is just copied. It no longer calls `Accessibility.check()`.
+- `Maccy/Storage.swift`: `static let shared` goes through `ClipKit.track(_:)`. It opens `Storage.location`, which `ClipKit.start()` sets (`…/Mooring/Clipboard/Storage.sqlite` by default; in memory if `inMemory`, and always in memory under a test host), instead of `…/Maccy/Storage.sqlite` built at static init. The `#if DEBUG` around the test-host check is gone. A store that fails to open logs and falls back to memory instead of `fatalError`.
+- `Maccy/Extensions/Defaults.Keys+Names.swift`: the `#if DEBUG` `<bundle id>.uitests` suite trick and `testingSuiteName` are removed; every key uses `UserDefaults.clipKit` (`dev.mooring.clipboard`, or `dev.mooring.clipboard.tests` under a test host). `ignoredApps` defaults to `passwordManagers` (1Password 7 and 8, Bitwarden, Dashlane, LastPass, KeePassXC, Keychain Access, Passwords). New key `recordUniversalClipboard`, default false.
+- `Maccy/Extensions/KeyboardShortcuts.Name+Shortcuts.swift`: names are prefixed (`clipboardPopup`, `clipboardPin`, `clipboardDelete`, `clipboardTogglePreview`) so they can't collide in the app's `UserDefaults.standard`, and each is wrapped in `ClipKitShortcuts.guarded`, which unregisters it at creation and after every change unless allowed (the popup hotkey only while running; the other three never, as Maccy's `AppDelegate.disableUnusedGlobalHotkeys` did).
+- `Maccy/Observables/Popup.swift`: `init()` no longer calls `KeyboardShortcuts.onKeyDown` or adds the events monitor. New `start()`/`stop()` (called by `ClipKit`) do: the key-down handler is installed once and ignores presses unless started (KeyboardShortcuts 2.0.2 can't remove one handler); the hotkey is enabled and disabled through `ClipKitShortcuts`; `stop()` removes the monitor and closes the panel. `reset()` re-enables the hotkey only while started. `deinitEventsMonitor()` now nils the monitor. New read-only `isStarted` and `hasEventsMonitor`.
+- `Maccy/Notifier.swift`: `authorize()` and `notify(body:sound:)` do nothing. Maccy posted each copied item's text to Notification Center and asked for notification permission.
+- `Maccy/Observables/History.swift`: `static let shared` goes through `ClipKit.track(_:)`. `logger` is `ClipKitLog.logger`. Log lines no longer include item titles ("Inserting item with id '<title>'", "Removing duplicate item '<title>'", and three PasteStack lines); the clear-storage error logs the error's type only. (An unused binding left by that edit became `!stack.items.isEmpty`.)
+- `Maccy/Observables/SlideoutController.swift`: `logger` is `ClipKitLog.logger`.
+- `Maccy/Observables/AppState.swift`, `Maccy/ApplicationImageCache.swift`: `static let shared` goes through `ClipKit.track(_:)`.
+
+Strings now resolve from ClipKit's bundle (`Bundle.module`) instead of the app's main bundle:
+
+- `NSLocalizedString(…)` gains `bundle: .module` in `HighlightMatch.swift`, `PinsPosition.swift`, `PopupPosition.swift`, `Search.swift`, `SearchVisibility.swift`, `Sorter.swift`, `Observables/HistoryItemDecorator.swift`, `Observables/NavigationManager.swift`, `Views/FooterItemView.swift` and `Views/ToolbarView.swift`.
+- SwiftUI: `Text(…, bundle: .module)` in `Views/FooterItemView.swift`, `Views/HistoryItemView.swift` (two accessibility actions), `Views/ListHeaderView.swift`, `Views/PreviewItemView.swift` (five labels), `Views/SearchFieldView.swift` and `Views/ToolbarView.swift`; `Views/ListItemView.swift` `.help(Text(help, bundle: .module))`; `Views/SearchFieldView.swift` `TextField(text:label:)` with the placeholder as a `Text(…, bundle: .module)` label; `Views/ConfirmationView.swift` the dialog title, message and both buttons as `Text(…, bundle: .module)` (buttons via `Button(role:action:label:)`).
+
+Tests:
+
+- `MaccyTests/*.swift` (all ten): the classes inherit `GeneralPasteboardGuardedTestCase` (Mooring's), which fails a test if `NSPasteboard.general`'s change count moves during it.
+- `MaccyTests/ClipboardTests.swift`: each test uses its own `Clipboard` on a uniquely named pasteboard (released in `tearDown`, where the clipboard is also stopped), with Xcode injected as the source app, instead of `Clipboard.shared` on `NSPasteboard.general`. The two ignore-app tests are back to Maccy's `ignoredApps` lists.
 
 Mooring-written (not from Maccy):
 
 - `Sources/ClipKit/TestHost.swift`: `TestHost.isActive`, the same test-host check as WindowKit's.
 - `Sources/ClipKit/PopupPanel.swift`: `protocol PopupPanel: NSWindow` with `isPresented`, `open(height:at:)` and `verticallyResize(to:)`, the members Maccy's views used on `FloatingPanel`.
+- `Sources/ClipKit/ClipKit.swift` (task 2): the public surface: `start()`/`stop()`, `isRunning`, `isPopupShortcutRegistered`, `instantiatedSingletons`/`track(_:)`, the store folder (`0700`, excluded from backup), `ClipItem`, `recent`, `copy`, `paste`, `isPaused`, `ignoreNextCopy`, `clear`, `popupView`, `popupShortcutName`, `defaultStoreURL`.
+- `Sources/ClipKit/ClipKitSettings.swift` (task 2): the `dev.mooring.clipboard` suite, and `ClipSettings` with `ClipKit.settingsValues()` / `setSettingsValues(_:)`.
+- `Sources/ClipKit/ClipboardEnvironment.swift` (task 2): `ClipboardEnvironment` and `SourceApplication`.
+- `Sources/ClipKit/ClipKitShortcuts.swift` (task 2): the one place hotkeys are registered and unregistered.
+- `Sources/ClipKit/ClipKitResources.swift` (task 2): `ClipKitLog.logger` and `Bundle.clipKit`.
+- `Tests/ClipKitTests/*.swift` and `Tests/ClipKitTests/Support/` (task 2).

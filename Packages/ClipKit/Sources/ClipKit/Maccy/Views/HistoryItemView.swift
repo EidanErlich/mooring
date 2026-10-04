@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/HistoryItemView.swift
 import Defaults
 import SwiftUI
 
@@ -62,10 +63,10 @@ struct HistoryItemView: View {
     .onAppear {
       item.ensureThumbnailImage()
     }
-    .accessibilityAction(named: Text(item.isPinned ? "history_item_unpin_action" : "history_item_pin_action")) {
+    .accessibilityAction(named: Text(item.isPinned ? "history_item_unpin_action" : "history_item_pin_action", bundle: .module)) {
       appState.history.togglePin(item)
     }
-    .accessibilityAction(named: Text("history_item_delete_action")) {
+    .accessibilityAction(named: Text("history_item_delete_action", bundle: .module)) {
       appState.history.delete(item)
     }
   }

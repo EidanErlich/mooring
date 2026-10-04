@@ -10,8 +10,9 @@ import SwiftData
 
 @Observable
 class History: ItemsContainer { // swiftlint:disable:this type_body_length
-  static let shared = History()
-  let logger = Logger(label: "org.p0deje.Maccy")
+  static let shared = ClipKit.track(History())
+  // Log counts and states only: never an item's title or contents.
+  var logger: Logger { ClipKitLog.logger }
 
   var items: [HistoryItemDecorator] = []
   var pasteStack: PasteStack?
@@ -127,7 +128,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
 
   @MainActor
   func insertIntoStorage(_ item: HistoryItem) throws {
-    logger.info("Inserting item with id '\(item.title)'")
+    logger.info("Inserting item")
     Storage.shared.context.insert(item)
     Storage.shared.context.processPendingChanges()
     try? Storage.shared.context.save()
@@ -155,7 +156,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       if !item.fromMaccy {
         item.application = existingHistoryItem.application
       }
-      logger.info("Removing duplicate item '\(item.title)'")
+      logger.info("Removing duplicate item")
       removedItemIndex = all.firstIndex(where: { $0.item == existingHistoryItem })
       if let removedItemIndex {
         cleanup(all[removedItemIndex])
@@ -268,7 +269,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
           try context.delete(model: HistoryItemContent.self)
         }
       } catch {
-        logger.error("Failed to clear storage: \(String(reflecting: error))")
+        logger.error("Failed to clear storage: \(type(of: error))")
       }
       Storage.shared.context.processPendingChanges()
       try? Storage.shared.context.save()
@@ -370,7 +371,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
     pasteStack = stack
 
     logger.info("Initialising PasteStack with \(stack.items.count) items")
-    logger.info("Copying \(item.item.title) from PasteStack")
+    logger.info("Copying first item from PasteStack")
 
     if modifierFlags.isEmpty {
       AppState.shared.popup.close()
@@ -402,13 +403,13 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       return
     }
 
-    guard let pasted = stack.items.first else {
+    guard !stack.items.isEmpty else {
       pasteStack = nil
       logger.info("PasteStack is empty")
       return
     }
 
-    logger.info("PasteStack pasted \(pasted.item.title)")
+    logger.info("PasteStack pasted an item")
 
     stack.items.removeFirst()
 
@@ -418,7 +419,7 @@ class History: ItemsContainer { // swiftlint:disable:this type_body_length
       return
     }
 
-    logger.info("Copying \(item.item.title) from PasteStack. \(stack.items.count) items remaining in stack.")
+    logger.info("Copying next item from PasteStack. \(stack.items.count) items remaining in stack.")
 
     Task {
       if stack.modifierFlags.isEmpty {

@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/SearchFieldView.swift
 import SwiftUI
 
 struct SearchFieldView: View {
@@ -20,7 +21,7 @@ struct SearchFieldView: View {
           .opacity(0.8)
           .accessibilityHidden(true)
 
-        TextField(placeholder, text: $query)
+        TextField(text: $query) { Text(placeholder, bundle: .module) }
           .disableAutocorrection(true)
           .lineLimit(1)
           .textFieldStyle(.plain)
@@ -38,7 +39,7 @@ struct SearchFieldView: View {
           }
           .buttonStyle(.plain)
           .opacity(0.9)
-          .accessibilityLabel(Text("search_clear_accessibility_label"))
+          .accessibilityLabel(Text("search_clear_accessibility_label", bundle: .module))
         }
       }
     }

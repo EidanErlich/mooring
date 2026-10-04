@@ -2,7 +2,7 @@
 import XCTest
 @testable import ClipKit
 
-final class UnsafeForTitleLayoutTests: XCTestCase {
+final class UnsafeForTitleLayoutTests: GeneralPasteboardGuardedTestCase {
   private let objectReplacement = "\u{FFFC}"
 
   func testRemovesLeadingOccurrence() {

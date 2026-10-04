@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/ListItemView.swift
 import Defaults
 import SwiftUI
 
@@ -131,6 +132,6 @@ struct ListItemView<Title: View, ID: Hashable>: View {
     .accessibilityAddTraits(isSelected ? .isSelected : [])
     .accessibilityValue(Text(displaySelectionIndex ?? ""))
     .hoverSelectionId(selectionId)
-    .help(help ?? "")
+    .help(Text(help ?? "", bundle: .module))
   }
 }

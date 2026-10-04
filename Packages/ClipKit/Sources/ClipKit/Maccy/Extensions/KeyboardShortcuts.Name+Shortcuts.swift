@@ -1,8 +1,14 @@
+// Adapted from Maccy@c376789: Maccy/Extensions/KeyboardShortcuts.Name+Shortcuts.swift
 import KeyboardShortcuts
 
 extension KeyboardShortcuts.Name {
-  static let popup = Self("popup", default: Shortcut(.c, modifiers: [.command, .shift]))
-  static let pin = Self("pin", default: Shortcut(.p, modifiers: [.option]))
-  static let delete = Self("delete", default: Shortcut(.delete, modifiers: [.option]))
-  static let togglePreview = Self("togglePreview", default: Shortcut(.space, modifiers: [.control]))
+  static let popup = ClipKitShortcuts.guarded(
+    Self("clipboardPopup", default: Shortcut(.c, modifiers: [.command, .shift])),
+    registeredWhile: { ClipKitShortcuts.popupActive }
+  )
+  static let pin = ClipKitShortcuts.guarded(Self("clipboardPin", default: Shortcut(.p, modifiers: [.option])))
+  static let delete = ClipKitShortcuts.guarded(Self("clipboardDelete", default: Shortcut(.delete, modifiers: [.option])))
+  static let togglePreview = ClipKitShortcuts.guarded(
+    Self("clipboardTogglePreview", default: Shortcut(.space, modifiers: [.control]))
+  )
 }

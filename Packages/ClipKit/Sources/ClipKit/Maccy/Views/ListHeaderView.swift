@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Views/ListHeaderView.swift
 import Defaults
 import KeyboardShortcuts
 import SwiftUI
@@ -14,7 +15,7 @@ struct ListHeaderView: View {
   var body: some View {
     HStack {
       if showTitle {
-        Text("Maccy")
+        Text("Maccy", bundle: .module)
           .foregroundStyle(.secondary)
           .padding(.leading, 5)
       }

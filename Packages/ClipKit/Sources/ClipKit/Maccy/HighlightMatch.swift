@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/HighlightMatch.swift
 import Foundation
 import Defaults
 
@@ -12,13 +13,13 @@ enum HighlightMatch: String, CaseIterable, Identifiable, CustomStringConvertible
   var description: String {
     switch self {
     case .bold:
-      return NSLocalizedString("HighlightMatchBold", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("HighlightMatchBold", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .color:
-      return NSLocalizedString("HighlightMatchColor", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("HighlightMatchColor", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .italic:
-      return NSLocalizedString("HighlightMatchItalic", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("HighlightMatchItalic", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .underline:
-      return NSLocalizedString("HighlightMatchUnderline", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("HighlightMatchUnderline", tableName: "AppearanceSettings", bundle: .module, comment: "")
     }
   }
 }

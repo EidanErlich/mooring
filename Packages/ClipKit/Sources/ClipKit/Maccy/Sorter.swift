@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Sorter.swift
 import AppKit
 import Defaults
 
@@ -14,11 +15,11 @@ class Sorter {
     var description: String {
       switch self {
       case .lastCopiedAt:
-        return NSLocalizedString("LastCopiedAt", tableName: "StorageSettings", comment: "")
+        return NSLocalizedString("LastCopiedAt", tableName: "StorageSettings", bundle: .module, comment: "")
       case .firstCopiedAt:
-        return NSLocalizedString("FirstCopiedAt", tableName: "StorageSettings", comment: "")
+        return NSLocalizedString("FirstCopiedAt", tableName: "StorageSettings", bundle: .module, comment: "")
       case .numberOfCopies:
-        return NSLocalizedString("NumberOfCopies", tableName: "StorageSettings", comment: "")
+        return NSLocalizedString("NumberOfCopies", tableName: "StorageSettings", bundle: .module, comment: "")
       }
     }
   }

@@ -4,9 +4,11 @@ import Defaults
 @testable import ClipKit
 
 // swiftlint:disable type_body_length
-class ClipboardTests: XCTestCase {
-  let clipboard = Clipboard.shared
-  let pasteboard = NSPasteboard.general
+class ClipboardTests: GeneralPasteboardGuardedTestCase {
+  // A private, uniquely named pasteboard per test; the real clipboard is never touched.
+  var pasteboard: NSPasteboard!
+  var clipboard: Clipboard!
+  var frontmostApp: String? = "com.apple.dt.Xcode"
   let image = NSImage(named: "NSInfo")!
   let coloredString = NSAttributedString(string: "foo",
                                          attributes: [.foregroundColor: NSColor.red])
@@ -29,6 +31,13 @@ class ClipboardTests: XCTestCase {
 
   override func setUp() {
     super.setUp()
+    pasteboard = NSPasteboard(name: .init("dev.mooring.clipkit.tests.\(UUID().uuidString)"))
+    clipboard = Clipboard(environment: ClipboardEnvironment(
+      pasteboard: pasteboard,
+      sourceApplication: { [unowned self] in frontmostApp.map { FakeApp(bundleIdentifier: $0) } },
+      secureInputEnabled: { false },
+      accessibilityTrusted: { false }
+    ))
     Defaults[.ignoreAllAppsExceptListed] = false
     Defaults[.ignoreEvents] = false
   }
@@ -41,7 +50,8 @@ class ClipboardTests: XCTestCase {
     Defaults[.ignoreAllAppsExceptListed] = savedIgnoreAllAppsExceptListed
     Defaults[.ignoredApps] = savedIgnoredApps
     Defaults[.ignoredPasteboardTypes] = savedIgnoredPasteboardTypes
-    clipboard.clearHooks()
+    clipboard.stop()
+    pasteboard.releaseGlobally()
   }
 
   func testChangesListenerAndAddHooks() {
@@ -139,7 +149,6 @@ class ClipboardTests: XCTestCase {
 
   func testIgnoreApplication() {
     Defaults[.ignoredApps] = ["com.apple.dt.Xcode", "com.apple.finder"] // Finder is on Bitrise
-      + [NSWorkspace.shared.frontmostApplication?.bundleIdentifier].compactMap { $0 } // whoever runs swift test
 
     let hookExpectation = expectation(description: "Hook is called")
     hookExpectation.isInverted = true
@@ -155,7 +164,6 @@ class ClipboardTests: XCTestCase {
   func testIgnoreAllApplicationsExcept() {
     Defaults[.ignoreAllAppsExceptListed] = true
     Defaults[.ignoredApps] = ["com.apple.dt.Xcode", "com.apple.finder"] // Finder is on Bitrise
-      + [NSWorkspace.shared.frontmostApplication?.bundleIdentifier].compactMap { $0 } // whoever runs swift test
 
     let hookExpectation = expectation(description: "Hook is called")
     clipboard.onNewCopy({ (_: HistoryItem) in

@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/Observables/HistoryItemDecorator.swift
 import AppKit.NSWorkspace
 import Defaults
 import Foundation
@@ -77,7 +78,7 @@ class HistoryItemDecorator: Identifiable, Hashable, HasVisibility {
     var parts: [String] = []
     if hasImage, let image = item.image {
       let size = image.pixelSize
-      parts.append(String(format: NSLocalizedString("history_item_image_accessibility_label_no_app", comment: ""), Int(size.width), Int(size.height)))
+      parts.append(String(format: NSLocalizedString("history_item_image_accessibility_label_no_app", bundle: .module, comment: ""), Int(size.width), Int(size.height)))
     } else {
       parts.append(title)
     }
@@ -85,10 +86,10 @@ class HistoryItemDecorator: Identifiable, Hashable, HasVisibility {
       parts.append(application)
     }
     if isPinned {
-      parts.append(NSLocalizedString("history_item_pinned_accessibility_value", comment: ""))
+      parts.append(NSLocalizedString("history_item_pinned_accessibility_value", bundle: .module, comment: ""))
     }
     if let index = multiSelectionIndex {
-      parts.append(String(format: NSLocalizedString("history_item_selected_accessibility_value", comment: ""), index + 1, AppState.shared.navigator.selection.count))
+      parts.append(String(format: NSLocalizedString("history_item_selected_accessibility_value", bundle: .module, comment: ""), index + 1, AppState.shared.navigator.selection.count))
     }
     return parts.joined(separator: ", ")
   }

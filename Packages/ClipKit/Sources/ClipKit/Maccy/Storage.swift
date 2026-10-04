@@ -4,7 +4,15 @@ import SwiftData
 
 @MainActor
 class Storage {
-  static let shared = Storage()
+  enum Location {
+    case file(URL)
+    case memory
+  }
+
+  /// Where `shared` opens the store; `ClipKit.start()` sets it before the first use.
+  static var location = Location.memory
+
+  static let shared = ClipKit.track(Storage())
 
   var container: ModelContainer
   var context: ModelContext { container.mainContext }
@@ -16,21 +24,24 @@ class Storage {
     return ByteCountFormatter().string(fromByteCount: size)
   }
 
-  private let url = URL.applicationSupportDirectory.appending(path: "Maccy/Storage.sqlite")
+  private let url: URL
 
   init() {
-    var config = ModelConfiguration(url: url)
+    var config = ModelConfiguration(isStoredInMemoryOnly: true)
+    url = if case .file(let url) = Storage.location { url } else { URL(filePath: "/dev/null") }
 
-    #if DEBUG
-    if TestHost.isActive {
-      config = ModelConfiguration(isStoredInMemoryOnly: true)
+    // Under a test host the store is always in memory.
+    if case .file(let url) = Storage.location, !TestHost.isActive {
+      config = ModelConfiguration(url: url)
     }
-    #endif
 
     do {
       container = try ModelContainer(for: HistoryItem.self, configurations: config)
     } catch let error {
-      fatalError("Cannot load database: \(error.localizedDescription).")
+      // A store that won't open must not take Mooring down; this session's history stays in memory.
+      ClipKitLog.logger.error("Cannot load the clipboard store: \(error.localizedDescription)")
+      // swiftlint:disable:next force_try
+      container = try! ModelContainer(for: HistoryItem.self, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     }
   }
 

@@ -5,7 +5,7 @@ import Defaults
 
 // swiftlint:disable force_try
 @MainActor
-class HistoryItemTests: XCTestCase {
+class HistoryItemTests: GeneralPasteboardGuardedTestCase {
   func testTitleForString() {
     let title = "foo"
     let item = historyItem(title)

@@ -1,3 +1,4 @@
+// Adapted from Maccy@c376789: Maccy/PopupPosition.swift
 import AppKit.NSEvent
 import Defaults
 import Foundation
@@ -14,15 +15,15 @@ enum PopupPosition: String, CaseIterable, Identifiable, CustomStringConvertible,
   var description: String {
     switch self {
     case .cursor:
-      return NSLocalizedString("PopupAtCursor", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PopupAtCursor", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .statusItem:
-      return NSLocalizedString("PopupAtMenuBarIcon", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PopupAtMenuBarIcon", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .window:
-      return NSLocalizedString("PopupAtWindowCenter", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PopupAtWindowCenter", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .center:
-      return NSLocalizedString("PopupAtScreenCenter", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PopupAtScreenCenter", tableName: "AppearanceSettings", bundle: .module, comment: "")
     case .lastPosition:
-      return NSLocalizedString("PopupAtLastPosition", tableName: "AppearanceSettings", comment: "")
+      return NSLocalizedString("PopupAtLastPosition", tableName: "AppearanceSettings", bundle: .module, comment: "")
     }
   }
 
