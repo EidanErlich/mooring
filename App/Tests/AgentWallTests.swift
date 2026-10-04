@@ -112,6 +112,35 @@ struct AgentWallTests {
         #expect(try Self.hits(of: ["AppIntent", "AppEntity", "AppShortcutsProvider"], under: [folder]).isEmpty)
     }
 
+    /// App Intents are extracted from the whole app target, so a Shortcuts action can live in any folder. Only
+    /// App/Intents may declare one, and its name scan above keeps the clipboard out of it.
+    @Test func appIntentsOnlyInIntentsFolder() throws {
+        #expect(Self.agentFolders.contains("App/Intents"), "App/Intents gets the clipboard name scans")
+        let folders = try FileManager.default.contentsOfDirectory(atPath: Self.root.appendingPathComponent("App").path)
+            .map { "App/\($0)" }
+            .filter { !["App/Intents", "App/Tests"].contains($0) }
+        let conformances = [
+            #"\bAppIntent\b"#, #"\bAppEntity\b"#, #"\bTransientAppEntity\b"#, #"\bAppShortcutsProvider\b"#,
+            #"\bEntityQuery\b"#, #"\bEntityStringQuery\b"#, #"\bEnumerableEntityQuery\b"#, #"\bimport\s+AppIntents\b"#
+        ]
+        let hits = try Self.hits(of: conformances, under: folders)
+        #expect(hits.isEmpty, "App Intents outside App/Intents: \(hits)")
+        #expect(try !Self.hits(of: [#"\bAppIntent\b"#], under: ["App/Intents"]).isEmpty, "the scan finds the real intents")
+    }
+
+    /// The intents metadata the build extracts, which Shortcuts reads, names no clipboard concept.
+    @Test func extractedIntentsNameNoClipboardConcept() throws {
+        let metadata = Bundle(for: AppDelegate.self).bundleURL.appending(path: "Contents/Resources/Metadata.appintents")
+        guard let walker = FileManager.default.enumerator(at: metadata, includingPropertiesForKeys: nil) else { return }
+        let pattern = try Regex("clip|paste|history").ignoresCase()
+        for case let file as URL in walker {
+            // Latin-1 decodes any bytes, so a binary file is scanned too.
+            guard let data = try? Data(contentsOf: file), let text = String(bytes: data, encoding: .isoLatin1) else { continue }
+            let named = text.firstMatch(of: pattern) != nil
+            #expect(!named, "\(file.lastPathComponent) names the clipboard")
+        }
+    }
+
     @Test func appleScriptDisabled() throws {
         #expect(Bundle.main.object(forInfoDictionaryKey: "NSAppleScriptEnabled") as? Bool == false)
         #expect(FileManager.default.fileExists(atPath: Self.root.appendingPathComponent("App/Info.plist").path))
