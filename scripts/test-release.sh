@@ -76,6 +76,8 @@ run_release() {
 # --- happy path: dry run against the fixture app -------------------------------------------------
 repo="$(fresh_repo happy)"; case_dir="$(dirname "$repo")"; shims happy >/dev/null
 app="$(fixture_app "$WORK/happy/built app" 9.9.9)"
+# Built files carry extended attributes (com.apple.provenance); the zip must not turn them into ._ files.
+xattr -w com.example.test 1 "$app/Contents/MacOS/Mooring"
 run_release "$repo" --dry-run --check-git --app "$app"
 dist="$repo/dist"
 zip="$dist/Mooring-9.9.9.zip"
@@ -86,6 +88,13 @@ unzipped="$WORK/happy/unzipped"
 mkdir -p "$unzipped"
 ditto -x -k "$zip" "$unzipped" 2>/dev/null
 check "zip round-trips to Mooring.app" "$([ -f "$unzipped/Mooring.app/Contents/Info.plist" ] && cmp -s "$unzipped/Mooring.app/Contents/Info.plist" "$app/Contents/Info.plist" && cmp -s "$unzipped/Mooring.app/Contents/MacOS/Mooring" "$app/Contents/MacOS/Mooring"; echo $?)"
+check "ditto keeps the extended attribute" "$([ "$(xattr -p com.example.test "$unzipped/Mooring.app/Contents/MacOS/Mooring" 2>/dev/null)" = 1 ]; echo $?)"
+check "zip has no ._ entries inside Mooring.app" "$(unzip -Z1 "$zip" | grep -v '^__MACOSX/' | grep -q '\(^\|/\)\._'; [ $? -ne 0 ]; echo $?)"
+check "zip still lists Mooring.app" "$(unzip -Z1 "$zip" | grep -q '^Mooring.app/Contents/MacOS/Mooring$'; echo $?)"
+plain="$WORK/happy/plain unzip"
+mkdir -p "$plain"
+unzip -q "$zip" -d "$plain" 2>/dev/null
+check "plain unzip leaves no ._ files in Mooring.app" "$([ -f "$plain/Mooring.app/Contents/Info.plist" ] && [ -z "$(find "$plain/Mooring.app" -name '._*')" ]; echo $?)"
 
 size="$(stat -f%z "$zip")"
 check "appcast is well-formed XML" "$(xmllint --noout "$dist/appcast.xml" 2>/dev/null; echo $?)"

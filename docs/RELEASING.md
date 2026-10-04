@@ -51,7 +51,7 @@ This runs `scripts/release.sh`, which:
 2. runs `make test`;
 3. builds Release with the identity in `Local.xcconfig` (`make build-release`);
 4. verifies it with `codesign --verify --deep --strict`;
-5. zips it with `ditto -c -k --keepParent`;
+5. zips it with `ditto -c -k --sequesterRsrc --keepParent` (extended attributes go in `__MACOSX/`, so even a plain `unzip` gives an intact app);
 6. signs the zip with Sparkle's `sign_update`, using the key in your Keychain (macOS may ask to allow access);
 7. writes the appcast and the Homebrew cask.
 

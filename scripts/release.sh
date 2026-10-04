@@ -246,7 +246,8 @@ main() {
     rm -f "$zip" "$zip.sig" "$dist/appcast.xml" "$dist/homebrew/mooring.rb"
 
     echo "== zip"
-    ditto -c -k --keepParent "$app" "$zip"
+    # --sequesterRsrc keeps extended attributes in __MACOSX/, so a plain `unzip` leaves no ._ files in the app.
+    ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
     local length sha
     length="$(stat -f%z "$zip")"
     sha="$(shasum -a 256 "$zip" | awk '{print $1}')"
