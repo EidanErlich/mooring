@@ -86,7 +86,7 @@ struct MCPHarness {
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: "/nowhere/mooring", pathEnv: nil,
             home: URL(fileURLWithPath: "/nowhere/home"),
-            readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, claude: { nil },
+            readInput: { _ in Data() }, hookClient: ScriptedClient(), lidClient: lidClient, windowClient: ScriptedClient(), claude: { nil },
             readLine: { feed.next() }, appVersion: Self.appVersion
         )
         return await MCPServer(environment: environment).run()

@@ -72,6 +72,8 @@ struct Harness {
     let hookClient: RecordingClient
     /// What an acquire at a lid level goes through, kept apart from `client` so a test can tell them apart.
     let lidClient: RecordingClient
+    /// What a mutating `win` request goes through, kept apart from `client` so a test can tell them apart.
+    let windowClient: RecordingClient
     let capture = Capture()
     let table: FakeProcessTable
     let parentPID: Int32
@@ -86,7 +88,7 @@ struct Harness {
 
     init(
         client: RecordingClient = RecordingClient(), hookClient: RecordingClient = RecordingClient(),
-        lidClient: RecordingClient = RecordingClient(),
+        lidClient: RecordingClient = RecordingClient(), windowClient: RecordingClient = RecordingClient(),
         table: FakeProcessTable = FakeProcessTable([]), parentPID: Int32 = 100,
         ownBinaryPath: String = "/nowhere/mooring", pathEnv: String? = nil, home: URL = URL(fileURLWithPath: "/nowhere/home"),
         input: Data = Data(), claude: ClaudeSnapshot? = nil
@@ -94,6 +96,7 @@ struct Harness {
         self.client = client
         self.hookClient = hookClient
         self.lidClient = lidClient
+        self.windowClient = windowClient
         self.input = input
         self.claude = claude
         self.table = table
@@ -112,7 +115,8 @@ struct Harness {
             client: client, processes: table, ownPID: 500, parentPID: parentPID,
             write: { capture.writeOut($0) }, writeError: { capture.writeErr($0) },
             newID: { "req-1" }, now: { fixedNow }, ownBinaryPath: ownBinaryPath, pathEnv: pathEnv, home: home,
-            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, lidClient: lidClient, claude: { claude },
+            readInput: { Data(input.prefix($0)) }, hookClient: hookClient, lidClient: lidClient, windowClient: windowClient,
+            claude: { claude },
             readLine: { nil }, appVersion: "9.9.9-test"
         )
         return await MooringCLI.run(arguments, environment: environment)
