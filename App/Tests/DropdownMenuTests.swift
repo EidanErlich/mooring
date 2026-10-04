@@ -19,7 +19,9 @@ struct DropdownMenuTests {
         confirmLidOnBattery: @escaping () -> Void = {},
         windows: WindowsController? = nil,
         windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil }),
-        clipboard: ClipboardController? = nil
+        clipboard: ClipboardController? = nil,
+        updateAvailable: @escaping () -> Bool = { false },
+        checkForUpdate: @escaping () -> Void = {}
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
@@ -27,7 +29,8 @@ struct DropdownMenuTests {
                                 runningApps: runningApps, openSettings: {},
                                 windows: windows ?? makeWindows(.off), windowActions: windowActions,
                                 clipboard: clipboard ?? Self.offClipboard(),
-                                needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery)
+                                needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery,
+                                updateAvailable: updateAvailable, checkForUpdate: checkForUpdate)
         return (menu, engine)
     }
 
@@ -46,6 +49,29 @@ struct DropdownMenuTests {
     @Test func rootItemsInOrder() {
         #expect(ids(makeMenu().root) == ["header", "-", "awake", "windows", "clipboard", "-", "settings", "quit"])
         #expect(makeMenu().root.item(withTitle: "Awake")?.submenu != nil)
+    }
+
+    /// "Update Available…" follows Settings… only while an update waits, and opens it through Check Now.
+    @Test func dropdownShowsUpdateAvailableOnlyWhenPending() {
+        var pending = false
+        var checks = 0
+        let (menu, _) = makeMenuAndEngine(updateAvailable: { pending }, checkForUpdate: { checks += 1 })
+        let plain = ["header", "-", "awake", "windows", "clipboard", "-", "settings", "quit"]
+        #expect(ids(menu.root) == plain)
+
+        pending = true
+        menu.sync()
+        #expect(ids(menu.root) == ["header", "-", "awake", "windows", "clipboard", "-", "settings", "updateAvailable", "quit"])
+        let index = menu.root.items.firstIndex { $0.identifier?.rawValue == "updateAvailable" }!
+        #expect(menu.root.items[index].title == "Update Available…")
+        menu.root.performActionForItem(at: index)
+        #expect(checks == 1)
+        menu.sync()
+        #expect(ids(menu.root).filter { $0 == "updateAvailable" }.count == 1)
+
+        pending = false
+        menu.sync()
+        #expect(ids(menu.root) == plain)
     }
 
     @Test func awakeRowsWithTheHelperEnabled() {

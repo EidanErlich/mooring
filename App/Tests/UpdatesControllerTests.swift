@@ -44,7 +44,7 @@ private final class UpdatesHarness {
     init(publicKey: String = "test-public-key", answer: Bool = false, settings: FakeUpdatesSettings = FakeUpdatesSettings()) {
         self.settings = settings
         controller = UpdatesController(
-            publicKey: publicKey, settings: settings,
+            publicKey: publicKey, settings: settings, reminder: UpdateReminder(poster: FakeNotificationPoster()),
             makeUpdater: { [unowned self] in
                 let updater = FakeUpdater()
                 updaters.append(updater)
@@ -175,6 +175,66 @@ struct UpdatesControllerTests {
             #expect(size.width > 0 && size.height > 0)
             #expect(harness.updaters.isEmpty)
         }
+    }
+
+    /// A scheduled update Sparkle would show behind other apps is Mooring's to show: a notification and the
+    /// dropdown's item. One Sparkle shows in focus, or one the user asked for, posts nothing.
+    @Test func scheduledUpdateInBackgroundPostsNotification() async {
+        let poster = FakeNotificationPoster()
+        let reminder = UpdateReminder(poster: poster)
+        #expect(reminder.supportsGentleScheduledUpdateReminders)
+        #expect(reminder.sparkleShowsScheduledUpdate(immediateFocus: true))
+        #expect(!reminder.sparkleShowsScheduledUpdate(immediateFocus: false))
+        #expect(!reminder.isPending)
+
+        await reminder.willShowUpdate(version: "0.1.1", sparkleShows: false, userInitiated: false)?.value
+        #expect(reminder.isPending)
+        #expect(poster.posts == [FakeNotificationPoster.Post(
+            id: UpdateReminder.notificationID, title: "Mooring 0.1.1 is available",
+            body: "Open the menu bar icon to update.", userInfo: [:], category: nil)])
+
+        // Sparkle shows it in focus, or the user asked: nothing to remind about.
+        for (sparkleShows, userInitiated) in [(true, false), (true, true)] {
+            let quiet = FakeNotificationPoster()
+            let other = UpdateReminder(poster: quiet)
+            await other.willShowUpdate(version: "0.1.1", sparkleShows: sparkleShows, userInitiated: userInitiated)?.value
+            #expect(!other.isPending)
+            #expect(quiet.posts.isEmpty)
+        }
+
+        // Notifications off: the dropdown still says so.
+        let denied = FakeNotificationPoster()
+        denied.authorized = false
+        let unannounced = UpdateReminder(poster: denied)
+        await unannounced.willShowUpdate(version: "0.1.1", sparkleShows: false, userInitiated: false)?.value
+        #expect(unannounced.isPending)
+        #expect(denied.posts.isEmpty)
+    }
+
+    /// Looking at the update, or the update session ending, clears the reminder and its notification.
+    @Test func userAttentionClearsReminder() async {
+        let poster = FakeNotificationPoster()
+        let reminder = UpdateReminder(poster: poster)
+        await reminder.willShowUpdate(version: "0.1.1", sparkleShows: false, userInitiated: false)?.value
+        reminder.didReceiveUserAttention()
+        #expect(!reminder.isPending)
+        #expect(poster.withdrawn == [UpdateReminder.notificationID])
+
+        await reminder.willShowUpdate(version: "0.1.2", sparkleShows: false, userInitiated: false)?.value
+        #expect(reminder.isPending)
+        reminder.willFinishUpdateSession()
+        #expect(!reminder.isPending)
+
+        // The controller reports it only while it's pending, and only with a key.
+        let harness = UpdatesHarness()
+        #expect(!harness.controller.updateAvailable)
+        await harness.controller.reminder.willShowUpdate(version: "0.1.1", sparkleShows: false, userInitiated: false)?.value
+        #expect(harness.controller.updateAvailable)
+        harness.controller.reminder.didReceiveUserAttention()
+        #expect(!harness.controller.updateAvailable)
+        let noKey = UpdatesHarness(publicKey: "")
+        await noKey.controller.reminder.willShowUpdate(version: "0.1.1", sparkleShows: false, userInitiated: false)?.value
+        #expect(!noKey.controller.updateAvailable)
     }
 
     /// Sparkle reads these from Info.plist: the SPEC's feed, and no checks of its own until Mooring turns them on.

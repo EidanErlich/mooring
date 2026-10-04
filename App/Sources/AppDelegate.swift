@@ -113,20 +113,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.clipboard = clipboard
         SettingsWindowController.shared.clipboard = clipboard
 
+        startDropdown(engine: engine, windows: windows, clipboard: clipboard, statusItem: statusItem)
+        startUpdates()
+    }
+
+    /// The status item's menu. "Update Available…" shows while the updater has a scheduled update waiting.
+    private func startDropdown(engine: AwakeEngine, windows: WindowsController, clipboard: ClipboardController,
+                               statusItem: StatusItemController) {
         let dropdown = DropdownController(
             engine: engine, approvals: approvals, windows: windows, clipboard: clipboard,
-            openSettings: { SettingsWindowController.shared.show() })
+            openSettings: { SettingsWindowController.shared.show() },
+            updateAvailable: { [weak self] in self?.updates?.updateAvailable ?? false },
+            checkForUpdate: { [weak self] in self?.updates?.checkNow() })
         statusItem.onOpenMenu = { [weak statusItem] in
             statusItem.map(dropdown.open(from:))
         }
         self.dropdown = dropdown
-        startUpdates()
     }
 
     /// Off without a Sparkle key: no updater, no alert, no network. With one, the consent alert is asked
     /// once, after launching finishes.
     private func startUpdates() {
-        let updates = UpdatesController.live()
+        let updates = UpdatesController.live(poster: poster)
         self.updates = updates
         SettingsWindowController.shared.updates = updates
         DispatchQueue.main.async { updates.launch() }

@@ -39,6 +39,8 @@ struct UpdatesQuestion: Equatable {
 final class UpdatesController {
     let isAvailable: Bool
     private(set) var checksAutomatically: Bool
+    /// The gentle reminder for scheduled updates (Sparkle's user driver delegate).
+    let reminder: UpdateReminder
 
     @ObservationIgnored private let settings: any UpdatesSettings
     @ObservationIgnored private let makeUpdater: @MainActor () -> any UpdaterDriving
@@ -47,11 +49,12 @@ final class UpdatesController {
 
     /// `makeUpdater` runs at most once, the first time the updater is needed. `ask` shows the consent alert
     /// and returns true for Check Automatically.
-    init(publicKey: String, settings: any UpdatesSettings,
+    init(publicKey: String, settings: any UpdatesSettings, reminder: UpdateReminder,
          makeUpdater: @escaping @MainActor () -> any UpdaterDriving,
          ask: @escaping @MainActor (UpdatesQuestion) -> Bool) {
         isAvailable = !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         self.settings = settings
+        self.reminder = reminder
         self.makeUpdater = makeUpdater
         self.ask = ask
         checksAutomatically = settings.checkForUpdates
@@ -81,7 +84,10 @@ final class UpdatesController {
         }
     }
 
-    /// Settings → Advanced's Check Now.
+    /// True while a scheduled update waits for the user: the dropdown then shows "Update Available…".
+    var updateAvailable: Bool { isAvailable && reminder.isPending }
+
+    /// Settings → Advanced's Check Now, and the dropdown's "Update Available…" (which brings the update forward).
     func checkNow() {
         guard isAvailable else { return }
         startedUpdater().checkForUpdates()
@@ -100,11 +106,14 @@ final class UpdatesController {
 
 extension UpdatesController {
     /// The app's controller, keyed by Info.plist's SUPublicEDKey (from MOORING_SPARKLE_PUBLIC_KEY).
-    static func live(bundle: Bundle = .main) -> UpdatesController {
-        UpdatesController(
+    /// `poster` posts the reminder for a scheduled update found while Mooring is in the background.
+    static func live(bundle: Bundle = .main, poster: any NotificationPosting) -> UpdatesController {
+        let reminder = UpdateReminder(poster: poster)
+        return UpdatesController(
             publicKey: bundle.object(forInfoDictionaryKey: "SUPublicEDKey") as? String ?? "",
             settings: DefaultsUpdatesSettings(),
-            makeUpdater: { LiveSparkleUpdater() },
+            reminder: reminder,
+            makeUpdater: { LiveSparkleUpdater(reminder: reminder) },
             ask: askWithAlert)
     }
 
@@ -132,11 +141,79 @@ final class DefaultsUpdatesSettings: UpdatesSettings {
     }
 }
 
+/// Gentle reminders for scheduled updates (Sparkle 2's `SPUStandardUserDriverDelegate`). Mooring has no Dock icon
+/// and can't be Cmd-Tabbed to, so an update alert Sparkle shows behind other apps is easy to never see. Sparkle shows
+/// a scheduled update itself only when it would be in focus; otherwise Mooring posts a notification and adds
+/// "Update Available…" to the dropdown, which brings the update forward through Check Now.
+@MainActor @Observable
+final class UpdateReminder {
+    /// The one reminder notification's id; a newer update replaces it.
+    static let notificationID = "mooring.update-available"
+    static let body = "Open the menu bar icon to update."
+
+    /// True from a background scheduled update until the user looks at it or the update session ends.
+    private(set) var isPending = false
+
+    @ObservationIgnored private let poster: any NotificationPosting
+
+    init(poster: any NotificationPosting) {
+        self.poster = poster
+    }
+
+    /// Sparkle's `supportsGentleScheduledUpdateReminders`.
+    let supportsGentleScheduledUpdateReminders = true
+
+    static func title(version: String) -> String { "Mooring \(version) is available" }
+
+    /// Sparkle's `standardUserDriverShouldHandleShowingScheduledUpdate(_:andInImmediateFocus:)`: Sparkle shows the
+    /// update itself only when it would be in focus; otherwise Mooring reminds.
+    func sparkleShowsScheduledUpdate(immediateFocus: Bool) -> Bool {
+        immediateFocus
+    }
+
+    /// Sparkle's `standardUserDriverWillHandleShowingUpdate(_:forUpdate:state:)`. A scheduled update Sparkle left to
+    /// Mooring sets the reminder and posts the notification (if notifications are allowed). The returned task is
+    /// the post, for tests to wait on.
+    @discardableResult
+    func willShowUpdate(version: String, sparkleShows: Bool, userInitiated: Bool) -> Task<Void, Never>? {
+        guard !sparkleShows, !userInitiated else { return nil }
+        isPending = true
+        let poster = poster
+        return Task {
+            guard await poster.authorize() else { return }
+            await poster.post(id: Self.notificationID, title: Self.title(version: version), body: Self.body,
+                              userInfo: [:], category: nil)
+        }
+    }
+
+    /// Sparkle's `standardUserDriverDidReceiveUserAttention(forUpdate:)`: the user is looking at the update.
+    func didReceiveUserAttention() {
+        clear()
+    }
+
+    /// Sparkle's `standardUserDriverWillFinishUpdateSession()`: installed, skipped, dismissed or failed.
+    func willFinishUpdateSession() {
+        clear()
+    }
+
+    private func clear() {
+        guard isPending else { return }
+        isPending = false
+        poster.withdraw(id: Self.notificationID)
+    }
+}
+
 /// Sparkle's standard updater and UI. Only `UpdatesController.live` makes one, and only with a public key.
 @MainActor
 final class LiveSparkleUpdater: UpdaterDriving {
-    private let controller = SPUStandardUpdaterController(
-        startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
+    private let delegate: SparkleUserDriverDelegate
+    private let controller: SPUStandardUpdaterController
+
+    init(reminder: UpdateReminder) {
+        delegate = SparkleUserDriverDelegate(reminder: reminder)
+        controller = SPUStandardUpdaterController(
+            startingUpdater: false, updaterDelegate: nil, userDriverDelegate: delegate)
+    }
 
     func start(automaticallyChecks: Bool) {
         controller.updater.automaticallyChecksForUpdates = automaticallyChecks
@@ -150,5 +227,40 @@ final class LiveSparkleUpdater: UpdaterDriving {
 
     func checkForUpdates() {
         controller.checkForUpdates(nil)
+    }
+}
+
+/// Hands Sparkle's user driver callbacks (always on the main thread) to `UpdateReminder`, which holds the logic.
+@MainActor
+private final class SparkleUserDriverDelegate: NSObject, @preconcurrency SPUStandardUserDriverDelegate {
+    private let reminder: UpdateReminder
+
+    init(reminder: UpdateReminder) {
+        self.reminder = reminder
+    }
+
+    var supportsGentleScheduledUpdateReminders: Bool {
+        reminder.supportsGentleScheduledUpdateReminders
+    }
+
+    func standardUserDriverShouldHandleShowingScheduledUpdate(
+        _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
+    ) -> Bool {
+        reminder.sparkleShowsScheduledUpdate(immediateFocus: immediateFocus)
+    }
+
+    func standardUserDriverWillHandleShowingUpdate(
+        _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState
+    ) {
+        reminder.willShowUpdate(version: update.displayVersionString, sparkleShows: handleShowingUpdate,
+                                userInitiated: state.userInitiated)
+    }
+
+    func standardUserDriverDidReceiveUserAttention(forUpdate update: SUAppcastItem) {
+        reminder.didReceiveUserAttention()
+    }
+
+    func standardUserDriverWillFinishUpdateSession() {
+        reminder.willFinishUpdateSession()
     }
 }
