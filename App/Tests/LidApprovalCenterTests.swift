@@ -37,7 +37,7 @@ final class FakeNotificationPoster: NotificationPosting {
         withdrawn.append(id)
     }
 
-    func deliveredApprovalIDs() async -> [String] { delivered }
+    func deliveredApprovalIDs(category: String) async -> [String] { delivered }
 
     /// Waits until `count` notifications have been posted (or about 2 s pass).
     func waitForPosts(_ count: Int) async {

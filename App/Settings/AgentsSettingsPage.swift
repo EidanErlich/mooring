@@ -67,6 +67,12 @@ struct AgentsSettingsPage: View {
                     + "and pauses when the battery is low.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Windows") {
+                Picker("Window arrangement by agents", selection: $awake.agentWindows) {
+                    ForEach(Self.windowModes, id: \.self) { Text(Self.label(for: $0)).tag($0) }
+                }
+                Text(LocalizedStringKey(Self.windowsCaption)).font(.caption).foregroundStyle(.secondary)
+            }
             MCPClientsSection(notificationsAllowed: $awake.agentNotifications)
             Section("Agents") {
                 Picker("Keep awake while agents work", selection: $awake.agentKeepAwake) {
@@ -83,6 +89,17 @@ struct AgentsSettingsPage: View {
         .formStyle(.grouped)
         .navigationTitle("Agents")
         .task { await refresh() }
+    }
+
+    nonisolated static let windowModes: [AgentWindowMode] = [.automatic, .askFirst, .off]
+    nonisolated static let windowsCaption = "Agents can move and resize your windows with `mooring win` and MCP. Windows must be on."
+
+    nonisolated static func label(for mode: AgentWindowMode) -> String {
+        switch mode {
+        case .automatic: "Automatic"
+        case .askFirst: "Ask first"
+        case .off: "Off"
+        }
     }
 
     nonisolated static func label(for approval: AgentLidApproval) -> String {

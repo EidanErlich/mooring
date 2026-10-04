@@ -10,6 +10,9 @@ final class RequestKnobs {
     var settings = AwakeSettings()
     var helperSleepDisabled: Bool?
     var notifications: String? = "allowed"
+    var windowsState = WindowsController.State.off
+    /// The handler's arranger; it's only used while `windowsState` is on.
+    var arranger: Arranger?
 }
 
 /// Process ancestry for agent detection; empty, so callers count as people, unless a test adds a chain.
@@ -77,11 +80,15 @@ struct RequestFixture {
     let approver = FakeLidApprover()
     /// Records what `notify` posts.
     let poster = FakeNotificationPoster()
+    /// Answers window asks, unless the fixture was made with a `windowCenter`.
+    let windowApprover = FakeWindowApprover()
+    let windowCenter: WindowApprovalCenter?
     let caller: Caller
 
     /// `table` is the caller's ancestry; `callerPID` is where agent detection starts.
     init(
-        processes: any ProcessInspecting = AliveProcesses(), table: FakeProcessTable = FakeProcessTable(), callerPID: Int32 = 77
+        processes: any ProcessInspecting = AliveProcesses(), table: FakeProcessTable = FakeProcessTable(), callerPID: Int32 = 77,
+        windowCenter: WindowApprovalCenter? = nil
     ) {
         let knobs = knobs
         caller = Caller(uid: 501, pid: callerPID)
@@ -90,11 +97,14 @@ struct RequestFixture {
             lid: LidController(helper: FakeLidHelper()), settings: { knobs.settings }, now: { knobs.clock }
         )
         self.engine = engine
+        self.windowCenter = windowCenter
         handler = RequestHandler(
             engine: engine, settings: { knobs.settings }, helperStatus: { "enabled" },
             readHelperSleepDisabled: { knobs.helperSleepDisabled }, now: { knobs.clock },
             processes: table, approver: approver, updateSettings: { change in change(&knobs.settings) },
-            notificationStatus: { knobs.notifications }, poster: poster
+            notificationStatus: { knobs.notifications }, poster: poster,
+            windowsState: { knobs.windowsState }, arranger: { knobs.arranger },
+            windowApprover: windowCenter.map { $0 as any WindowApproving } ?? windowApprover
         )
     }
 
