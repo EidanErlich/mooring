@@ -108,6 +108,7 @@ public enum ClipKitPopup {
 
     public static func panelDidBecomeKey() {
         guard let state else { return }
+        state.refreshPasteHint()
         state.preview.enableAutoOpen()
         if state.navigator.leadHistoryItem != nil {
             state.preview.startAutoOpen()

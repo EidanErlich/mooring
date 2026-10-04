@@ -105,9 +105,20 @@ class AppState: Sendable {
     ClipKit.runningOwner?.openSettings?()
   }
 
+  /// The hint the footer shows: `pasteHint` as of the last `refreshPasteHint()`.
+  private(set) var shownPasteHint: String?
+
   /// The footer's hint while Mooring can't paste for the user (no Accessibility); nil while it can.
   var pasteHint: String? {
     Clipboard.shared.environment.accessibilityTrusted()
       ? nil : "Paste with ⌘V. Allow Accessibility in Windows to paste automatically."
+  }
+
+  /// Reads Accessibility again; called whenever the popup becomes key.
+  func refreshPasteHint() {
+    let hint = pasteHint
+    if hint != shownPasteHint {
+      shownPasteHint = hint
+    }
   }
 }

@@ -230,6 +230,15 @@ Mooring-written:
 
 #### Stage 4 final fixes
 
+Vendored edits:
+
+- `Maccy/Storage.swift`: new read-only `isOpen` (whether `shared` has opened). `ClipKit.start()` now sets `location` only while it's false, so a later start, such as one after an earlier start fell back to memory, can't move the store or trip the debug assertion.
+- `Maccy/Observables/AppState.swift`: new `shownPasteHint`, the hint as of the last `refreshPasteHint()`, which reads `pasteHint` again.
+- `Maccy/Views/FooterView.swift`: shows `appState.shownPasteHint` instead of its own `@State`; it still refreshes on appearing and on scene-phase changes, and `ClipKitPopup.panelDidBecomeKey()` refreshes it whenever the panel becomes key (an `NSHostingView` in an `NSPanel` may never change scene phase).
+
 Mooring-written:
+
+- `Sources/ClipKit/ClipKitPopup.swift`: `panelDidBecomeKey()` calls `AppState.refreshPasteHint()`.
+- `Sources/ClipKit/ClipKit.swift`: `ClipItem.isImage` (the decorator's `hasImage`), so the dropdown can name untitled image rows; internal `setStoreLocation(_:)`, the guard above. Tested in `LifecycleTests.recentMarksImages`, `PopupTests.pasteHintRefreshesWhenPanelBecomesKey` and `StoreTests.storeLocationIsSetOnlyBeforeItOpens` (an exit test: without the guard it stops on the assertion).
 
 - `Sources/ClipKit/ClipKit.swift`: `discardLoadedHistory()` drops the history a stopped ClipKit loaded earlier in the process (Maccy's `History.clearAll()`), for Settings' "Delete Clipboard History…"; it does nothing while one runs or if none ever started, so it creates no singleton. Tested in `ClearTests` and `IsolationTests.noSingletonsBeforeStart`.

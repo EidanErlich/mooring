@@ -10,7 +10,6 @@ struct FooterView: View {
   @Default(.showFooter) private var showFooter
   @State private var showClear = true
   @State private var showClearAll = false
-  @State private var pasteHint: String?
   @Environment(\.scenePhase) private var scenePhase
 
   var clearAllModifiersPressed: Bool {
@@ -57,7 +56,7 @@ struct FooterView: View {
         FooterItemView(item: item)
       }
 
-      if let pasteHint {
+      if let pasteHint = appState.shownPasteHint {
         Text(pasteHint)
           .font(.footnote)
           .foregroundStyle(.secondary)
@@ -67,9 +66,10 @@ struct FooterView: View {
           .padding(.vertical, 4)
       }
     }
-    // Checked each time the popup becomes key: Accessibility can be granted while it's closed.
+    // Checked as it appears and each time the popup becomes key (`ClipKitPopup.panelDidBecomeKey`):
+    // Accessibility can be granted while it's closed.
     .onChange(of: scenePhase, initial: true) {
-      pasteHint = appState.pasteHint
+      appState.refreshPasteHint()
     }
     .invisible(!showFooter)
     .frame(maxHeight: showFooter ? nil : 0)

@@ -76,6 +76,22 @@ extension ClipKitGlobalStateTests {
             #expect(ClipKit.storeLocation(for: readOnly, fileManager: .default) == .memory)
         }
 
+        /// The store stays where it first opened: a later start (after an earlier one fell back to memory)
+        /// doesn't move it, and doesn't trip the debug assertion on moving it.
+        @Test func storeLocationIsSetOnlyBeforeItOpens() async {
+            await #expect(processExitsWith: .success) {
+                let kept = await MainActor.run {
+                    ClipKit.setStoreLocation(.memory)
+                    _ = Storage.shared
+                    let elsewhere = FileManager.default.temporaryDirectory
+                        .appending(path: "dev.mooring.clipkit.tests.\(UUID().uuidString)/Clipboard/Storage.sqlite")
+                    ClipKit.setStoreLocation(.file(elsewhere))
+                    return Storage.location == .memory
+                }
+                exit(kept ? EXIT_SUCCESS : EXIT_FAILURE)
+            }
+        }
+
         @Test func inMemoryCreatesNoFolder() {
             let home = Fixture.temporaryFolder()
             defer { try? FileManager.default.removeItem(at: home) }

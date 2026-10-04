@@ -26,6 +26,8 @@ struct ClipboardEntry {
     let id: AnyHashable
     let title: String
     var isPinned = false
+    /// An image, which has no title.
+    var isImage = false
 }
 
 /// `clipboardEnabled` and ClipKit's "Clear history on quit".
@@ -174,7 +176,9 @@ final class DefaultsClipboardSettings: ClipboardSettings {
 
 extension ClipKit: ClipKitRuntime {
     func recentEntries(limit: Int) -> [ClipboardEntry] {
-        recent(limit: limit, includingPinned: false).map { ClipboardEntry(id: $0.id, title: $0.title, isPinned: $0.isPinned) }
+        recent(limit: limit, includingPinned: false).map {
+            ClipboardEntry(id: $0.id, title: $0.title, isPinned: $0.isPinned, isImage: $0.isImage)
+        }
     }
 
     func copyEntry(_ id: AnyHashable) {

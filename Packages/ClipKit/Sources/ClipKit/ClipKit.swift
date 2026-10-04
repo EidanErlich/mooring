@@ -90,7 +90,7 @@ public final class ClipKit {
         Self.hasStarted = true
         ownsRunning = true
 
-        Storage.location = prepareStoreLocation()
+        Self.setStoreLocation(prepareStoreLocation())
         let clipboard = Clipboard.shared
         clipboard.environment = environment
         clipboard.onNewCopy { History.shared.add($0) }
@@ -126,6 +126,13 @@ public final class ClipKit {
         AppState.shared.popup.stop()  // closes the panel
         AppState.shared.panel = nil
         ModifierFlags.setMonitoring(false)
+    }
+
+    /// Sets where the store opens, unless it already opened this process: it stays there, so a later
+    /// start (say, after an earlier one fell back to memory) doesn't try to move it.
+    static func setStoreLocation(_ location: Storage.Location) {
+        guard !Storage.isOpen else { return }
+        Storage.location = location
     }
 
     private func prepareStoreLocation() -> Storage.Location {
@@ -182,6 +189,8 @@ public struct ClipItem: Identifiable, Hashable, Sendable {
     /// The name of the app the copy came from, when known.
     public let app: String?
     public let isPinned: Bool
+    /// An image copy, which has no title.
+    public let isImage: Bool
 }
 
 extension ClipKit {
@@ -195,7 +204,8 @@ extension ClipKit {
                 id: decorator.item.persistentModelID,
                 title: decorator.title,
                 app: decorator.application,
-                isPinned: decorator.isPinned
+                isPinned: decorator.isPinned,
+                isImage: decorator.hasImage
             )
         }
     }

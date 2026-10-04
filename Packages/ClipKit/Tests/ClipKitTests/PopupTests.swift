@@ -101,5 +101,23 @@ extension ClipKitGlobalStateTests {
             #expect(AppState.shared.pasteHint == nil)
             trusted.stop()
         }
+
+        /// Accessibility can be granted while the popup is closed; the footer reads it again each time
+        /// the panel becomes key, which an `NSHostingView` in a panel doesn't report as a scene change.
+        @Test func pasteHintRefreshesWhenPanelBecomesKey() {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            var trusted = false
+            let kit = Fixture.kit(pasteboard: scratch, trusted: { trusted })
+            Fixture.start(kit)
+            defer { kit.stop() }
+
+            ClipKitPopup.panelDidBecomeKey()
+            #expect(AppState.shared.shownPasteHint == "Paste with ⌘V. Allow Accessibility in Windows to paste automatically.")
+            trusted = true
+            #expect(AppState.shared.shownPasteHint != nil)  // not until it becomes key again
+            ClipKitPopup.panelDidBecomeKey()
+            #expect(AppState.shared.shownPasteHint == nil)
+        }
     }
 }

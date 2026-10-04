@@ -19,6 +19,8 @@ class Storage {
     }
   }
   private static var openedLocation: Location?
+  /// Whether `shared` has opened, after which `location` must not change.
+  static var isOpen: Bool { openedLocation != nil }
 
   static let shared = ClipKit.track(Storage())
 

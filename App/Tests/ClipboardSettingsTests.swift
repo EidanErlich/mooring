@@ -241,6 +241,33 @@ struct ClipboardSettingsTests {
         #expect(fake.values.ignoredApps == ["com.example.notes"])
     }
 
+    /// Maccy's "ignore all apps except listed" stays hidden: with the password-manager default list it
+    /// would record only copies from password managers. No page names it and no edit changes it.
+    @Test func ignoreAllAppsExceptListedIsNeverExposed() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let walker = FileManager.default.enumerator(at: root.appending(path: "Settings"), includingPropertiesForKeys: nil)
+        let sources = (walker?.allObjects as? [URL] ?? []).filter { $0.pathExtension == "swift" }
+        #expect(sources.contains { $0.lastPathComponent == "ClipboardSettingsPages.swift" })
+        for file in sources {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            #expect(!text.contains("ignoreAllAppsExceptListed"), "\(file.lastPathComponent)")
+            #expect(text.range(of: "except listed", options: .caseInsensitive) == nil, "\(file.lastPathComponent)")
+        }
+
+        let fake = FakeClipboardSettingsAccess()
+        let model = model(fake)
+        model.addIgnoredApp(choosing: { "com.example.notes" })
+        model.removeIgnoredApp("com.example.vault")
+        model.removeIgnoredApp("com.example.notes")
+        model.addIgnoredType("com.example.other")
+        model.removeIgnoredType("com.example.secret")
+        model.addIgnoreRegex("^x")
+        model.removeIgnoreRegex("^x")
+        model.binding(\.recordUniversalClipboard).wrappedValue = true
+        #expect(!fake.writes.isEmpty)
+        #expect(fake.writes.allSatisfy { !$0.ignoreAllAppsExceptListed })
+    }
+
     @Test func pickerPanelIsLimitedToAppsInApplications() {
         let panel = NSOpenPanel()
         IgnoredAppPicker.configure(panel)

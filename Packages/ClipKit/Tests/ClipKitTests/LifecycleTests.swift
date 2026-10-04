@@ -1,3 +1,4 @@
+import AppKit
 import Defaults
 import Foundation
 import SwiftData
@@ -121,6 +122,24 @@ extension ClipKitGlobalStateTests {
 
             kit.clear(all: true)
             #expect(kit.recent(limit: 10).isEmpty)
+        }
+
+        /// An image has no title, so the dropdown names it by kind.
+        @Test func recentMarksImages() throws {
+            let scratch = TestPasteboard()
+            defer { scratch.release() }
+            let kit = Fixture.kit(pasteboard: scratch)
+            Fixture.start(kit)
+            defer { kit.stop() }
+
+            scratch.write(string: "text")
+            Fixture.poll()
+            let image = try #require(NSImage(named: "NSBluetoothTemplate")?.tiffRepresentation)
+            scratch.write([.tiff: image])
+            Fixture.poll()
+            let recent = kit.recent(limit: 2)
+            #expect(recent.map(\.isImage) == [true, false])
+            #expect(recent.first?.title == "")
         }
     }
 }

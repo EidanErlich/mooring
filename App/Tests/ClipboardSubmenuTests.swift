@@ -13,7 +13,6 @@ struct ClipboardSubmenuTests {
         private(set) var kits: [FakeClipKit] = []
         private(set) var controller: ClipboardController!
         var entries: [ClipboardEntry] = []
-        var optionHeld = false
         var dismissals = 0
         var pending: [() -> Void] = []
         var shortcutReads = 0
@@ -43,7 +42,6 @@ struct ClipboardSubmenuTests {
                 clipboard: controller, model: DropdownModel(),
                 dismiss: { [unowned self] in dismissals += 1 },
                 afterClose: { [unowned self] in pending.append($0) },
-                modifierFlags: { [unowned self] in optionHeld ? .option : [] },
                 popupShortcut: { [unowned self] in
                     shortcutReads += 1
                     return "⇧⌘C"
@@ -104,7 +102,7 @@ struct ClipboardSubmenuTests {
 
         let items = [String(repeating: "a", count: 49) + "…", "one two"] + (1...8).map { "Copy \($0)" }
         // Pins stay in the popup; the newest unpinned items are numbered as the popup numbers them.
-        #expect(titles(menu) == items + ["-", "Pause Recording", "Ignore Next Copy", "Clear", "-", "Search…"])
+        #expect(titles(menu) == items + ["-", "Pause Recording", "Ignore Next Copy", "Clear", "Clear All", "-", "Search…"])
         #expect(row(menu, "Pinned") == nil)
         #expect(row(menu, "Copy 1")?.trailing == "⌘3")
         #expect(fixture.kit?.recentLimits.last == 10)
@@ -131,7 +129,31 @@ struct ClipboardSubmenuTests {
         // Right after turning on, before history loads, there are no items yet.
         fixture.kit?.entries = []
         fixture.open()
-        #expect(titles(fixture.submenu.menu) == ["Pause Recording", "Ignore Next Copy", "Clear", "-", "Search…"])
+        #expect(titles(fixture.submenu.menu) == ["Pause Recording", "Ignore Next Copy", "Clear", "Clear All", "-", "Search…"])
+    }
+
+    /// Clear All is Clear's ⌥ alternate, so AppKit swaps them live while the submenu is open.
+    @Test func clearAllIsTheOptionAlternate() throws {
+        let fixture = Fixture(enabled: true)
+        fixture.open()
+        let items = fixture.submenu.menu.items
+        let clear = try #require(items.firstIndex { $0.title == "Clear" })
+        let clearAll = items[clear + 1]
+        #expect(clearAll.title == "Clear All")
+        #expect(clearAll.isAlternate)
+        #expect(clearAll.keyEquivalentModifierMask == .option)
+        #expect(clearAll.keyEquivalent == items[clear].keyEquivalent)
+        #expect(!items[clear].isAlternate)
+        #expect(items[clear].keyEquivalentModifierMask.isEmpty)
+    }
+
+    /// Untitled copies (images, or contents with no text) get a name rather than a blank row.
+    @Test func untitledItemsAreNamed() {
+        let fixture = Fixture(enabled: true)
+        fixture.kit?.entries = [ClipboardEntry(id: "image", title: "", isImage: true),
+                                ClipboardEntry(id: "other", title: " \n"), ClipboardEntry(id: "text", title: "text")]
+        fixture.open()
+        #expect(Array(titles(fixture.submenu.menu).prefix(3)) == ["Image", "Item", "text"])
     }
 
     /// Clear and Clear All ask first, as the popup does, once the menu has closed.
@@ -155,10 +177,7 @@ struct ClipboardSubmenuTests {
         #expect(fixture.clearAlerts == 2)
         #expect(kit.clears == [false])
 
-        // With ⌥ held as it opens: Clear All, confirmed with "don't ask again".
-        fixture.optionHeld = true
-        fixture.open()
-        #expect(row(fixture.submenu.menu, "Clear") == nil)
+        // Clear All (with ⌥ held), confirmed with "don't ask again".
         fixture.clearAnswer = ClearConfirmation(confirmed: true, dontAskAgain: true)
         try #require(row(fixture.submenu.menu, "Clear All")).action()
         fixture.runPending()
