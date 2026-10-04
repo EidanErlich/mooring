@@ -17,18 +17,27 @@ struct ClipboardSubmenuTests {
         var dismissals = 0
         var pending: [() -> Void] = []
         var shortcutReads = 0
+        /// What the clear alert answers, and how often it was shown.
+        var clearAnswer = ClearConfirmation(confirmed: true)
+        var clearAlerts = 0
         private(set) var submenu: ClipboardSubmenu!
 
         var kit: FakeClipKit? { kits.last }
 
         init(enabled: Bool) {
             settings = FakeClipboardSettings(enabled: enabled)
-            controller = ClipboardController(settings: settings, storeURL: URL(filePath: "/dev/null/Storage.sqlite")) { [unowned self] _ in
-                let kit = FakeClipKit()
-                kit.entries = entries
-                kits.append(kit)
-                return kit
-            }
+            controller = ClipboardController(
+                settings: settings, storeURL: URL(filePath: "/dev/null/Storage.sqlite"),
+                confirmClear: { [unowned self] in
+                    clearAlerts += 1
+                    return clearAnswer
+                },
+                makeKit: { [unowned self] _ in
+                    let kit = FakeClipKit()
+                    kit.entries = entries
+                    kits.append(kit)
+                    return kit
+                })
             controller.launch()
             submenu = ClipboardSubmenu(
                 clipboard: controller, model: DropdownModel(),
@@ -87,13 +96,17 @@ struct ClipboardSubmenuTests {
     @Test func onShowsRecentAndActions() throws {
         let fixture = Fixture(enabled: true)
         let long = String(repeating: "a", count: 60)
-        fixture.kit?.entries = [ClipboardEntry(id: "long", title: long), ClipboardEntry(id: "lines", title: "one\ntwo")]
+        fixture.kit?.entries = [ClipboardEntry(id: "pinned", title: "Pinned", isPinned: true),
+                                ClipboardEntry(id: "long", title: long), ClipboardEntry(id: "lines", title: "one\ntwo")]
             + Self.entries(11)
         fixture.open()
         let menu = fixture.submenu.menu
 
         let items = [String(repeating: "a", count: 49) + "…", "one two"] + (1...8).map { "Copy \($0)" }
+        // Pins stay in the popup; the newest unpinned items are numbered as the popup numbers them.
         #expect(titles(menu) == items + ["-", "Pause Recording", "Ignore Next Copy", "Clear", "-", "Search…"])
+        #expect(row(menu, "Pinned") == nil)
+        #expect(row(menu, "Copy 1")?.trailing == "⌘3")
         #expect(fixture.kit?.recentLimits.last == 10)
         let trailing = menu.items.prefix(10).map { ($0.representedObject as? ClipboardSubmenu.Row)?.trailing }
         #expect(trailing == (1...9).map { "⌘\($0)" } + [nil])
@@ -121,18 +134,44 @@ struct ClipboardSubmenuTests {
         #expect(titles(fixture.submenu.menu) == ["Pause Recording", "Ignore Next Copy", "Clear", "-", "Search…"])
     }
 
+    /// Clear and Clear All ask first, as the popup does, once the menu has closed.
     @Test func optionShowsClearAll() throws {
         let fixture = Fixture(enabled: true)
+        let kit = try #require(fixture.kit)
         fixture.open()
-        try #require(row(fixture.submenu.menu, "Clear")).action()
-        #expect(fixture.kit?.clears == [false])
 
+        // Cancelling clears nothing.
+        fixture.clearAnswer = ClearConfirmation(confirmed: false)
+        try #require(row(fixture.submenu.menu, "Clear")).action()
+        #expect(fixture.clearAlerts == 0 && fixture.pending.count == 1)  // the menu is still up
+        fixture.runPending()
+        #expect(fixture.clearAlerts == 1)
+        #expect(kit.clears == [])
+
+        // Confirming clears the unpinned items.
+        fixture.clearAnswer = ClearConfirmation(confirmed: true)
+        try #require(row(fixture.submenu.menu, "Clear")).action()
+        fixture.runPending()
+        #expect(fixture.clearAlerts == 2)
+        #expect(kit.clears == [false])
+
+        // With ⌥ held as it opens: Clear All, confirmed with "don't ask again".
         fixture.optionHeld = true
         fixture.open()
         #expect(row(fixture.submenu.menu, "Clear") == nil)
+        fixture.clearAnswer = ClearConfirmation(confirmed: true, dontAskAgain: true)
         try #require(row(fixture.submenu.menu, "Clear All")).action()
-        #expect(fixture.kit?.clears == [false, true])
-        #expect(fixture.dismissals == 2)
+        fixture.runPending()
+        #expect(fixture.clearAlerts == 3)
+        #expect(kit.clears == [false, true])
+        #expect(kit.clearAlertSuppressed)
+
+        // Suppressed: it clears without asking.
+        fixture.clearAnswer = ClearConfirmation(confirmed: false)
+        try #require(row(fixture.submenu.menu, "Clear All")).action()
+        fixture.runPending()
+        #expect(fixture.clearAlerts == 3)
+        #expect(kit.clears == [false, true, true])
     }
 
     @Test func chooseItemCopies() throws {
@@ -165,5 +204,27 @@ struct ClipboardSubmenuTests {
         #expect(fixture.kits.count == 1)
         #expect(!fixture.controller.isOn)
         #expect(ClipKit.instantiatedSingletons == singletons)
+    }
+}
+
+extension ClipKitGlobalStateTests {
+    @Suite
+    @MainActor
+    struct ClipboardPanelTests {
+        /// The panel's content comes from `popupView()`, which is empty while ClipKit isn't running:
+        /// building, laying out and closing the panel creates none of Maccy's state.
+        @Test func panelFromAStoppedKitBuildsNothing() {
+            let singletons = ClipKit.instantiatedSingletons
+            let kit = ClipKit(storeURL: nil, inMemory: true)
+            let panel = ClipboardPanel(kit: kit, statusBarButton: nil)
+            panel.contentView?.layoutSubtreeIfNeeded()
+            #expect(!panel.isPresented)
+            #expect(panel.canBecomeKey)
+            #expect(panel.level == .screenSaver)
+            #expect(panel.styleMask.contains(.nonactivatingPanel))
+            panel.close()
+            #expect(!kit.isRunning)
+            #expect(ClipKit.instantiatedSingletons == singletons)
+        }
     }
 }

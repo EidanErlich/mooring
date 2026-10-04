@@ -27,6 +27,8 @@ final class FakeClipKit: ClipKitRuntime {
 
     // The history surface. `touches` counts every call to it.
     var touches = 0
+    var clearAlertSuppressed = false
+    /// Returned whole, whatever the limit, so the app's own filtering is what's tested.
     var entries: [ClipboardEntry] = []
     var recentLimits: [Int] = []
     var copies: [AnyHashable] = []
@@ -37,7 +39,13 @@ final class FakeClipKit: ClipKitRuntime {
     func recentEntries(limit: Int) -> [ClipboardEntry] {
         touches += 1
         recentLimits.append(limit)
-        return Array(entries.prefix(limit))
+        return entries
+    }
+
+    func confirmAndClear(all: Bool, confirm: @MainActor () -> ClearConfirmation) {
+        touches += 1
+        guard ClipKit.shouldClear(alertSuppressed: &clearAlertSuppressed, confirm: confirm) else { return }
+        clears.append(all)
     }
 
     func copyEntry(_ id: AnyHashable) {

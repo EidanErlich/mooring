@@ -153,7 +153,7 @@ Transitive, as resolved: swift-syntax 602.0.0 (for Defaults' macros; Defaults al
 Each changed file starts with `// Adapted from Maccy@c376789: <original path>`. These are compile fixes for the left-out files and the package build; behaviour is unchanged except where an entry says so. Mooring-written code sits outside `Maccy/` (`TestHost.swift`, `PopupPanel.swift`).
 
 - `Maccy/Observables/AppState.swift`: removed `import Settings`, the `about` and `settingsWindowController` properties and `openAbout()`; `openPreferences()` is now empty (Maccy's Settings window isn't taken). `var appDelegate: AppDelegate?` → `var panel: (any PopupPanel)?`.
-- `Maccy/Observables/Footer.swift`: removed the "about" footer item (it called `openAbout()`). The "preferences" item stays and, for now, does nothing.
+- `Maccy/Observables/Footer.swift`: removed the "about" footer item (it called `openAbout()`). The "preferences" item stays; since task 4 it opens Mooring's Settings (see `AppState.swift` under task 4).
 - `Maccy/Observables/Popup.swift`, `Maccy/Observables/SlideoutController.swift`, `Maccy/Views/SlideoutView.swift`, `Maccy/Views/ToolbarView.swift`: `AppState.shared.appDelegate?.panel` / `appState.appDelegate?.panel` → `AppState.shared.panel` / `appState.panel` (seven call sites).
 - `Maccy/Observables/History.swift`: removed the unused `import Settings`.
 - `Maccy/Extensions/Defaults.Keys+Names.swift`: `AppDelegate.isTesting` → `TestHost.isActive`; removed the `menuIcon` key (its type, `MenuIcon`, isn't taken).
@@ -225,5 +225,5 @@ Vendored edits:
 Mooring-written:
 
 - `Sources/ClipKit/PopupPanel.swift`: `PopupPanel` is public; `open(height:at:)` takes the public `ClipSettings.PopupPosition` (an internal overload maps Maccy's `PopupPosition`). It stays non-isolated because Maccy's `Popup` calls it from non-isolated code.
-- `Sources/ClipKit/ClipKit.swift`: `makePopupPanel` (called in `start()`; `stop()` closes the panel and drops it), `openSettings`, `openPopup()` (opens where the popup-position setting says; nothing while not running or already open), `popupShortcutDescription` ("⇧⌘C"), and the internal `hasStarted`.
-- `Tests/ClipKitTests/PopupTests.swift`.
+- `Sources/ClipKit/ClipKit.swift`: `makePopupPanel` (called in `start()`; `stop()` closes the panel and drops it), `openSettings`, `openPopup()` (opens where the popup-position setting says; nothing while not running or already open), `popupShortcutDescription` ("⇧⌘C"), and the internal `hasStarted`. `recent(limit:includingPinned:)` can leave pinned items out (the dropdown lists only unpinned ones, numbered as the popup numbers them). `confirmAndClear(all:confirm:)`, for the dropdown's Clear and Clear All, keeps the popup's confirmation: it honours `suppressClearAlert`, otherwise asks with `askToClear()`, an `NSAlert` built from Maccy's `clear_alert_*` strings (`Bundle.module`) with a suppression checkbox that sets `suppressClearAlert` when the user confirms; `shouldClear(alertSuppressed:confirm:)` is that rule on its own; `ClearConfirmation` is the answer.
+- `Tests/ClipKitTests/PopupTests.swift`, `Tests/ClipKitTests/ClearTests.swift`.

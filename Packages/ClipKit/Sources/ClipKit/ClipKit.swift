@@ -163,6 +163,18 @@ public final class ClipKit {
 
 // MARK: - Data surface
 
+/// The answer to "Are you sure you want to clear the history?".
+public struct ClearConfirmation: Equatable, Sendable {
+    public var confirmed: Bool
+    /// The alert's "don't ask again" checkbox was ticked.
+    public var dontAskAgain: Bool
+
+    public init(confirmed: Bool, dontAskAgain: Bool = false) {
+        self.confirmed = confirmed
+        self.dontAskAgain = dontAskAgain
+    }
+}
+
 /// One recorded copy, as the app's menus show it.
 public struct ClipItem: Identifiable, Hashable, Sendable {
     public let id: PersistentIdentifier
@@ -173,10 +185,12 @@ public struct ClipItem: Identifiable, Hashable, Sendable {
 }
 
 extension ClipKit {
-    /// The newest items, pinned ones placed as the popup places them. Empty while not running.
-    public func recent(limit: Int) -> [ClipItem] {
+    /// The newest items, pinned ones placed as the popup places them, or without pinned ones when
+    /// `includingPinned` is false. Empty while not running.
+    public func recent(limit: Int, includingPinned: Bool = true) -> [ClipItem] {
         guard isRunning else { return [] }
-        return History.shared.all.prefix(max(limit, 0)).map { decorator in
+        let items = includingPinned ? History.shared.all : History.shared.all.filter(\.isUnpinned)
+        return items.prefix(max(limit, 0)).map { decorator in
             ClipItem(
                 id: decorator.item.persistentModelID,
                 title: decorator.title,
@@ -233,6 +247,52 @@ extension ClipKit {
         let popup = AppState.shared.popup
         guard popup.isClosed() else { return }
         popup.open(height: popup.height)
+    }
+
+    /// Clears as the popup's Clear and Clear All do: after asking "Are you sure you want to clear the
+    /// history?", unless the user ticked "don't ask again" before. `confirm` shows the question;
+    /// tests replace it. Does nothing while not running.
+    public func confirmAndClear(all: Bool, confirm: @MainActor () -> ClearConfirmation = ClipKit.askToClear) {
+        guard isRunning else { return }
+        var suppressed = Defaults[.suppressClearAlert]
+        guard Self.shouldClear(alertSuppressed: &suppressed, confirm: confirm) else { return }
+        if suppressed != Defaults[.suppressClearAlert] {
+            Defaults[.suppressClearAlert] = suppressed
+        }
+        clear(all: all)
+    }
+
+    /// The rule behind `confirmAndClear`: clear without asking while the question is suppressed;
+    /// otherwise ask, and on a yes with "don't ask again" ticked, suppress it from now on.
+    public static func shouldClear(alertSuppressed: inout Bool, confirm: () -> ClearConfirmation) -> Bool {
+        if alertSuppressed { return true }
+        let answer = confirm()
+        guard answer.confirmed else { return false }
+        if answer.dontAskAgain { alertSuppressed = true }
+        return true
+    }
+
+    /// Asks with Maccy's clear alert, which has a "don't ask again" checkbox. Runs modally.
+    public static func askToClear() -> ClearConfirmation {
+        let alert = makeClearAlert()
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        return ClearConfirmation(
+            confirmed: response == .alertFirstButtonReturn,
+            dontAskAgain: alert.suppressionButton?.state == .on
+        )
+    }
+
+    static func makeClearAlert() -> NSAlert {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = NSLocalizedString("clear_alert_message", bundle: .module, comment: "")
+        alert.informativeText = NSLocalizedString("clear_alert_comment", bundle: .module, comment: "")
+        alert.addButton(withTitle: NSLocalizedString("clear_alert_confirm", bundle: .module, comment: ""))
+        alert.addButton(withTitle: NSLocalizedString("clear_alert_cancel", bundle: .module, comment: ""))
+        alert.buttons.first?.hasDestructiveAction = true
+        alert.showsSuppressionButton = true
+        return alert
     }
 
     /// Maccy's popup content, or an empty view while not running: building it creates Maccy's

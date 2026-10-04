@@ -6,7 +6,8 @@ import SwiftUI
 /// ClipKit for anything. While on: the newest items, Pause Recording, Ignore Next Copy, Clear (Clear
 /// All with ⌥ held as it opens) and Search…, which opens the ⇧⌘C popup. Rows are hosted, like the
 /// Windows submenu's, so the ⌘-number and popup hints are trailing text rather than live key
-/// equivalents.
+/// equivalents. The items are the newest unpinned ones, numbered as the popup numbers them; pins stay
+/// in the popup.
 @MainActor
 final class ClipboardSubmenu: NSObject, NSMenuDelegate {
     /// What a row shows and does, kept on its menu item for tests.
@@ -93,7 +94,8 @@ final class ClipboardSubmenu: NSObject, NSMenuDelegate {
         })
         let all = modifierFlags().contains(.option)
         add(id: "clipboard.clear", Row(title: all ? "Clear All" : "Clear") { [weak self] in
-            self?.perform { $0.clear(all: all) }
+            // It asks first, and an alert can't run while the menu is tracking.
+            self?.afterClose { [weak self] in self?.clipboard.confirmAndClear(all: all) }
         })
         menu.addItem(.separator())
         add(id: "clipboard.search", Row(title: "Search…", trailing: popupShortcut()) { [weak self] in
@@ -108,9 +110,9 @@ final class ClipboardSubmenu: NSObject, NSMenuDelegate {
     }
 
     private func add(id: String, _ row: Row) {
-        let item = DropdownMenu.hostedItem(id: id, title: row.title) {
+        let item = DropdownMenu.hostedItem(id: id, title: row.title) { [model] in
             MenuRow(title: row.title, trailing: row.trailing, checked: row.checked,
-                    highlighted: self.model.highlightedID == id, action: row.action)
+                    highlighted: model.highlightedID == id, action: row.action)
         }
         item.representedObject = row
         menu.addItem(item)

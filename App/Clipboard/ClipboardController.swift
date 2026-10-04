@@ -11,6 +11,9 @@ protocol ClipKitRuntime: AnyObject {
     func stop()
     var isRunning: Bool { get }
     func clear(all: Bool)
+    /// Clears after `confirm` says yes, unless the user asked not to be asked (ClipKit's rule).
+    func confirmAndClear(all: Bool, confirm: @MainActor () -> ClearConfirmation)
+    /// The newest unpinned items, at most `limit`.
     func recentEntries(limit: Int) -> [ClipboardEntry]
     func copyEntry(_ id: AnyHashable)
     var isPaused: Bool { get set }
@@ -22,6 +25,7 @@ protocol ClipKitRuntime: AnyObject {
 struct ClipboardEntry {
     let id: AnyHashable
     let title: String
+    var isPinned = false
 }
 
 /// `clipboardEnabled` and ClipKit's "Clear history on quit".
@@ -40,13 +44,17 @@ final class ClipboardController {
     @ObservationIgnored private let settings: any ClipboardSettings
     @ObservationIgnored private let storeURL: URL
     @ObservationIgnored private let makeKit: (URL) -> any ClipKitRuntime
+    @ObservationIgnored private let confirmClear: @MainActor () -> ClearConfirmation
     @ObservationIgnored private var kit: (any ClipKitRuntime)?
 
     /// `makeKit` runs only when Clipboard starts, and is given where the history is kept.
+    /// `confirmClear` asks before clearing (Maccy's alert; tests answer for it).
     init(settings: any ClipboardSettings, storeURL: URL = ClipKit.defaultStoreURL,
+         confirmClear: @escaping @MainActor () -> ClearConfirmation = { ClipKit.askToClear() },
          makeKit: @escaping (URL) -> any ClipKitRuntime) {
         self.settings = settings
         self.storeURL = storeURL
+        self.confirmClear = confirmClear
         self.makeKit = makeKit
     }
 
@@ -77,10 +85,11 @@ final class ClipboardController {
 
     // MARK: The history. While off none of these reaches ClipKit.
 
-    /// The newest items; none while off, or until the history has loaded after turning on.
+    /// The newest unpinned items (pins stay in the popup); none while off, or until the history has
+    /// loaded after turning on.
     func recent(limit: Int) -> [ClipboardEntry] {
         guard isOn, let kit else { return [] }
-        return kit.recentEntries(limit: limit)
+        return Array(kit.recentEntries(limit: limit).filter { !$0.isPinned }.prefix(limit))
     }
 
     /// Puts the item back on the clipboard.
@@ -105,10 +114,11 @@ final class ClipboardController {
         kit?.ignoreNextCopy()
     }
 
-    /// Clears unpinned items, or every item with `all`.
-    func clear(all: Bool) {
+    /// Clears unpinned items, or every item with `all`, once the user confirms (unless they asked
+    /// not to be asked). It may show an alert, so it never runs while a menu is tracking.
+    func confirmAndClear(all: Bool) {
         guard isOn else { return }
-        kit?.clear(all: all)
+        kit?.confirmAndClear(all: all, confirm: confirmClear)
     }
 
     /// Opens the ⇧⌘C popup.
@@ -141,7 +151,7 @@ final class DefaultsClipboardSettings: ClipboardSettings {
 
 extension ClipKit: ClipKitRuntime {
     func recentEntries(limit: Int) -> [ClipboardEntry] {
-        recent(limit: limit).map { ClipboardEntry(id: $0.id, title: $0.title) }
+        recent(limit: limit, includingPinned: false).map { ClipboardEntry(id: $0.id, title: $0.title, isPinned: $0.isPinned) }
     }
 
     func copyEntry(_ id: AnyHashable) {
