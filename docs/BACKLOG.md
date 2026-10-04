@@ -135,29 +135,24 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 
 ## Release (5 leftovers)
 
-- **Uninstall hardening:**
-  - step 2 stops the socket server first, so an agent can't take a new lease while the uninstall runs;
-  - also remove `leases.json`, `layouts.json` and `mooring.sock` from `~/Library/Application Support/Mooring` (Clipboard stays per the checkbox);
-  - remove the defaults domains again in `applicationWillTerminate` when uninstalling, because AppKit can write a key or two back (the Settings window frame, the status item's position) and leave a near-empty `dev.mooring.app` plist;
-  - when restoring sleep failed, the summary should show `sudo pmset -a disablesleep 0`;
-  - no test for an MCP config with a sibling entry that isn't Mooring's, and none for `uninstall()` being ignored while it is already running.
+- **Uninstall:** stopping the socket server as step 0 would be tidier, so an agent can't take a new lease while the uninstall runs. It isn't needed for safety: `LidController.apply` refuses to disable sleep once shutdown has begun, and assertions die at quit.
 - **Uninstall scope:** a Claude plugin installed from GitHub (`mooring@mooring`) is left installed, by design. The in-app CLI step removes only a link to this app's own bundled `mooring`, while `make uninstall` removes any link under `/Applications/Mooring.app/`.
 - **Uninstall tests:** `make uninstall`'s refusal guard in `scripts/test-make-uninstall.sh` can't fire (isolation comes from the overrides, which is sound); the test log shows "Unable to find service status" noise that predates stage 5.
 - **Updater:**
-  - Sparkle's standard user driver doesn't use gentle reminders; for a menu-bar app, add a delegate with `supportsGentleScheduledUpdateReminders` so a scheduled update isn't missed;
-  - the misleading `#require` message in `ClaudePluginFilesTests`.
+  - the misleading `#require` message in `ClaudePluginFilesTests`;
+  - the appcast has no `<sparkle:releaseNotesLink>`, so the update alert shows no notes; it could point at the GitHub release page;
+  - WindowKit's `appBuild` (reads `CFBundleVersion` as an Int) is now always nil, and unused.
 - **Release script:**
   - the tag check is local only, so a tag that exists only on the remote isn't caught;
   - `make release` passes no flags (no `ARGS`); use `bash scripts/release.sh --publish` directly;
-  - the cask has no `auto_updates true`, so `brew upgrade` and Sparkle can both update the app;
-  - a real (non-dry) run was never exercised end to end by an agent: it needs the owner's signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`);
-  - nothing checks the built app has a non-empty `SUPublicEDKey` before releasing it.
+  - a real (non-dry) run was never exercised end to end by an agent: it needs the owner's signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`). The key and signature checks are tested with fixtures and a shimmed `make`.
 - **Owner checks, not yet done:**
-  - Sparkle keys, `make release` and a look at `dist/` (`docs/RELEASING.md`);
+  - Sparkle keys (and the offline backup), `bash scripts/release.sh --publish` and a look at the `dist/` it built (`docs/RELEASING.md`);
   - with the owner's identity, the embedded Sparkle.framework still passes `codesign --verify --deep --strict` after Xcode re-signs it;
   - a clean install on a second user account: the Gatekeeper block, **Open Anyway** and the `xattr` fix, and the first-launch update consent;
   - **Uninstall Mooring…** on a real install, including that `claude plugin marketplace remove mooring-app` (which also uninstalls the plugin) reads right;
-  - the tap repo, Pages and the printed publish commands, then the `v0.1.0` tag.
+  - the tap repo, Pages and the printed publish commands (the first one tags `v0.1.0`);
+  - with 0.1.1: a scheduled update found while Mooring is in the background posts the notification and shows **Update Available…**, and the update replaces a bundle whose helper is running.
 
 ## CLI and IPC (stage 2a leftovers)
 

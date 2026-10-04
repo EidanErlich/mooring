@@ -1,8 +1,8 @@
 # Releasing Mooring
 
-The owner's checklist for publishing a release. Everything here runs on your Mac, with your Keychain. Nothing in the repo, its scripts or CI publishes anything: `scripts/release.sh --publish` only **prints** the commands in step 7, and you run them yourself.
+The owner's checklist for publishing a release. Everything here runs on your Mac, with your Keychain. Nothing in the repo, its scripts or CI publishes anything: `scripts/release.sh --publish` (step 4) builds once and only **prints** the publishing commands, and you run them yourself in step 7.
 
-Mooring has no paid Apple account, so a release is signed with your own certificate (not notarized) and updates are verified with Sparkle's EdDSA signature instead. Keep using the same signing certificate for every release, so people's Accessibility grants survive updates; if it ever changes, say so in the release notes.
+Mooring has no paid Apple account, so a release is signed with the maintainer's own certificate (yours, not notarized) and updates are verified with Sparkle's EdDSA signature instead. Keep using the same signing certificate for every release, so people's Accessibility grants survive updates; if it ever changes, say so in the release notes.
 
 ## Before you start
 
@@ -23,7 +23,13 @@ build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
 
 If you use a different derived-data folder, look for `…/SourcePackages/artifacts/sparkle/Sparkle/bin/` under it, or set `SIGN_UPDATE=/path/to/sign_update` when you run the release.
 
-Losing this key means installed copies can't verify future updates. Consider exporting a backup (`generate_keys -x <file>`) to somewhere safe and offline.
+Losing this key means installed copies can't verify future updates, so back it up once:
+
+```sh
+build/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys -x ~/mooring-sparkle-key
+```
+
+Write the backup **outside the repo** (never into the working tree, where it could be committed) and outside synced folders such as Desktop or Documents in iCloud. Move it to offline storage (an encrypted USB drive or a password manager's secure file), then delete the local copy (`rm ~/mooring-sparkle-key`). `generate_keys -f <file>` imports it again.
 
 ## 2. Put the public key in `Config/Local.xcconfig`
 
@@ -39,41 +45,45 @@ Set `MARKETING_VERSION` in `Config/Shared.xcconfig` (it is `0.1.0` for the first
 
 Commit the bump, merge it to `main` and push `main`, so the tag in step 7 points at a commit GitHub has.
 
-## 4. Build the release
+## 4. Build, sign and print the publishing commands
 
 ```sh
-make release
+bash scripts/release.sh --publish
 ```
 
-This runs `scripts/release.sh`, which:
+This is the one build of the release. The script:
 
 1. checks the tree is clean and the tag is unused;
 2. runs `make test`;
 3. builds Release with the identity in `Local.xcconfig` (`make build-release`);
-4. verifies it with `codesign --verify --deep --strict`;
-5. zips it with `ditto -c -k --sequesterRsrc --keepParent` (extended attributes go in `__MACOSX/`, so even a plain `unzip` gives an intact app);
-6. signs the zip with Sparkle's `sign_update`, using the key in your Keychain (macOS may ask to allow access);
-7. writes the appcast and the Homebrew cask.
+4. refuses the build if its `SUPublicEDKey` is empty (a release without it could never update itself) or if it isn't signed with a certificate (ad-hoc, or no Authority or TeamIdentifier in `codesign -dv`);
+5. verifies it with `codesign --verify --deep --strict`;
+6. zips it with `ditto -c -k --sequesterRsrc --keepParent` (extended attributes go in `__MACOSX/`, so even a plain `unzip` gives an intact app);
+7. signs the zip with Sparkle's `sign_update`, using the key in your Keychain (macOS may ask to allow access);
+8. writes the appcast and the Homebrew cask;
+9. prints three blocks of publishing commands for step 7, and runs none of them.
 
-`make release` passes no flags. To use one, call the script directly: `bash scripts/release.sh --publish` (step 7).
+(`make release` is the same run without `--publish`: it builds `dist/` but prints no commands.)
 
 ## 5. Inspect `dist/`
 
-`dist/` is gitignored and holds:
+Inspect the `dist/` that step 4 just built; the commands it printed publish exactly these files. `dist/` is gitignored and holds:
 
 | File | What it is |
 | --- | --- |
 | `Mooring-<version>.zip` | The app, zipped with `Mooring.app` at the top |
 | `Mooring-<version>.zip.sig` | `sign_update`'s output for the zip |
 | `appcast.xml` | One `<item>`: version, `sparkle:version`, minimum macOS, the zip's byte length and `sparkle:edSignature` |
-| `homebrew/mooring.rb` | The cask for the tap, with the zip's sha256 |
+| `homebrew/mooring.rb` | The cask for the tap, with the zip's sha256, `auto_updates true`, `uninstall quit:` and `zap trash:` |
 
 Check that:
 
 - `unzip -l dist/Mooring-<version>.zip` shows `Mooring.app/…`, and the unzipped app passes `codesign --verify --deep --strict`;
 - `appcast.xml` has a non-empty `sparkle:edSignature`, `length` equals `stat -f%z dist/Mooring-<version>.zip`, and `xmllint --noout dist/appcast.xml` is quiet;
 - the cask's `sha256` equals `shasum -a 256 dist/Mooring-<version>.zip`, and its caveats offer **Open Anyway** or `xattr -dr com.apple.quarantine /Applications/Mooring.app`;
-- the built app has your public key: `plutil -extract SUPublicEDKey raw build/DerivedData/Build/Products/Release/Mooring.app/Contents/Info.plist`.
+- the built app has your public key (the script already refuses an empty one): `plutil -extract SUPublicEDKey raw build/DerivedData/Build/Products/Release/Mooring.app/Contents/Info.plist`.
+
+If anything is wrong, fix it and run step 4 again; nothing has been published yet.
 
 (`scripts/release.sh --dry-run --app <path to a built Mooring.app>` makes the same files without tests, a build or signing; its appcast signature is empty. CI runs it on every push, and `--dry-run` can't be combined with `--publish`.)
 
@@ -86,27 +96,24 @@ Both are one-time setup. Do them in your browser or with `gh`, but only when you
 
 ## 7. Run the printed publishing commands
 
-```sh
-bash scripts/release.sh --publish
-```
-
-This is a full real run (steps 4 and 5 again, so `dist/` is rebuilt and the zip, appcast and cask stay consistent with each other), and it then prints three blocks of commands without running any:
+Don't run the script again: a rerun rebuilds and re-signs `dist/`, and its zip would no longer be the one you inspected. Scroll back to the three blocks step 4 printed (if they've scrolled away, `bash -c '. scripts/release.sh && print_publish <version>'` prints them again without building anything):
 
 1. `git tag v<version> && git push origin v<version>`, then `gh release create v<version> dist/Mooring-<version>.zip --generate-notes`;
 2. a clone of `gh-pages`, a copy of `dist/appcast.xml` into it, then commit and push;
 3. a clone of the tap, a copy of `dist/homebrew/mooring.rb` to `Casks/mooring.rb`, then commit and push.
 
-Read them, then run them from the repo root, in order.
+Blocks 2 and 3 clone over `https`, which needs Git credentials for GitHub. If you haven't already, run `gh auth setup-git` once so Git uses your `gh` login.
 
-## 8. Tag
+Read them, then run them from the repo root, in order. Block 1 is the only place the release is tagged.
 
-The first printed command tags `v<version>` and pushes the tag. If you ran it, confirm with `git tag -l` and `git ls-remote --tags origin`; if you split the steps, tag the same commit you released:
+## 8. Verify the tag
+
+Block 1 tagged `v<version>` and pushed the tag. Don't tag by hand; just confirm both sides have it:
 
 ```sh
-git tag v0.1.0 && git push origin v0.1.0
+git tag -l
+git ls-remote --tags origin
 ```
-
-Do this once per release, and only after the zip, appcast and cask are published.
 
 ## 9. Check a clean install on a second user account
 
@@ -117,6 +124,6 @@ Create (or use) another macOS user, so nothing is left over from your own builds
 3. Confirm the quarantine fix works both ways, on a fresh copy each time: **System Settings → Privacy & Security → Open Anyway**, and `xattr -dr com.apple.quarantine /Applications/Mooring.app`.
 4. Check the first launch asks "Check for updates automatically?" once, and that Settings → Mooring → Advanced has **Check for updates automatically** and **Check Now**.
 5. After `brew install --cask eidanerlich/tap/mooring`, check Mooring installs and opens the same way and the caveats print the quarantine advice.
-6. Try **Uninstall Mooring…** in Settings → Mooring → Advanced, and confirm the app is in the Trash.
+6. Try **Uninstall Mooring…** in Settings → Mooring → Advanced, and confirm the app is in the Trash and `~/Library/Application Support/Mooring` has no `leases.json`, `layouts.json` or `mooring.sock`.
 
 Updating can't be tested with the first release, since nothing older has the updater. When you publish the next version, install the previous one first and use **Check Now**.

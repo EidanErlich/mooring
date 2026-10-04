@@ -20,9 +20,11 @@ make install     # Release build to /Applications
 
 An app you build yourself isn't quarantined, so macOS never warns about it. To update later, run `git pull && make install`.
 
+Lid mode needs a build signed with your own signing certificate: before `make install`, copy [`Config/Local.xcconfig.example`](Config/Local.xcconfig.example) to `Config/Local.xcconfig` and fill in your identity. Without it the build is ad-hoc signed, and everything but lid mode works.
+
 ### Prebuilt download
 
-Download `Mooring-<version>.zip` from [GitHub Releases](https://github.com/EidanErlich/mooring/releases), unzip it and drag `Mooring.app` to `/Applications`. Mooring is signed with a self-signed certificate, not notarized, so macOS blocks the first open. Either:
+Download `Mooring-<version>.zip` from [GitHub Releases](https://github.com/EidanErlich/mooring/releases), unzip it and drag `Mooring.app` to `/Applications`. Mooring is signed with the maintainer's own certificate, not notarized, so macOS blocks the first open. Either:
 
 - open System Settings → Privacy & Security and click **Open Anyway**, or
 - run `xattr -dr com.apple.quarantine /Applications/Mooring.app` in Terminal.
@@ -35,11 +37,11 @@ Once the tap is published:
 brew install --cask eidanerlich/tap/mooring
 ```
 
-The cask lives in a project tap (`EidanErlich/homebrew-tap`), because official Homebrew casks reject apps that aren't notarized. It prints the same quarantine advice after installing.
+The cask lives in a project tap (`EidanErlich/homebrew-tap`), because official Homebrew casks reject apps that aren't notarized. It prints the same quarantine advice after installing. Mooring updates itself, so `brew upgrade` leaves it alone (`auto_updates`); `brew uninstall` quits it first, and `brew uninstall --zap` also removes its Application Support folder and preferences.
 
 ## Updates
 
-Mooring makes no network requests of its own on a build without an update key, and the Updates settings don't appear. A release build with Sparkle's public key (`MOORING_SPARKLE_PUBLIC_KEY` in `Config/Local.xcconfig`) asks once, on first launch, whether to check for updates automatically; **Not Now** leaves checks off. Settings → Mooring → Advanced then has **Check for updates automatically** and **Check Now**. The updates come from `https://eidanerlich.github.io/mooring/appcast.xml` and are verified with an EdDSA signature (Sparkle 2.10.0). If you built from source, update with `git pull && make install` instead.
+Mooring makes no network requests of its own on a build without an update key, and the Updates settings don't appear. A release build with Sparkle's public key (`MOORING_SPARKLE_PUBLIC_KEY` in `Config/Local.xcconfig`) asks once, on first launch, whether to check for updates automatically; **Not Now** leaves checks off. Settings → Mooring → Advanced then has **Check for updates automatically** and **Check Now**. The updates come from `https://eidanerlich.github.io/mooring/appcast.xml` and are verified with an EdDSA signature (Sparkle 2.10.0). When an automatic check finds an update while you're working in another app, Mooring doesn't pop a window up behind it: it posts a notification and adds **Update Available…** to the menu, which shows the update. If you built from source, update with `git pull && make install` instead.
 
 ## Uninstall
 
@@ -53,10 +55,11 @@ Settings → Mooring → Advanced → **Uninstall Mooring…** lists what it wil
 6. removes the Claude Code plugin that came with the app;
 7. removes Mooring from Claude Desktop and Cursor;
 8. deletes clipboard history, only if you tick **Also delete clipboard history** (off by default);
-9. deletes Mooring's settings;
-10. moves Mooring to the Trash, then quits.
+9. deletes saved sessions (`leases.json`), saved window layouts (`layouts.json`) and the CLI socket (`mooring.sock`) from `~/Library/Application Support/Mooring`, and that folder too if nothing else is left in it;
+10. deletes Mooring's settings (again as it quits, so nothing written on the way out survives);
+11. moves Mooring to the Trash, then quits.
 
-A step that fails doesn't stop the rest; Mooring lists what didn't finish before it quits. If the app is already gone, `make uninstall` quits Mooring, removes `~/.local/bin/mooring` when it links into `/Applications/Mooring.app`, and removes the app. It doesn't touch the helper, login item or settings, so use the in-app button first when you can.
+A step that fails doesn't stop the rest; Mooring lists what didn't finish before it quits. If lid sleep couldn't be turned back on, the list says to run `sudo pmset -a disablesleep 0` in Terminal. If the app is already gone, `make uninstall` quits Mooring, removes `~/.local/bin/mooring` when it links into `/Applications/Mooring.app`, and removes the app. It doesn't touch the helper, login item or settings, so use the in-app button first when you can.
 
 ## Develop
 
