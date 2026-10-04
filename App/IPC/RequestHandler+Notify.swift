@@ -31,10 +31,10 @@ extension RequestHandler {
             if case .client = caller.identity { buckets.append("pid-\(caller.pid)") }
             try checkRate(buckets)
         }
-        await poster.post(
+        let posted = await poster.post(
             id: "notify-\(UUID().uuidString)", title: "\(name): \(title)", body: body, userInfo: [:], category: nil
         )
-        return NotifyResult(posted: true)
+        return NotifyResult(posted: posted)
     }
 
     /// Refuses unless every bucket's last notification is at least `notifyInterval` ago, then records them all. A last

@@ -350,6 +350,14 @@ import Testing
     #expect(harness.client.requests.count == 1)
 }
 
+@Test func notifyNotShownIsAnError() async throws {
+    var harness = MCPHarness()
+    harness.client = ScriptedClient { .success(.success(id: $0.id, .notify(NotifyResult(posted: false)))) }
+    _ = await harness.run([initialize("cursor-vscode"), call(2, "notify", #"{"title":"Done"}"#)])
+    #expect(harness.isError(2) == true)
+    #expect(harness.text(2) == "Mooring couldn't show the notification. Check System Settings → Notifications → Mooring.")
+}
+
 @Test func notifyBeforeInitializeIsAnMCPClient() async throws {
     let harness = MCPHarness()
     _ = await harness.run([call(1, "notify", #"{"title":"Done"}"#)])

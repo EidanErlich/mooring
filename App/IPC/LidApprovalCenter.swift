@@ -21,7 +21,7 @@ protocol NotificationPosting: AnyObject {
     /// Requests authorization if it hasn't been asked yet; true only if a notification could be seen:
     /// allowed, with alerts on and a style other than none.
     func authorize() async -> Bool
-    /// "allowed", "notDetermined" or "denied"; nil if the settings can't be read.
+    /// "allowed", "alerts off", "notDetermined" or "denied"; nil if the settings can't be read.
     func notificationStatus() async -> String?
     /// Posts a notification; `category` is set only when given (the approvals' actions). False if the system
     /// refused it, so nothing was shown.
@@ -37,14 +37,20 @@ protocol NotificationPosting: AnyObject {
 final class SystemNotificationPoster: NotificationPosting {
     private var center: UNUserNotificationCenter { .current() }
 
+    /// Whether an allowed app's notifications would appear: alerts on and a style other than none.
+    private static func showsAlerts(_ settings: UNNotificationSettings) -> Bool {
+        settings.alertSetting == .enabled && settings.alertStyle != .none
+    }
+
     func authorize() async -> Bool {
         let settings = await center.notificationSettings()
         switch settings.authorizationStatus {
         case .notDetermined:
-            return (try? await center.requestAuthorization(options: [.alert, .sound])) == true
+            guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else { return false }
+            // Granted, but the person may have turned alerts off in the same prompt.
+            return Self.showsAlerts(await center.notificationSettings())
         case .authorized, .provisional:
-            // Allowed in name only when alerts are off or the style is none: nothing would appear.
-            return settings.alertSetting == .enabled && settings.alertStyle != .none
+            return Self.showsAlerts(settings)
         case .denied:
             return false
         @unknown default:
@@ -53,11 +59,12 @@ final class SystemNotificationPoster: NotificationPosting {
     }
 
     func notificationStatus() async -> String? {
-        switch await center.notificationSettings().authorizationStatus {
-        case .notDetermined: "notDetermined"
-        case .authorized, .provisional: "allowed"
-        case .denied: "denied"
-        @unknown default: nil
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined: return "notDetermined"
+        case .authorized, .provisional: return Self.showsAlerts(settings) ? "allowed" : "alerts off"
+        case .denied: return "denied"
+        @unknown default: return nil
         }
     }
 
@@ -159,7 +166,7 @@ final class LidApprovalCenter: LidApproving {
         }
     }
 
-    /// "allowed", "notDetermined" or "denied", for `mooring status` and `doctor`.
+    /// "allowed", "alerts off", "notDetermined" or "denied", for `mooring status` and `doctor`.
     func notificationStatus() async -> String? {
         await poster.notificationStatus()
     }

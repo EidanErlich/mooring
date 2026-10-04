@@ -177,6 +177,10 @@ struct CommandRunner {
         if response.ok, case .winUndo(let undone)? = response.result, undone.results.isEmpty {
             response = .failure(id: response.id, .notFound, WinText.nothingToUndo)
         }
+        // A refused notification is a denial, like the other reasons `notify` can't post.
+        if response.ok, case .notify(let notified)? = response.result, !notified.posted {
+            response = .failure(id: response.id, .denied, WireText.notificationNotShown)
+        }
         if response.ok, let result = response.result {
             if options.json {
                 printJSON(result)

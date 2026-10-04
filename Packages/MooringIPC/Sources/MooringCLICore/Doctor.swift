@@ -151,6 +151,8 @@ public enum Doctor {
         switch status.notifications {
         case "allowed": return Check(name: name, state: "pass", detail: "allowed", fix: nil)
         case "notDetermined": return Check(name: name, state: "skip", detail: "not asked yet", fix: nil)
+        case "alerts off":
+            return Check(name: name, state: "fail", detail: "alerts off", fix: "System Settings → Notifications → Mooring")
         case "denied":
             guard ["askWhenOpenEnded", "alwaysAsk"].contains(status.agentLidApproval) else {
                 return Check(name: name, state: "skip", detail: "denied (not needed)", fix: nil)

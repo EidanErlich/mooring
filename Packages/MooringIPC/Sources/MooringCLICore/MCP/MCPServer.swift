@@ -201,8 +201,8 @@ extension MCPSession {
     private func notify(title: String, body: String?) async -> JSONValue {
         switch await send(.notify(NotifyArgs(title: title, body: body, client: wireClient)), through: environment.client) {
         case .done(.notify(let result), _):
-            return MCPTools.result(result.posted ? "Notification posted" : "Notification not posted",
-                                   structured: JSONValue(encoding: result))
+            guard result.posted else { return MCPTools.failure(WireText.notificationNotShown) }
+            return MCPTools.result("Notification posted", structured: JSONValue(encoding: result))
         case .done:
             return MCPTools.failure(Self.unexpectedReply)
         case .held(let message), .failed(let message, _):

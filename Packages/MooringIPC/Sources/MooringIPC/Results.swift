@@ -144,7 +144,8 @@ public struct StatusResult: Codable, Sendable, Equatable {
     public var lidClosed: Bool?
     public var helper: String
     public var suspensions: [String]
-    /// The notification permission as the app sees it: `allowed`, `notDetermined` or `denied`. Absent from older apps.
+    /// The notification permission as the app sees it: `allowed`, `alerts off` (allowed, but nothing would
+    /// show), `notDetermined` or `denied`. Absent from older apps.
     public var notifications: String?
     /// The agent lid-mode setting: `askWhenOpenEnded`, `alwaysAsk`, `alwaysAllow` or `never`. Absent from older apps.
     public var agentLidApproval: String?
