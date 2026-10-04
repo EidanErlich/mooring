@@ -48,6 +48,9 @@ final class SocketServer: @unchecked Sendable {
     private var listener: DispatchSourceRead?
     /// Resumes `listener`, suspended while out of descriptors; set only while it's suspended.
     private var acceptRetry: DispatchWorkItem?
+    /// Whether accepting is out of descriptors and has been logged, until a connection is accepted again.
+    private var outOfDescriptors = false
+    private var episodes = 0
     private var connections: [UInt64: Connection] = [:]
     private var nextID: UInt64 = 0
 
@@ -118,6 +121,9 @@ final class SocketServer: @unchecked Sendable {
 
     // MARK: - Accepting
 
+    /// How many times accepting has run out of descriptors, each logged once however long it lasts; for tests.
+    var backOffEpisodes: Int { queue.sync { episodes } }
+
     private func acceptPending(on listening: Int32) {
         while true {
             let (descriptor, error) = accept(listening)
@@ -125,15 +131,20 @@ final class SocketServer: @unchecked Sendable {
                 if error == EMFILE || error == ENFILE { pauseAccepting() }
                 return
             }
+            outOfDescriptors = false
             admit(descriptor)
         }
     }
 
     /// Out of descriptors, the connection stays queued and the listener would fire again at once: it waits 100 ms
-    /// instead, then tries again.
+    /// instead, then tries again. Logged once until a connection is accepted.
     private func pauseAccepting() {
         guard let listener, acceptRetry == nil else { return }
-        log.error("out of file descriptors; accepting again in 100 ms")
+        if !outOfDescriptors {
+            outOfDescriptors = true
+            episodes += 1
+            log.error("out of file descriptors; retrying accept every 100 ms")
+        }
         listener.suspend()
         // Resumes exactly once: here, or in `stop()`, which cancels this first.
         let retry = DispatchWorkItem { [weak self] in

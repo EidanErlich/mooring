@@ -148,12 +148,13 @@ final class DropdownMenu: NSObject, NSMenuDelegate {
         model.highlightedID = item?.identifier?.rawValue
     }
 
-    /// Arms one observation of the leases; it re-arms itself only after a change.
+    /// Arms one observation of the leases and their lid approvals (which lease rows show); it re-arms itself only after
+    /// a change.
     private func observe() {
         guard !observing else { return }
         observing = true
         withObservationTracking {
-            _ = engine.leases
+            for lease in engine.leases { _ = pendingApproval(lease.id) }
             _ = engine.state
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in

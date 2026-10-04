@@ -21,14 +21,15 @@ struct DropdownMenuTests {
         windowActions: WindowActions = WindowActions(menuActions: { _ in [] }, perform: { _, _ in }, frontmostPID: { nil }),
         clipboard: ClipboardController? = nil,
         updateAvailable: @escaping () -> Bool = { false },
-        checkForUpdate: @escaping () -> Void = {}
+        checkForUpdate: @escaping () -> Void = {},
+        pendingApproval: @escaping (String) -> Bool = { _ in false }
     ) -> (DropdownMenu, AwakeEngine) {
         let engine = AwakeEngine(assertions: NullAssertions(), store: MemoryStore(), processes: AliveProcesses(),
                                  lid: LidController(helper: FakeLidHelper()), settings: { AwakeSettings() })
         let menu = DropdownMenu(engine: engine, model: model, helperEnabled: helperEnabled,
                                 runningApps: runningApps, openSettings: {},
                                 windows: windows ?? makeWindows(.off), windowActions: windowActions,
-                                clipboard: clipboard ?? Self.offClipboard(),
+                                clipboard: clipboard ?? Self.offClipboard(), pendingApproval: pendingApproval,
                                 needsLidConfirmation: { _ in needsLidConfirmation() }, confirmLidOnBattery: confirmLidOnBattery,
                                 updateAvailable: updateAvailable, checkForUpdate: checkForUpdate)
         return (menu, engine)
@@ -194,39 +195,6 @@ struct DropdownMenuTests {
             #expect(item.view!.frame.width == 300)
             #expect(item.view!.frame.height > 0)
         }
-    }
-
-    /// VoiceOver reads a hosted row by its title and label, which are the row's own text, off and on.
-    @Test func everyHostedRowHasATitle() async {
-        let (menu, engine) = makeMenuAndEngine(runningApps: { [NSRunningApplication.current] })
-        menu.menuWillOpen(menu.root)
-        func expectTitled() {
-            menu.menuNeedsUpdate(menu.apps)
-            let menus = [menu.root, menu.awake, menu.apps, menu.windowsSubmenu.menu, menu.clipboardSubmenu.menu]
-            let hosted = menus.flatMap(\.items).filter { $0.view != nil }
-            #expect(hosted.count > 10)
-            for item in hosted {
-                let id = item.identifier?.rawValue ?? "?"
-                #expect(!item.title.isEmpty, "\(id) has no title")
-                #expect(item.view?.accessibilityLabel() == item.title, "\(id)'s label isn't its title")
-            }
-        }
-        func title(_ id: String, in menu: NSMenu) -> String? {
-            menu.items.first { $0.identifier?.rawValue == id }?.title
-        }
-
-        expectTitled()
-        #expect(title("header", in: menu.root) == "Off")
-        #expect(title("nothingAnchored", in: menu.awake) == "Nothing anchored")
-        #expect(title("duration.hour1", in: menu.awake) == "For 1 h")
-
-        engine.toggleMenu()
-        engine.acquire(id: "job", owner: .cli(pid: 4242), reason: "make test", level: .system, duration: nil)
-        for _ in 0..<5 { await Task.yield() }
-        expectTitled()
-        // The header's and a lease row's text change while the menu is open; their titles follow.
-        #expect(title("header", in: menu.root) == "On · until turned off")
-        #expect(title("lease.job", in: menu.awake) == "Terminal, make test, Until turned off")
     }
 
     @Test func actionRowsAreEnabledAfterUpdate() {

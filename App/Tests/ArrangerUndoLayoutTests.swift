@@ -138,6 +138,24 @@ extension ArrangerTests {
         #expect(try setAside("layouts.corrupt-1700000000-2.json") == "third")
     }
 
+    /// A corrupt file that can't be renamed stays where it is, and saving is refused rather than writing over it.
+    @Test func failedRenameKeepsCorruptFileAndBlocksSave() async throws {
+        try writeCorrupt("{not json")
+        let folder = layoutsURL.deletingLastPathComponent().path
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder) }
+
+        let store = LayoutStore(url: layoutsURL, now: { Self.corruptTime })
+        #expect(throws: WireError.self) { try store.load() }
+        await #expect {
+            try await arranger.layout(WinLayoutArgs(action: "save", name: "coding"))
+        } throws: { error in
+            (error as? WireError)?.message.hasPrefix("Couldn't read saved layouts") == true
+        }
+        #expect(String(bytes: try Data(contentsOf: layoutsURL), encoding: .utf8) == "{not json")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder) == ["layouts.json"])
+    }
+
     @Test func saveWorksAfterCorruptFile() async throws {
         try writeCorrupt("[1, 2")
         #expect(try await arranger.layout(WinLayoutArgs(action: "list")).names == [])
