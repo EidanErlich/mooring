@@ -1,6 +1,6 @@
 # Stage 3a: WindowKit (Loop inside Mooring)
 
-Oct 3, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 3, 2026 · Eidan Erlich · Status: built (0.0.4)
 
 ## Goal
 
@@ -106,7 +106,7 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
 | Excluded Apps | Loop's Excluded Apps |
 
 - **Dropped:** Loop's Icon page and About page.
-- **Pages while Windows is off:** each one shows a banner with "Windows is off" and **Turn On…**. Editing is still allowed; settings take effect when Windows starts.
+- **Pages while Windows is off:** each one shows only a banner with "Windows is off" and **Turn On…** (Behavior also keeps the Window Manager toggle). Loop's pages are not built, because building them creates `SettingsWindowManager.shared` and Luminare views, which would break "loads none of WindowKit" while off. So settings can't be edited before turning Windows on (amended during the build).
 - **Hosting:** Luminare views are hosted inside Mooring's `NavigationSplitView` detail area. If Luminare needs its own window chrome, the Windows group opens Loop's settings window instead, titled "Mooring: Windows", and the sidebar item opens that. The plan records which.
 
 ## General → Shortcuts
