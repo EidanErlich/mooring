@@ -44,6 +44,22 @@ private struct FakeTable: ProcessTable {
     #expect(AgentDetection.agent(for: 100, in: table) == "Claude Code")
 }
 
+@Test func npmClaudeWithProcessTitleIsAnAgent() {
+    // Claude Code sets `process.title = "claude"`, which overwrites argv in place: node's script is gone.
+    let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]
+    for titled in [["claude", "", ""], ["claude"], ["claude  ", "", ""], ["claude\0\0", ""]] {
+        let table = FakeTable(rows, arguments: [90: titled])
+        #expect(AgentDetection.agent(for: 100, in: table) == "Claude Code")
+        #expect(AgentDetection.programName(of: proc(90, 1, "node"), in: table) == "claude")
+    }
+    // Only the exact title counts, and only for node.
+    for other in [["claude-helper"], ["claude daemon", ""], ["Claude", ""], ["claudex"], ["", "claude"]] {
+        #expect(AgentDetection.agent(for: 100, in: FakeTable(rows, arguments: [90: other])) == nil)
+    }
+    let python = FakeTable([proc(100, 90, "zsh"), proc(90, 1, "python3")], arguments: [90: ["claude", "", ""]])
+    #expect(AgentDetection.agent(for: 100, in: python) == nil)
+}
+
 @Test func npmClaudeIsAnAgent() {
     // Claude Code installed with npm runs as `node` with its script as the first argument.
     let rows = [proc(100, 90, "zsh"), proc(90, 1, "node")]

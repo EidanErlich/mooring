@@ -208,7 +208,7 @@ Found while hardening v0.1 and deferred. Still deferred from before, as the stag
   - `--no-launch` doesn't consult the app-running check, so a busy app reads "isn't running" there;
   - `node --require <file>` before the script isn't recognised as Claude Code;
   - each process lookup allocates a 1 MB `KERN_PROCARGS2` buffer;
-  - no app-level test for an npm-installed Claude's lid approval, and no MCP test that `busy` isn't reported as lost.
+  - no MCP test that `busy` isn't reported as lost.
 - **Settings:**
   - Copy config isn't gated on a transient bundle;
   - an install on an external volume (`/Volumes/…`) reads as transient;

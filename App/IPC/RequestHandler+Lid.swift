@@ -126,7 +126,9 @@ extension RequestHandler {
 
     /// Takes up the record of agent-granted lid saved before a relaunch. Runs after `engine.restore()`: an entry is
     /// kept only while a restored lease has its id and, within `createdTolerance`, its creation time, and it takes
-    /// that lease's own time, so later checks compare exactly. The filtered record is written back.
+    /// that lease's own time, so later checks compare exactly. The filtered record is written back. Then the settings
+    /// are applied once: the settings observation skips the value at launch, and they may have gone to Never (or
+    /// session lid off) while the app wasn't running.
     func restoreAgentLid() {
         var restored: [String: Date] = [:]
         for (id, created) in agentLidRecord.load() {
@@ -136,6 +138,7 @@ extension RequestHandler {
         }
         agentLid = restored
         agentLidRecord.save(restored)
+        applyLidSettings()
     }
 
     /// Takes lid mode back from live leases that got it on an agent's behalf once the settings no longer allow it:
@@ -230,13 +233,18 @@ extension RequestHandler {
     /// "<reason> · <with no end time | for 30m | while <process> runs>"; the center adds the agent's name.
     private func approvalBody(_ lease: Lease, reason: String?) -> String {
         let end = if let pid = lease.watch?.pid {
-            "while \(processes.entry(pid)?.name ?? "pid \(pid)") runs"
+            "while \(watchedProgram(pid) ?? "pid \(pid)") runs"
         } else if let expiry = lease.expiresAt {
             "for \(DurationText.remaining(expiry.timeIntervalSince(now())))"
         } else {
             "with no end time"
         }
         return "\(reason ?? lease.reason) · \(end)"
+    }
+
+    /// The program the process runs, so npm Claude Code reads `claude` rather than `node`.
+    private func watchedProgram(_ pid: Int32) -> String? {
+        processes.entry(pid).map { AgentDetection.programName(of: $0, in: processes) }
     }
 
     private func alwaysAllow(_ agent: String) {

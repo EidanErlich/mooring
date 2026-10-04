@@ -18,6 +18,8 @@ final class RequestKnobs {
 /// Process ancestry for agent detection; empty, so callers count as people, unless a test adds a chain.
 struct FakeProcessTable: ProcessTable {
     var entries: [Int32: ProcessEntry] = [:]
+    /// Command lines of the processes a test gives them; the rest have none, so callers are told apart by name alone.
+    var commandLines: [Int32: [String]] = [:]
 
     /// `chain` from the caller up: `[(200, "sh"), (100, "claude")]` makes 200 a child of 100, and 100 a child of launchd.
     init(_ chain: [(pid: Int32, name: String)] = []) {
@@ -28,8 +30,7 @@ struct FakeProcessTable: ProcessTable {
     }
 
     func entry(_ pid: Int32) -> ProcessEntry? { entries[pid] }
-    /// No command lines: callers are told apart by process name alone.
-    func arguments(_ pid: Int32) -> [String]? { nil }
+    func arguments(_ pid: Int32) -> [String]? { commandLines[pid] }
 }
 
 /// Answers lid asks from a script, or holds them until the test resolves them.

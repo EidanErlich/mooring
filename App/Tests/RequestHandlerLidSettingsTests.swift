@@ -61,6 +61,22 @@ struct RequestHandlerLidSettingsTests {
         #expect(try #require(refused.lease("job")).level == .system)
     }
 
+    /// The app was closed while settings went to Never: the delegate's one `restoreAgentLid()` call at launch takes the
+    /// restored lid back, as the settings observation (which skips the initial value) wouldn't.
+    @Test func restoredAgentLidIsDroppedAtLaunchWhenSettingsNowForbidIt() async throws {
+        let never = try await agentLidAfterRelaunch()
+        never.knobs.settings.agentLidApproval = .never
+        never.handler.restoreAgentLid()
+        #expect(try #require(never.lease("job")).level == .system)
+        #expect(never.agentLidGrants.grants.isEmpty)
+
+        // Allowed as before: kept.
+        let kept = try await agentLidAfterRelaunch()
+        kept.handler.restoreAgentLid()
+        #expect(try #require(kept.lease("job")).level == lidOnly)
+        #expect(kept.agentLidGrants.grants.keys.sorted() == ["job"])
+    }
+
     @Test func sessionLidOffDropsLidOnNextHook() async throws {
         // Off: the next prompt re-acquires at system level rather than merging lid back in.
         let off = RequestFixture()

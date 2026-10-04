@@ -225,7 +225,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             windowApprover: windowApprovals,
             agentLidRecord: AgentLidRecord(read: { Defaults[.agentLidGrants] }, write: { Defaults[.agentLidGrants] = $0 })
         )
-        // After `engine.restore()`, so the record keeps only the leases that came back.
+        // After `engine.restore()`, so the record keeps only the leases that came back; it also applies the settings
+        // once, for a change made while the app wasn't running.
         handler.restoreAgentLid()
         gate.set(handler)
         // Never, or session lid switched off, takes lid mode back from live agent leases right away.

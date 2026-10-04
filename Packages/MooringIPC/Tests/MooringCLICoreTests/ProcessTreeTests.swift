@@ -75,3 +75,14 @@ import Testing
     #expect(await harness.run(["anchor", "--pid", "80"]) == 0)
     #expect(harness.capture.stdout == "Anchored anchor-80 · while Claude Code (80) runs\n")
 }
+
+@Test func autoWatchFindsTitledNpmClaude() {
+    // A titled npm Claude Code: node, with argv overwritten by its process title.
+    let table = FakeProcessTable(
+        [proc(100, 90, "zsh"), proc(90, 1, "node")], arguments: [90: ["claude", "", ""]]
+    )
+    let entry = ProcessTree.autoWatch(from: 100, in: table)
+    #expect(entry?.pid == 90)
+    #expect(entry?.name == "claude")
+    #expect(entry.map { ProcessTree.agentName(for: $0, in: table) } == "Claude Code")
+}

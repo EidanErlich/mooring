@@ -138,6 +138,28 @@ struct RequestHandlerLidChangeTests {
 
     // MARK: - the lease changing during an ask
 
+    /// The ask names the watched process by the program it runs, so npm Claude Code isn't "node".
+    @Test func approvalBodyNamesTheProgramOfAWatchedNodeClaude() async throws {
+        var table = FakeProcessTable([(200, "sh"), (100, "claude")])
+        table.entries[4242] = ProcessEntry(pid: 4242, parent: 100, name: "node")
+        table.commandLines[4242] = ["claude", "", ""]
+        table.entries[4343] = ProcessEntry(pid: 4343, parent: 100, name: "node")
+        table.commandLines[4343] = ["node", "/usr/local/bin/vite"]
+        let fixture = RequestFixture(table: table, callerPID: 200)
+        fixture.knobs.settings.agentLidApproval = .alwaysAsk
+        fixture.approver.holds = true
+
+        let titled = Task { await fixture.acquire(.lease, id: "job", level: "lid", ttl: 600, watchPid: 4242, reason: "build") }
+        await fixture.approver.waitForCalls(1)
+        let other = Task { await fixture.acquire(.lease, id: "dev", level: "lid", ttl: 600, watchPid: 4343, reason: "serve") }
+        await fixture.approver.waitForCalls(2)
+
+        #expect(fixture.approver.calls.map(\.body) == ["build · while claude runs", "serve · while node runs"])
+        fixture.approver.resolve("job", with: .deny)
+        fixture.approver.resolve("dev", with: .deny)
+        _ = await (titled.value, other.value)
+    }
+
     @Test func allowAfterTheRequestChangedDoesNotUpgrade() async throws {
         let fixture = RequestFixture.agent()
         fixture.knobs.settings.agentLidApproval = .alwaysAsk
