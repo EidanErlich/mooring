@@ -73,7 +73,6 @@ final class AdvancedConfigurationModel: ObservableObject {
 }
 
 struct AdvancedConfigurationView: View {
-    @EnvironmentObject private var windowModel: SettingsWindowManager
     @Environment(\.luminareAnimation) var luminareAnimation
     @Environment(\.openURL) private var openURL
 
@@ -154,21 +153,8 @@ struct AdvancedConfigurationView: View {
 
     private var radialMenuSection: some View {
         LuminareSection(String(localized: "Radial Menu", comment: "Section header shown in settings")) {
-            LuminareToggle(isOn: $enableRadialMenuCustomization) {
-                HStack {
-                    Text("Allow radial menu customization")
-
-                    if enableRadialMenuCustomization {
-                        Button {
-                            windowModel.currentTab = .radialMenu
-                        } label: {
-                            Image(systemName: "arrow.up.right.square.fill")
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
+            // Mooring: no jump button to Loop's own Radial Menu tab; Mooring's sidebar has the page.
+            LuminareToggle("Allow radial menu customization", isOn: $enableRadialMenuCustomization)
 
             if enableRadialMenuCustomization {
                 Button(role: .destructive) {

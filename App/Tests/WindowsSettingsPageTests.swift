@@ -32,28 +32,31 @@ extension WindowKitGlobalStateTests {
     struct WindowsSettingsPageTests {
         private let windowsPages = SettingsPage.allCases.filter { $0.windowSettingsPage != nil }
 
+        /// Off means off: no page asks for Loop's page while Windows isn't on. The singleton count is a second check.
         @Test func offPagesBuildNoWindowKit() {
             let before = WindowKit.instantiatedSingletons
+            let builder = CountingBuilder()
             for state in [WindowsController.State.off, .waitingForTrust, .needsAccessibility] {
                 let windows = WindowsController.fake(state)
                 for page in windowsPages {
-                    let size = layOut(WindowsSettingsPage(page: page, windows: windows))
+                    let size = layOut(WindowsSettingsPage(page: page, windows: windows, loopPage: builder.build))
                     #expect(size.width > 0 && size.height > 0, "\(page) while \(state)")
                 }
             }
+            #expect(builder.built.isEmpty)
             #expect(WindowKit.instantiatedSingletons == before)
         }
 
         /// Loop's Luminare pages lay out in Mooring's detail area. Building them creates Loop's singletons.
         @Test func onPagesLayOutLoopsPages() {
-            let before = WindowKit.instantiatedSingletons
+            let builder = CountingBuilder()
             let windows = WindowsController.fake(.on)
             for page in windowsPages {
-                let size = layOut(WindowsSettingsPage(page: page, windows: windows))
+                let size = layOut(WindowsSettingsPage(page: page, windows: windows, loopPage: builder.build))
                 #expect(size.width > 0 && size.height > 0, "\(page)")
             }
-            // Laying out evaluated the bodies, so the off test above would have seen a Loop page built.
-            #expect(WindowKit.instantiatedSingletons > before)
+            #expect(Set(builder.built) == Set(WindowSettingsPage.allCases))
+            #expect(WindowKit.instantiatedSingletons > 0)
 
             for page in WindowSettingsPage.allCases {
                 let size = layOut(WindowSettingsPage.view(page))
@@ -72,5 +75,16 @@ extension WindowKitGlobalStateTests {
             defer { window.close() }
             return host.fittingSize
         }
+    }
+}
+
+/// Builds Loop's real page, recording which pages were asked for.
+@MainActor
+private final class CountingBuilder {
+    private(set) var built: [WindowSettingsPage] = []
+
+    func build(_ page: WindowSettingsPage) -> AnyView {
+        built.append(page)
+        return WindowSettingsPage.view(page)
     }
 }

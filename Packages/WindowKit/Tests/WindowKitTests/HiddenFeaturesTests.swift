@@ -33,6 +33,22 @@ extension WindowKitGlobalStateTests {
             }
         }
 
+        /// Loop's app-level toggles (read by nothing in Mooring) and the jump to Loop's own Radial Menu
+        /// tab are gone from the pages Mooring hosts. Checked in the sources, where they would be bound.
+        @Test func behaviorHidesLoopAppControls() throws {
+            let settingsWindow = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+                .appending(path: "Sources/WindowKit/Loop/Settings Window")
+            let files = try #require(FileManager.default.enumerator(at: settingsWindow, includingPropertiesForKeys: nil))
+                .compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+            #expect(files.count > 10)
+            let sources = try files.map { try String(contentsOf: $0, encoding: .utf8) }.joined(separator: "\n")
+            for hidden in ["$launchAtLogin", "$startHidden", "$hideMenuBarIcon", "\"Launch at login\"", "\"Start hidden\"",
+                           "\"Hide menu bar icon\"", "windowModel.currentTab"] {
+                #expect(!sources.contains(hidden), "\(hidden)")
+            }
+        }
+
         @Test func focusActionsFindNoTarget() async {
             for direction in WindowDirection.focus {
                 let target = await WindowActionEngine.shared.resolveFocusTarget(WindowAction(direction), currentWindow: nil)

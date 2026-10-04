@@ -13,9 +13,6 @@ import SwiftUI
 struct BehaviorConfigurationView: View {
     @Environment(\.luminareAnimation) private var luminareAnimation
 
-    @Default(.launchAtLogin) var launchAtLogin
-    @Default(.startHidden) var startHidden
-    @Default(.hideMenuBarIcon) var hideMenuBarIcon
     @Default(.animationConfiguration) var animationConfiguration
     @Default(.windowSnapping) var windowSnapping
     @Default(.suppressMissionControlOnTopDrag) var suppressMissionControlOnTopDrag
@@ -55,12 +52,7 @@ struct BehaviorConfigurationView: View {
 
     private var generalSection: some View {
         LuminareSection(String(localized: "General", comment: "Section header shown in settings")) {
-            LuminareToggle("Launch at login", isOn: $launchAtLogin)
-
-            LuminareToggle("Start hidden", isOn: $startHidden)
-
-            LuminareToggle("Hide menu bar icon", isOn: $hideMenuBarIcon)
-
+            // Mooring: Loop's launch-at-login, start-hidden and menu bar icon toggles are gone; nothing reads them here.
             LuminareSliderPicker(
                 "Animation speed",
                 AnimationConfiguration.allCases.reversed(),

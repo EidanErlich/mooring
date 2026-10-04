@@ -39,6 +39,8 @@ extension SettingsPage {
 struct WindowsSettingsPage: View {
     let page: SettingsPage
     let windows: WindowsController
+    /// Builds Loop's page; called only while Windows is on. Tests inject a counting builder.
+    var loopPage: @MainActor (WindowSettingsPage) -> AnyView = WindowSettingsPage.view
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,8 +51,8 @@ struct WindowsSettingsPage: View {
             switch page.windowsContent(for: windows.state) {
             case .offBanner:
                 WindowsPageBanner(turnOn: windows.turnOn)
-            case .loopPage(let loopPage):
-                WindowSettingsPage.view(loopPage)
+            case .loopPage(let page):
+                loopPage(page)
             case nil:
                 EmptyView()
             }
