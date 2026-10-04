@@ -130,9 +130,19 @@ cask "mooring" do
   desc "Keep your Mac awake, arrange windows, and keep clipboard history"
   homepage "$REPO_URL"
 
+  auto_updates true
   depends_on macos: ">= :sonoma"
 
   app "Mooring.app"
+
+  uninstall quit: "dev.mooring.app"
+
+  zap trash: [
+    "~/Library/Application Support/Mooring",
+    "~/Library/Preferences/dev.mooring.app.plist",
+    "~/Library/Preferences/dev.mooring.windows.plist",
+    "~/Library/Preferences/dev.mooring.clipboard.plist",
+  ]
 
   caveats <<~EOS
     Mooring is not notarized. If macOS blocks it on first open, go to

@@ -112,6 +112,15 @@ check "cask has the version and URL" "$(grep -q '^  version "9.9.9"$' "$cask" &&
 check "cask has the app and macOS floor" "$(grep -q '^  app "Mooring.app"$' "$cask" && grep -q 'depends_on macos: ">= :sonoma"' "$cask"; echo $?)"
 check "cask mentions Open Anyway and the xattr fix" "$(grep -q 'Open Anyway' "$cask" && grep -q 'xattr -dr com.apple.quarantine /Applications/Mooring.app' "$cask"; echo $?)"
 check "cask no longer suggests right-click Open" "$(! grep -qi 'right-click' "$cask"; echo $?)"
+check "cask says Sparkle updates the app" "$(grep -q '^  auto_updates true$' "$cask"; echo $?)"
+check "cask quits Mooring on uninstall" "$(grep -q '^  uninstall quit: "dev.mooring.app"$' "$cask"; echo $?)"
+check "cask zaps Mooring's folder and preferences" "$(grep -q '^  zap trash: \[$' "$cask" \
+    && grep -q '^    "~/Library/Application Support/Mooring",$' "$cask" \
+    && grep -q '^    "~/Library/Preferences/dev.mooring.app.plist",$' "$cask" \
+    && grep -q '^    "~/Library/Preferences/dev.mooring.windows.plist",$' "$cask" \
+    && grep -q '^    "~/Library/Preferences/dev.mooring.clipboard.plist",$' "$cask" \
+    && [ "$(grep -c '^    "~/Library/' "$cask")" -eq 4 ]; echo $?)"
+check "CI checks the cask parses" "$(grep -q 'ruby -c dist/homebrew/mooring.rb' "$ROOT/.github/workflows/ci.yml"; echo $?)"
 if command -v ruby >/dev/null 2>&1; then
     check "cask is valid Ruby" "$(ruby -c "$cask" >/dev/null 2>&1; echo $?)"
 fi
