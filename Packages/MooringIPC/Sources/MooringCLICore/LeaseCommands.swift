@@ -22,13 +22,13 @@ struct LeaseAcquire: ParsableCommand, CLICommand {
     @Option(name: .customLong("watch-pid"), help: "Hold while this process runs: a process id, or auto for the calling agent.")
     var watchPid: String?
 
-    @Option(help: "system or display.")
+    @Option(help: "system, display, lid or display,lid. Defaults to system.")
     var level: String?
 
     @Option(help: "Why, shown in the menu.")
     var reason: String?
 
-    @Option(help: "Name to show as the owner. Defaults to the watched process.")
+    @Option(help: "Name to show as the owner. Defaults to the watched agent with --watch-pid auto, else Terminal.")
     var agent: String?
 
     @OptionGroup var output: OutputOptions

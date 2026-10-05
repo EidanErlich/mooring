@@ -314,6 +314,21 @@ private func usageObject(_ message: String) -> String {
     #expect(text[forAgents.upperBound...].contains("mooring win"))
 }
 
+@Test func leaseAndAnchorHelpListEveryLevel() async {
+    /// The command's help with its wrapping undone.
+    func help(_ arguments: [String]) async -> String {
+        let harness = Harness()
+        #expect(await harness.run(arguments + ["--help"]) == 0)
+        return harness.capture.stdout.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+    let lease = await help(["lease", "acquire"])
+    #expect(lease.contains("--level <level> system, display, lid or display,lid. Defaults to system."))
+    #expect(lease.contains("Defaults to the watched agent with --watch-pid auto, else Terminal."))
+    #expect(!lease.contains("Defaults to the watched process"))
+    let anchor = await help(["anchor"])
+    #expect(anchor.contains("--level <level> system, display, lid or display,lid. Defaults to system."))
+}
+
 @Test func bareMooringPrintsHelp() async {
     let harness = Harness()
     #expect(await harness.run([]) == 0)
