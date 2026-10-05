@@ -17,10 +17,18 @@ final class Arranger {
         let frame: CGRect
     }
 
+    /// One arrangement's moved windows; `kept` once an undo has kept it because none of them could be found.
+    private struct UndoStep {
+        let entries: [UndoEntry]
+        var kept = false
+    }
+
     /// Final frames within this many points of the target, in width and height, count as `ok`.
     static let sizeTolerance: CGFloat = 2
     /// Why undo kept an arrangement whose windows it couldn't find.
     static let outOfReach = "couldn't find the window — it may be on another Space; switch to it and try again"
+    /// Why undo removed a kept arrangement whose windows it still couldn't find.
+    static let givenUp = "still couldn't find the window; removed from undo"
 
     let system: any WindowSystem
     let layouts: LayoutStore
@@ -31,7 +39,7 @@ final class Arranger {
     let appName: @MainActor (String) -> String
     private let launchTimeout: Duration
     private let pollInterval: Duration
-    private var undoStack: [[UndoEntry]] = []
+    private var undoStack: [UndoStep] = []
 
     /// `locateApp` turns a query for an app that isn't running into a bundle id to open; `appName` turns a bundle id
     /// into the app's name, or gives it back; `launchTimeout` is how long an opened app gets to show a window.
@@ -92,7 +100,7 @@ final class Arranger {
             }
         }
         if !moved.isEmpty {
-            undoStack.append(moved)
+            undoStack.append(UndoStep(entries: moved))
             undoStack.removeFirst(max(undoStack.count - maxUndo, 0))
         }
         return WinArrangeResult(results: results, undoAvailable: !undoStack.isEmpty)
@@ -105,19 +113,27 @@ final class Arranger {
 
     /// Moves each window of the latest arrangement back. A window that's gone is skipped and reported `not_found`.
     /// When none of its windows can be found but an app of theirs still runs (Accessibility lists no windows on
-    /// another Space), the arrangement stays to undo once they're back.
+    /// another Space), the arrangement stays to undo once they're back, but only once: a window closed in an app
+    /// that keeps running would otherwise block undo for good.
     func undo() async -> WinArrangeResult? {
-        guard let entries = undoStack.last else { return nil }
+        guard let step = undoStack.last else { return nil }
+        let entries = step.entries
         let apps = visibleApps()
         let running = Set(apps.map(\.pid))
         let windows = apps.flatMap(\.windows)
         let found = entries.map { entry in windows.first { $0.id == entry.windowID && $0.pid == entry.pid } }
         if found.allSatisfy({ $0 == nil }), entries.contains(where: { running.contains($0.pid) }) {
-            let results = entries.map { entry in
-                let reason = running.contains(entry.pid) ? Self.outOfReach : "the window is gone"
-                return WinPlacementResult(app: entry.app, status: .notFound, reason: reason)
+            if step.kept {
+                undoStack.removeLast()
+            } else {
+                undoStack[undoStack.count - 1].kept = true
             }
-            return WinArrangeResult(results: results, undoAvailable: true)
+            let missing = step.kept ? Self.givenUp : Self.outOfReach
+            let results = entries.map { entry in
+                WinPlacementResult(app: entry.app, status: .notFound,
+                                   reason: running.contains(entry.pid) ? missing : "the window is gone")
+            }
+            return WinArrangeResult(results: results, undoAvailable: !undoStack.isEmpty)
         }
         undoStack.removeLast()
         var results: [WinPlacementResult] = []
