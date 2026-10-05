@@ -101,6 +101,40 @@ enum Uninstaller {
         if let firstError { throw firstError }
     }
 
+    static let dragToTrashMessage = "macOS didn't let Mooring move itself. Finder shows it now: drag it to the Trash."
+
+    /// Moves `app` to the Trash. When Mooring trashes its own running bundle, macOS can move it and still report an
+    /// error, so the outcome is judged by whether the app has left its place. If it's really still there, Finder
+    /// shows it so it can be dragged to the Trash by hand.
+    static func moveToTrash(
+        _ app: URL, recycle: (URL) async throws -> Void, exists: (URL) -> Bool, reveal: (URL) -> Void
+    ) async throws {
+        do {
+            try await recycle(app)
+        } catch {
+            guard exists(app) else { return }
+            reveal(app)
+            throw UninstallStepError(errorDescription: dragToTrashMessage)
+        }
+    }
+
+    /// Quits once Uninstall is done. AppKit refuses to terminate while a sheet is attached ("App termination
+    /// blocked by modal sheet"), and the uninstall sheet is still up, so sheets are ended first. Everything has
+    /// been undone by now, so if something still blocks termination, the app exits after `fallback`.
+    static func quitAfterUninstall(
+        windows: [NSWindow], terminate: @escaping @MainActor () -> Void, exit: @escaping @MainActor () -> Void,
+        fallback: Duration = .seconds(5)
+    ) {
+        for window in windows {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+        }
+        Task { @MainActor in
+            terminate()
+            try? await Task.sleep(for: fallback)
+            exit()
+        }
+    }
+
     /// The failure summary shown before quitting. If lid sleep may still be off, it says how to fix that by hand.
     static func summary(_ failures: [UninstallFailure]) -> String {
         var text = failures.map { "• \($0.step.title): \($0.message)" }.joined(separator: "\n")
@@ -247,7 +281,13 @@ final class LiveUninstallSteps: UninstallPerforming {
         case .deleteClipboardHistory: try deleteClipboardHistory()
         case .removeSupportFiles: try Uninstaller.removeSupportFiles(in: FileLeaseStore.defaultDirectory)
         case .removeSettings: SettingsDomainsRemover.shared.remove()
-        case .moveAppToTrash: _ = try await NSWorkspace.shared.recycle([Bundle.main.bundleURL])
+        case .moveAppToTrash:
+            try await Uninstaller.moveToTrash(
+                Bundle.main.bundleURL,
+                recycle: { _ = try await NSWorkspace.shared.recycle([$0]) },
+                exists: { FileManager.default.fileExists(atPath: $0.path) },
+                reveal: { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
+            )
         }
     }
 
@@ -306,6 +346,13 @@ final class LiveUninstallSteps: UninstallPerforming {
     }
 
     func quit() {
-        NSApp.terminate(nil)
+        Uninstaller.quitAfterUninstall(
+            windows: NSApp.windows,
+            terminate: { NSApp.terminate(nil) },
+            exit: {
+                SettingsDomainsRemover.shared.removeAgainAtQuit()
+                Darwin.exit(0)
+            }
+        )
     }
 }
