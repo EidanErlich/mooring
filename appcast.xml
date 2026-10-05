@@ -6,13 +6,13 @@
     <description>Mooring updates</description>
     <language>en</language>
     <item>
-      <title>Version 0.1.0</title>
-      <pubDate>Mon, 05 Oct 2026 20:26:07 +0000</pubDate>
-      <sparkle:version>0.1.0</sparkle:version>
-      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <title>Version 0.1.1</title>
+      <pubDate>Mon, 05 Oct 2026 23:05:09 +0000</pubDate>
+      <sparkle:version>0.1.1</sparkle:version>
+      <sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/EidanErlich/mooring/releases/tag/v0.1.0</sparkle:releaseNotesLink>
-      <enclosure url="https://github.com/EidanErlich/mooring/releases/download/v0.1.0/Mooring-0.1.0.zip" sparkle:edSignature="HcdlrfzUp16rjKOtqX7n99oD2LPPnG1txuFmo4j0q+Yu8dyNJwWx6NULF8KWBzZcj4zgLCtbsjaQG2x/YKr+Cg==" length="12705147" type="application/octet-stream"/>
+      <sparkle:releaseNotesLink>https://github.com/EidanErlich/mooring/releases/tag/v0.1.1</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/EidanErlich/mooring/releases/download/v0.1.1/Mooring-0.1.1.zip" sparkle:edSignature="utvVSZReMIHZlQSDsn/ipGj3V/6UBSrTFq/om4tHVX4oRuz0cEPC/1/pcAe3kHQiAaShSMdGXJkJkUINsq6XCQ==" length="12724092" type="application/octet-stream"/>
     </item>
   </channel>
 </rss>
