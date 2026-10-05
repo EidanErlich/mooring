@@ -21,8 +21,10 @@ check() { # name, condition result (0 = pass)
 # A fixture app outside any repo: $1 is the directory, $2 the version.
 fixture_app() {
     local app="$1/Mooring.app"
-    mkdir -p "$app/Contents/MacOS"
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
     printf 'binary' > "$app/Contents/MacOS/Mooring"
+    printf 'license' > "$app/Contents/Resources/LICENSE"
+    printf '# Third-party notices\n' > "$app/Contents/Resources/THIRD_PARTY_NOTICES.md"
     local plist="$app/Contents/Info.plist"
     plutil -create xml1 "$plist"
     plutil -insert CFBundleShortVersionString -string "$2" "$plist"
@@ -99,6 +101,8 @@ check "zip round-trips to Mooring.app" "$([ -f "$unzipped/Mooring.app/Contents/I
 check "ditto keeps the extended attribute" "$([ "$(xattr -p com.example.test "$unzipped/Mooring.app/Contents/MacOS/Mooring" 2>/dev/null)" = 1 ]; echo $?)"
 check "zip has no ._ entries inside Mooring.app" "$(unzip -Z1 "$zip" | grep -v '^__MACOSX/' | grep -q '\(^\|/\)\._'; [ $? -ne 0 ]; echo $?)"
 check "zip still lists Mooring.app" "$(unzip -Z1 "$zip" | grep -q '^Mooring.app/Contents/MacOS/Mooring$'; echo $?)"
+check "zip has the license notices" "$(unzip -Z1 "$zip" | grep -q '^Mooring.app/Contents/Resources/THIRD_PARTY_NOTICES.md$' \
+    && unzip -Z1 "$zip" | grep -q '^Mooring.app/Contents/Resources/LICENSE$'; echo $?)"
 plain="$WORK/happy/plain unzip"
 mkdir -p "$plain"
 unzip -q "$zip" -d "$plain" 2>/dev/null
@@ -156,6 +160,17 @@ app="$(fixture_app "$WORK/tagged/built" 9.9.9)"
 run_release "$repo" --dry-run --check-git --app "$app"
 check "existing tag refused" "$([ "$CODE" -ne 0 ] && grep -q 'v9.9.9 already exists' "$WORK/tagged/out"; echo $?)"
 check "existing tag: nothing written" "$([ ! -e "$repo/dist" ]; echo $?)"
+
+# --- an app without its license notices is refused -------------------------------------------------
+for missing in THIRD_PARTY_NOTICES.md LICENSE; do
+    repo="$(fresh_repo "no-$missing")"; shims "no-$missing" >/dev/null
+    app="$(fixture_app "$WORK/no-$missing/built" 9.9.9)"
+    rm "$app/Contents/Resources/$missing"
+    run_release "$repo" --dry-run --app "$app"
+    check "app without $missing refused" "$([ "$CODE" -ne 0 ] && grep -q "has no Contents/Resources/$missing" "$WORK/no-$missing/out" && [ ! -e "$repo/dist" ]; echo $?)"
+done
+check "CI checks the zip has the notices" "$(grep -q 'for f in LICENSE THIRD_PARTY_NOTICES.md' "$ROOT/.github/workflows/ci.yml" \
+    && grep -q 'Mooring.app/Contents/Resources/\$f' "$ROOT/.github/workflows/ci.yml"; echo $?)"
 
 # --- --dry-run --publish is refused -----------------------------------------------------------------
 repo="$(fresh_repo publish)"; shims publish >/dev/null

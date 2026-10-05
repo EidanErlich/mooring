@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds a Mooring release into dist/: the zip, its Sparkle signature, the appcast and the Homebrew cask.
-# It never publishes anything: --publish only PRINTS the tag, gh and git commands for the owner to run.
+# It never publishes anything: --publish only PRINTS the tag, gh and git commands to run by hand.
 #
 #   scripts/release.sh                       checks, tests, builds Release, signs (Sparkle key in your Keychain)
 #   scripts/release.sh --dry-run --app APP   uses an already-built app; no tests, build or signing
@@ -66,6 +66,15 @@ check_update_key() { # plist
         *[![:space:]]*) ;;
         *) die "the built app has no SUPublicEDKey, so it could never update itself. Set MOORING_SPARKLE_PUBLIC_KEY in Config/Local.xcconfig — see docs/RELEASING.md" ;;
     esac
+}
+
+# Every build ships its licenses: LICENSE and THIRD_PARTY_NOTICES.md in Contents/Resources (the "Bundle license
+# notices" build phase). Checked on dry runs too, so CI's dry run proves the real app has them.
+check_notices() { # app
+    local file
+    for file in LICENSE THIRD_PARTY_NOTICES.md; do
+        [ -s "$1/Contents/Resources/$file" ] || die "$1 has no Contents/Resources/$file (the \"Bundle license notices\" build phase writes it)"
+    done
 }
 
 # A real release is signed with the maintainer's own certificate: not ad-hoc, with an Authority and a team.
@@ -260,6 +269,8 @@ main() {
     if [ "$dry_run" -eq 0 ] && [ -n "$source_version" ] && [ "$version" != "$source_version" ]; then
         die "the built app says $version but Config says $source_version"
     fi
+
+    check_notices "$app"
 
     if [ "$dry_run" -eq 0 ]; then
         echo "== update key and signature"
