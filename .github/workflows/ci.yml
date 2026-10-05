@@ -5,7 +5,12 @@ on:
     branches: [main]
   pull_request:
 
-# Private repo: macOS minutes are metered, so drop superseded runs.
+# The workflow needs no secrets and only reads the repo. It runs on pull_request (never
+# pull_request_target), so a fork's PR gets a read-only token and no secrets.
+permissions:
+  contents: read
+
+# Drop superseded runs.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -15,6 +20,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Bootstrap
         run: make bootstrap
       - name: Build (unsigned)

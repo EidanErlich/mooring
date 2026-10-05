@@ -21,3 +21,12 @@ dist/
 
 # Superpowers plan workspaces (ledgers, briefs)
 .superpowers/
+*.xcuserdatad
+
+# Local Claude Code settings
+.claude/
+
+# Signing material never belongs in the repo
+*.p12
+*.cer
+*.mobileprovision
