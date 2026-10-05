@@ -193,6 +193,7 @@ Each changed file starts with `// Adapted from Loop@0ac6d83: <original path>`. T
 - `Loop/Settings Window/SettingsWindowManager.swift`: the default `currentTab` is `.accentColor`, since `.icon` is gone.
 - `Loop/Settings Window/Settings/Gestures/GestureConfigurationView.swift`, `Loop/Settings Window/Settings/Gestures/GestureItemView.swift`, `Loop/Window Management/Window Action/GestureBinding.swift`: `Image(.loop)` → `Image("loop", bundle: .module)`. SwiftPM generates no asset symbols, so `ImageResource.loop` does not exist in the package.
 - `LoopTests/*.swift` (all six): `@testable import Loop` → `@testable import WindowKit`.
+- `Loop/Localizable.xcstrings` (at `Resources/Localizable.xcstrings`): removed the `No updates available message 20` entry, one of Loop's joke lines for its updater's "no updates" alert. The updater isn't vendored, so nothing reads any of the `No updates available message` keys; the rest are left as they are. A string catalog can't carry an `Adapted from` line, so this list is the only record. A re-fetch of the catalog brings the entry back; remove it again.
 - `Loop/Extensions/View+Extensions.swift`: not taken (see Left out).
 
 ### Isolation and gating

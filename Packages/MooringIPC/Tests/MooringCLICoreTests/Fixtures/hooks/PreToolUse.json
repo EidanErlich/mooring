@@ -3,7 +3,6 @@
   "hook_event_name": "PreToolUse",
   "permission_mode": "default",
   "prompt_id": "5f05ea2a-8fdd-4fc7-ba07-9266dab9d1eb",
-  "scratchpad_dir": "/Users/test/scratch",
   "session_id": "00000000-0000-0000-0000-000000000001",
   "tool_input": {
     "command": "ls",
