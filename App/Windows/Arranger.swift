@@ -19,6 +19,8 @@ final class Arranger {
 
     /// Final frames within this many points of the target, in width and height, count as `ok`.
     static let sizeTolerance: CGFloat = 2
+    /// Why undo kept an arrangement whose windows it couldn't find.
+    static let outOfReach = "couldn't find the window — it may be on another Space; switch to it and try again"
 
     let system: any WindowSystem
     let layouts: LayoutStore
@@ -102,12 +104,25 @@ final class Arranger {
     }
 
     /// Moves each window of the latest arrangement back. A window that's gone is skipped and reported `not_found`.
+    /// When none of its windows can be found but an app of theirs still runs (Accessibility lists no windows on
+    /// another Space), the arrangement stays to undo once they're back.
     func undo() async -> WinArrangeResult? {
-        guard let entries = undoStack.popLast() else { return nil }
-        let windows = visibleApps().flatMap(\.windows)
+        guard let entries = undoStack.last else { return nil }
+        let apps = visibleApps()
+        let running = Set(apps.map(\.pid))
+        let windows = apps.flatMap(\.windows)
+        let found = entries.map { entry in windows.first { $0.id == entry.windowID && $0.pid == entry.pid } }
+        if found.allSatisfy({ $0 == nil }), entries.contains(where: { running.contains($0.pid) }) {
+            let results = entries.map { entry in
+                let reason = running.contains(entry.pid) ? Self.outOfReach : "the window is gone"
+                return WinPlacementResult(app: entry.app, status: .notFound, reason: reason)
+            }
+            return WinArrangeResult(results: results, undoAvailable: true)
+        }
+        undoStack.removeLast()
         var results: [WinPlacementResult] = []
-        for entry in entries {
-            guard let window = windows.first(where: { $0.id == entry.windowID && $0.pid == entry.pid }) else {
+        for (entry, window) in zip(entries, found) {
+            guard let window else {
                 results.append(WinPlacementResult(app: entry.app, status: .notFound, reason: "the window is gone"))
                 continue
             }

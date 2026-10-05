@@ -28,6 +28,41 @@ extension ArrangerTests {
         #expect(await arranger.undo() == nil)
     }
 
+    @Test func undoKeepsTheEntryWhenWindowsAreOutOfReach() async {
+        _ = await arrange(WinPlacement(app: "chrome", region: "right-half", screen: "main"),
+                          WinPlacement(app: "slack", region: "left-half", screen: "main"))
+        // On another Space, Accessibility lists the apps with no windows.
+        let shown = fake.appList
+        for index in fake.appList.indices where [WindowFixture.chrome, WindowFixture.slack].contains(fake.appList[index].pid) {
+            fake.appList[index].windows = []
+        }
+        let before = fake.calls.count
+        let reason = "couldn't find the window — it may be on another Space; switch to it and try again"
+        let kept = await arranger.undo()
+        #expect(kept == WinArrangeResult(results: [
+            WinPlacementResult(app: "chrome", status: .notFound, reason: reason),
+            WinPlacementResult(app: "slack", status: .notFound, reason: reason)
+        ], undoAvailable: true))
+        #expect(fake.calls.count == before)
+
+        fake.appList = shown
+        let undone = await arranger.undo()
+        #expect(undone?.results.map(\.status) == [.ok, .ok])
+        #expect(undone?.undoAvailable == false)
+        #expect(frame(WindowFixture.chromeInbox) == CGRect(x: 100, y: 100, width: 800, height: 600))
+        #expect(frame(WindowFixture.slackMain) == CGRect(x: -1800, y: -100, width: 1000, height: 700))
+    }
+
+    @Test func undoDropsTheEntryWhenTheAppQuit() async {
+        _ = await arrange(WinPlacement(app: "slack", region: "left-half", screen: "main"))
+        fake.appList.removeAll { $0.pid == WindowFixture.slack }
+        let undone = await arranger.undo()
+        #expect(undone == WinArrangeResult(results: [
+            WinPlacementResult(app: "slack", status: .notFound, reason: "the window is gone")
+        ], undoAvailable: false))
+        #expect(await arranger.undo() == nil)
+    }
+
     @Test func undoKeepsTen() async {
         func slackFrame(_ step: Int) -> CGRect {
             CGRect(x: Double(step) * 72, y: 25, width: 720, height: 437.5)
