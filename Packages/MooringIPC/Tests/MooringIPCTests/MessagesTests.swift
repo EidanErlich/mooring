@@ -102,6 +102,24 @@ private func sampleLease(expiresAt: Date? = Date(timeIntervalSince1970: 1_800_00
     #expect(try WireCoding.decodeResponse(line, op: .acquire) == response)
 }
 
+@Test func releaseResultExpiryIsOptionalOnTheWire() throws {
+    // An app from before `expiresAt` replies with `released` alone.
+    let older = #"{"v":1,"id":"r","ok":true,"result":{"released":true}}"#
+    let decoded = try WireCoding.decodeResponse(Data(older.utf8), op: .release)
+    #expect(decoded.result == .release(ReleaseResult(released: true, expiresAt: nil)))
+
+    // A release without --after leaves the key out, so older CLIs see the reply they always did.
+    let plain = try WireCoding.encodeLine(Response.success(id: "r", .release(ReleaseResult(released: true))))
+    let plainResult = try #require(try object(plain)["result"] as? [String: Any])
+    #expect(plainResult.keys.sorted() == ["released"])
+
+    let after = Response.success(id: "r", .release(ReleaseResult(released: true, expiresAt: Date(timeIntervalSince1970: 1_800_000_060))))
+    let line = try WireCoding.encodeLine(after)
+    let afterResult = try #require(try object(line)["result"] as? [String: Any])
+    #expect(afterResult.keys.sorted() == ["expiresAt", "released"])
+    #expect(try WireCoding.decodeResponse(line, op: .release) == after)
+}
+
 @Test func resultsRoundTripForEveryOp() throws {
     let responses: [(Op, Response)] = [
         (.renew, .success(id: "1", .renew(sampleLease()))),

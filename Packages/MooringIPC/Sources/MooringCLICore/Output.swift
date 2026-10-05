@@ -93,18 +93,20 @@ enum CLIText {
         case .off: return result.released ? "Off" : "Already off"
         case .lease:
             guard result.released else { return "\(name) wasn't active" }
-            guard let after = request.after else { return "Released \(name)" }
-            return releaseAfter(name, after: after, expiresAt: result.expiresAt, now: now)
+            guard let after = request.after, let expiresAt = result.expiresAt else { return "Released \(name)" }
+            return releaseAfter(name, after: after, expiresAt: expiresAt, now: now)
         }
     }
 
-    /// "job ends in 2m", or "job already ends in 1m, sooner than 2m" when `--after` left an earlier expiry alone.
-    /// The two are compared as printed, so the moment the reply took to arrive doesn't count as sooner.
-    private static func releaseAfter(_ name: String, after: TimeInterval, expiresAt: Date?, now: Date) -> String {
-        let requested = remaining(after)
-        guard let expiresAt else { return "\(name) ends in \(requested)" }
+    /// How much earlier than `now + after` a lease must end to count as already ending sooner: more than the reply's trip back.
+    private static let replyLatency: TimeInterval = 2
+
+    /// "job ends in 2m", or "job already ends sooner, in 1m" when `--after` left an earlier expiry alone. An app from before
+    /// `ReleaseResult.expiresAt` doesn't say when the lease ends, so the caller prints "Released job" for it instead.
+    private static func releaseAfter(_ name: String, after: TimeInterval, expiresAt: Date, now: Date) -> String {
         let left = remaining(expiresAt.timeIntervalSince(now))
-        return left == requested ? "\(name) ends in \(left)" : "\(name) already ends in \(left), sooner than \(requested)"
+        guard expiresAt < now.addingTimeInterval(after - replyLatency) else { return "\(name) ends in \(left)" }
+        return "\(name) already ends sooner, in \(left)"
     }
 }
 

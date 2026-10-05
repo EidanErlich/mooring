@@ -37,11 +37,12 @@ public enum MooringCLI {
     }
 
     /// The command a usage error belongs to, such as `mooring lease acquire`: the subcommand names `arguments` starts with.
+    /// `_commandName` is the name ArgumentParser matches, derived from the type (`Status` → `status`) when none is set.
     private static func commandPath(_ arguments: [String]) -> String {
         var command: any ParsableCommand.Type = MooringCommand.self
         var path = ["mooring"]
         for argument in arguments {
-            guard let next = command.configuration.subcommands.first(where: { $0.configuration.commandName == argument }) else { break }
+            guard let next = command.configuration.subcommands.first(where: { $0._commandName == argument }) else { break }
             command = next
             path.append(argument)
         }

@@ -213,10 +213,13 @@ private let threeLeases = [
     }
     #expect(await output(after: "1m", expiresAt: fixedNow.addingTimeInterval(60)) == "job ends in 1m\n")
     #expect(await output(after: "1h30m", expiresAt: fixedNow.addingTimeInterval(5400)) == "job ends in 1h 30m\n")
-    // --after only shortens, so a lease that already ends sooner keeps its expiry.
-    #expect(await output(after: "10m", expiresAt: fixedNow.addingTimeInterval(120)) == "job already ends in 2m, sooner than 10m\n")
-    // An app that doesn't report the expiry still applied --after.
-    #expect(await output(after: "2m", expiresAt: nil) == "job ends in 2m\n")
+    // A second lost to the reply's trip back isn't "sooner".
+    #expect(await output(after: "2m", expiresAt: fixedNow.addingTimeInterval(119)) == "job ends in 2m\n")
+    // --after only shortens, so a lease that already ends sooner keeps its expiry, rounded up as acquire rounds it.
+    #expect(await output(after: "10m", expiresAt: fixedNow.addingTimeInterval(120)) == "job already ends sooner, in 2m\n")
+    #expect(await output(after: "2m", expiresAt: fixedNow.addingTimeInterval(90)) == "job already ends sooner, in 2m\n")
+    // An older app doesn't report the expiry, so the CLI can't say when the lease ends.
+    #expect(await output(after: "2m", expiresAt: nil) == "Released job\n")
 
     let gone = Harness(client: RecordingClient(reply: .success(.success(id: "r", .release(ReleaseResult(released: false))))))
     _ = await gone.run(["lease", "release", "job", "--after", "2m"])

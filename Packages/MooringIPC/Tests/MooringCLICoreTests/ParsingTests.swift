@@ -299,6 +299,11 @@ private func usageObject(_ message: String) -> String {
 
     """)
     #expect(await stderr(["win", "layout", "apply", "--json-ish"]).hasSuffix("Run 'mooring win layout apply --help' for usage.\n"))
+    // Commands whose names ArgumentParser derives from the type name, and a nested one with an argument.
+    #expect(await stderr(["status", "--bogus"]).hasSuffix("\nRun 'mooring status --help' for usage.\n"))
+    #expect(await stderr(["off", "--bogus"]).hasSuffix("\nRun 'mooring off --help' for usage.\n"))
+    #expect(await stderr(["anchor", "--pid", "abc"]).hasSuffix("\nRun 'mooring anchor --help' for usage.\n"))
+    #expect(await stderr(["win", "layout", "save", "a", "--bogus"]).hasSuffix("\nRun 'mooring win layout save --help' for usage.\n"))
 }
 
 @Test func helpAndVersionUnchanged() async {
