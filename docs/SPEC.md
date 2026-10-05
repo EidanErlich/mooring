@@ -1,8 +1,8 @@
-# Mooring — Mac Awake Utility Spec
+# Mooring design spec (as built, 0.1.0)
 
 Sep 29, 2026 · Eidan Erlich
 
-> **For coding agents:** this file is the complete spec for Mooring. Read all of it before starting. Build only the stage you are assigned (see "Build brief for agents" → Stages) and stop at that stage's owner checkpoint. Where sections disagree, "Engineering decisions (authoritative)" wins, then "UX: one icon, one dropdown", then earlier sections. Upstream repos are pinned in "Vendoring".
+> This is the design record for Mooring as built in 0.1.0. Where sections disagree, "Engineering decisions (authoritative)" wins, then "UX: one icon, one dropdown", then earlier sections. Upstream repos are pinned in "Vendoring", and the per-feature design notes are in `docs/design/`.
 
 ## Overview
 
@@ -106,7 +106,7 @@ Settings → General can swap left and right click for people who want the dropd
 
 **What On means** is set in Settings → Awake → "When I click the icon": level (system, screen on, or lid), duration (until turned off, or 30 min to 8 h), and "end after the Mac sleeps". Defaults: system level, until turned off.
 
-**Icon states** (redesigned 2026-10-01; full design in `docs/superpowers/specs/2026-10-01-menu-bar-icon-design.md`):
+**Icon states** (redesigned 2026-10-01; full design in `docs/design/2026-10-01-menu-bar-icon-design.md`):
 
 | State | Icon |
 | --- | --- |
@@ -171,9 +171,9 @@ Assertions are released by the kernel automatically when the process dies, so th
 
 Every request to stay awake, from the menu, a timer, the CLI or an agent, is a **lease**. The Mac stays awake while at least one lease is live. This replaces Chai's single on/off flag and Awayke's intent/override flags with one model.
 
-A lease has an id, an owner, a reason shown in the dropdown, a level, an optional expiry, an optional watched process, and an "ends when the lid opens" flag. The exact Swift types and lease ids are in Build brief → Engineering decisions → Core types.
+A lease has an id, an owner, a reason shown in the dropdown, a level, an optional expiry, an optional watched process, and an "ends when the lid opens" flag. The exact Swift types and lease ids are in Engineering decisions → Core types.
 
-**Levels** are independent flags on top of idle-system-sleep prevention (exact types in Build brief → Engineering decisions):
+**Levels** are independent flags on top of idle-system-sleep prevention (exact types in Engineering decisions):
 
 - `system`: prevent idle system sleep; screen may turn off. The default for agents.
 - `display`: also keep the screen on. Chai's behaviour.
@@ -224,7 +224,7 @@ It runs `/usr/bin/pmset` with a fixed argument array; no strings from the client
 
 **Caller validation.** Awayke embeds an `SMAuthorizedClients` requirement in the helper's Info.plist but its listener accepts every connection. Mooring enforces it:
 
-- `listener.setConnectionCodeSigningRequirement(req)` (macOS 13+), where `req` is `identifier "dev.mooring.app" and certificate leaf = H"<SHA-1 of the app's signing certificate>"`. The system evaluates it against the connecting process's audit token and drops any other caller before the helper's code runs (observed 2026-09-30: "Dropping check-in message due to code signing requirement", status -67050). A build script writes the requirement into the helper's embedded `SMAuthorizedClients` (Build brief → Engineering decisions), and the helper reads it back from there at launch. Only the signed Mooring app can connect; the CLI and MCP server never talk to the helper directly.
+- `listener.setConnectionCodeSigningRequirement(req)` (macOS 13+), where `req` is `identifier "dev.mooring.app" and certificate leaf = H"<SHA-1 of the app's signing certificate>"`. The system evaluates it against the connecting process's audit token and drops any other caller before the helper's code runs (observed 2026-09-30: "Dropping check-in message due to code signing requirement", status -67050). A build script writes the requirement into the helper's embedded `SMAuthorizedClients` (Engineering decisions), and the helper reads it back from there at launch. Only the signed Mooring app can connect; the CLI and MCP server never talk to the helper directly.
 - If no valid requirement is embedded (unsigned or ad-hoc builds), the helper refuses every connection.
 - The app and the helper are built with the hardened runtime, so a process running as the user can't inject code into the genuine app (for example with `DYLD_INSERT_LIBRARIES` or a swapped library) and borrow its signature to pass the check. Debug builds also carry `get-task-allow` so a debugger can attach; only Release builds are held to this guarantee.
 - A second, manual audit-token check in `shouldAcceptNewConnection` was dropped (decided 2026-09-30): `NSXPCConnection` has no public audit-token API on macOS 26, and the listener requirement above already performs that check.
@@ -261,7 +261,7 @@ macOS still forces sleep at critical battery regardless of `disablesleep`; the g
 
 ### 1.9 Settings window
 
-Settings use the sidebar defined in the UX section, with the mapping in Build brief → Engineering decisions → UI details. Level 1 needs: launch at login (`SMAppService.mainApp`), click action and left/right swap, On defaults (level, duration, "End my session after the Mac sleeps"), helper status with approve and uninstall, lid-on-battery opt-in, battery thresholds, thermal cutoff, notification toggles, log level, reveal logs and export diagnostics. Values are stored with the `Defaults` package. Stage 1c leaves out "log level": `os.Logger` levels are controlled by the system, not the app. "Reveal logs" is an Open Console button.
+Settings use the sidebar defined in the UX section, with the mapping in Engineering decisions → UI details. Level 1 needs: launch at login (`SMAppService.mainApp`), click action and left/right swap, On defaults (level, duration, "End my session after the Mac sleeps"), helper status with approve and uninstall, lid-on-battery opt-in, battery thresholds, thermal cutoff, notification toggles, log level, reveal logs and export diagnostics. Values are stored with the `Defaults` package. Stage 1c leaves out "log level": `os.Logger` levels are controlled by the system, not the app. "Reveal logs" is an Open Console button.
 
 ### 1.10 Logging and diagnostics
 
@@ -586,7 +586,7 @@ Level 3 vendors Loop's window engine into a `WindowKit` package and runs it insi
 - Its own menu-bar icon, dock tile (`LoopDockTile`), About window and onboarding. Mooring's dropdown gains a Windows section instead.
 - Its updater (`LoopUpdaterHelper`, ZIPFoundation). Mooring has one updater for the whole app (Appendix).
 - Settings migration code for old Loop versions.
-- Loop's settings window, rebuilt as the Windows settings group inside Mooring's settings. Loop's `Luminare` UI package is kept for those pages, since 36 Loop files import it (owner decision, 2026-10-03: Keep Luminare). Loop's Launch at login, Start hidden and Hide menu bar icon controls are removed from the Behavior page, because Mooring has its own.
+- Loop's settings window, rebuilt as the Windows settings group inside Mooring's settings. Loop's `Luminare` UI package is kept for those pages, since 36 Loop files import it (decided 2026-10-03: keep Luminare). Loop's Launch at login, Start hidden and Hide menu bar icon controls are removed from the Behavior page, because Mooring has its own.
 
 Dependencies kept: `Defaults` (shared with Maccy and level 1), `Scribe` (logging; replaced with Mooring's `os.Logger` if the port is small).
 
@@ -686,19 +686,19 @@ A single **Shortcuts** page (General › Shortcuts) lists every global hotkey ac
 - **Private APIs.** Loop binds SkyLight symbols (`@_silgen_name`, runtime symbol loading) for stash, window tags and some moves. These can break on any macOS update. Mitigation: every private-API path sits behind a capability check, fails closed (the feature hides itself) and is logged; the release checklist tests each macOS beta.
 - **License.** Loop is GPL-3.0, which is why the monorepo is GPL-3.0-only (Overview).
 - **Contribution norms.** Loop's `AI_POLICY.md` requires disclosure and human verification for AI-assisted contributions *to Loop*. It doesn't restrict forking, but fixes sent back upstream must follow it.
-- **Keeping up with upstream.** Loop is actively developed (last commit 2026-09-29). It is vendored as a plain snapshot (Build brief); later upstream fixes are ported by hand and logged in `THIRD_PARTY/Loop/UPSTREAM.md`.
+- **Keeping up with upstream.** Loop is actively developed (last commit 2026-09-29). It is vendored as a plain snapshot (Development notes → Vendoring); later upstream fixes are ported by hand and logged in `THIRD_PARTY/Loop/UPSTREAM.md`.
 
 ### 3.7 Level 3 acceptance criteria
 
 - [ ] With Windows off, Mooring never asks for Accessibility and loads none of `WindowKit`.
 - [ ] Radial menu, preview, keyboard actions and cycles behave as in the upstream Loop commit that was vendored.
-- [ ] The Chrome / iTerm / Slack request lands in one `mooring win arrange` call, and `mooring win undo` restores the previous layout (built and covered by `Arranger`, handler, CLI and MCP tests over a fake `WindowSystem`; needs the owner check with Accessibility)
+- [ ] The Chrome / iTerm / Slack request lands in one `mooring win arrange` call, and `mooring win undo` restores the previous layout (built and covered by `Arranger`, handler, CLI and MCP tests over a fake `WindowSystem`; needs a manual check with Accessibility granted)
 - [ ] A failing private-API call hides the dependent feature instead of crashing.
 - [ ] The Shortcuts page detects a clash between the Windows trigger and the clipboard hotkey.
 
 ## Part 4: Clipboard history (from Maccy, never exposed to agents)
 
-**Status:** stage 4 (ClipKit, version 0.0.6) is built and reviewed. Maccy@c376789 runs inside Mooring, off by default, with the Clipboard submenu and popup, Settings → Clipboard, the Shortcuts row and the agent wall (4.3, as built). The final review's fixes are in: the App Intents wall covers the whole app (4.3), turning Clipboard off honours "Clear history on quit" and Settings can delete saved history (4.4), and the edges in 4.8. Two criteria in 4.7 are left for the owner check.
+**Status:** stage 4 (ClipKit, version 0.0.6) is built and reviewed. Maccy@c376789 runs inside Mooring, off by default, with the Clipboard submenu and popup, Settings → Clipboard, the Shortcuts row and the agent wall (4.3, as built). The final review's fixes are in: the App Intents wall covers the whole app (4.3), turning Clipboard off honours "Clear history on quit" and Settings can delete saved history (4.4), and the edges in 4.8. Two criteria in 4.7 need a manual check.
 
 Level 4 vendors Maccy as a `ClipKit` package, off by default, with the same storage and privacy behaviour as Maccy (no added encryption, decided 2026-09-29). Agents get no clipboard API: no CLI command, MCP tool, App Intent, URL route or AppleScript returns history.
 
@@ -780,12 +780,12 @@ Recording history needs no permission. Auto-paste needs **Accessibility**, the s
 ### 4.7 Level 4 acceptance criteria
 
 - [x] With Clipboard off, nothing is recorded and no store is created (`offMeansNoStoreNoPolling`; a released or stopped kit stops, and `popupView()` is empty while off).
-- [ ] A password copied from 1Password never appears in history. The ignore list, concealed types and the Secure Keyboard Entry check are covered by tests with an injected frontmost app; a copy from the real 1Password needs the owner check.
+- [ ] A password copied from 1Password never appears in history. The ignore list, concealed types and the Secure Keyboard Entry check are covered by tests with an injected frontmost app; a copy from the real 1Password needs a manual check.
 - [x] No CLI command, MCP tool, App Intent, URL or AppleScript call returns history contents (`AgentWallTests` and `AgentWallMCPTests`, 4.3).
-- [ ] Popup opens in under 100 ms with 200 items, and search filters as you type. A test builds the item list from 200 fixtures within budget, and search is Maccy's own tested code; the live popup timing needs the owner check.
+- [ ] Popup opens in under 100 ms with 200 items, and search filters as you type. A test builds the item list from 200 fixtures within budget, and search is Maccy's own tested code; the live popup timing needs a manual check.
 - [x] The Shortcuts page detects a clash between the clipboard hotkey and a Windows keybind (`clipboardHotkeyConflictsWithWindowsKeybind`).
 
-**Owner check** (stage 4): leave Clipboard off and confirm there is no `~/Library/Application Support/Mooring/Clipboard/` folder; turn it on, copy text, an image and a file, open ⇧⌘C, search, pin, and paste with ⌥Return (with Accessibility it pastes; without, it copies and the footer hint shows); copy a password from 1Password and confirm it doesn't appear; check that `mooring --help`, `mooring mcp` `tools/list` and Shortcuts show nothing clipboard-related; open the Clear alert over the dropdown and check the popup's placement and timing.
+**Manual check** (stage 4): leave Clipboard off and confirm there is no `~/Library/Application Support/Mooring/Clipboard/` folder; turn it on, copy text, an image and a file, open ⇧⌘C, search, pin, and paste with ⌥Return (with Accessibility it pastes; without, it copies and the footer hint shows); copy a password from 1Password and confirm it doesn't appear; check that `mooring --help`, `mooring mcp` `tools/list` and Shortcuts show nothing clipboard-related; open the Clear alert over the dropdown and check the popup's placement and timing.
 
 ### 4.8 Settings and popup, as built
 
@@ -804,8 +804,8 @@ Recording history needs no permission. Auto-paste needs **Accessibility**, the s
   - Official Homebrew casks now reject apps that fail Gatekeeper (Chai is being removed for this), so Homebrew means a project tap only.
   - The helper's caller check (1.5) pins the signing certificate's hash instead of a Team ID.
   - Accessibility grants (levels 3 and 4) are tied to the signature, so the signing identity must stay the same across updates or users re-grant after every update.
-- **Spike before level 1 build-out:** confirm that `SMAppService.daemon` registers and runs a helper signed with your own certificate on macOS 14, 15 and 26 (the owner's M4 Pro runs 26). If it doesn't, lid mode falls back to a one-time `sudo mooring install-helper` that installs a launchd daemon the classic way.
-- **Updates (as built, stage 5):** Sparkle 2.10.0 with an EdDSA-signed appcast on GitHub Pages (`https://eidanerlich.github.io/mooring/appcast.xml`); Sparkle's own signature check works without Developer ID. The update check is the only network access and is opt-in on first launch. **The updater is gated on the public key:** `MOORING_SPARKLE_PUBLIC_KEY` (in `Config/Local.xcconfig`, empty by default) becomes `SUPublicEDKey`. With no key, no updater object is created, the Updates settings are hidden and Mooring never touches the network, so local builds and CI are always offline. With a key, the first launch asks once ("Check for updates automatically?", **Check Automatically** or **Not Now**); nothing is checked until the user agrees. Settings → Advanced then has "Check for updates automatically" and **Check Now**. `SUEnableAutomaticChecks` is `NO` in `Info.plist`, so Sparkle never prompts or schedules by itself. **Gentle reminders:** Mooring has no Dock icon and can't be Cmd-Tabbed to, so a scheduled update Sparkle would show behind other apps is easy to miss. Mooring's `SPUStandardUserDriverDelegate` lets Sparkle show a scheduled update only when it would be in immediate focus; otherwise Mooring posts a notification ("Mooring <version> is available", "Open the menu bar icon to update.") and adds **Update Available…** after Settings… in the dropdown, which calls Check Now to bring the update forward. Looking at the update, or the update session ending, clears both. This matters from 0.1.0 on: the installed binary is the one that presents every later update. Mooring and its scripts never generate or read the private key; it stays in the owner's Keychain (`docs/RELEASING.md`). Build-from-source users update with `git pull && make install`.
+- **Spike before level 1 build-out:** confirm that `SMAppService.daemon` registers and runs a helper signed with your own certificate on macOS 14, 15 and 26. If it doesn't, lid mode falls back to a one-time `sudo mooring install-helper` that installs a launchd daemon the classic way.
+- **Updates (as built, stage 5):** Sparkle 2.10.0 with an EdDSA-signed appcast on GitHub Pages (`https://eidanerlich.github.io/mooring/appcast.xml`); Sparkle's own signature check works without Developer ID. The update check is the only network access and is opt-in on first launch. **The updater is gated on the public key:** `MOORING_SPARKLE_PUBLIC_KEY` (in `Config/Local.xcconfig`, empty by default) becomes `SUPublicEDKey`. With no key, no updater object is created, the Updates settings are hidden and Mooring never touches the network, so local builds and CI are always offline. With a key, the first launch asks once ("Check for updates automatically?", **Check Automatically** or **Not Now**); nothing is checked until the user agrees. Settings → Advanced then has "Check for updates automatically" and **Check Now**. `SUEnableAutomaticChecks` is `NO` in `Info.plist`, so Sparkle never prompts or schedules by itself. **Gentle reminders:** Mooring has no Dock icon and can't be Cmd-Tabbed to, so a scheduled update Sparkle would show behind other apps is easy to miss. Mooring's `SPUStandardUserDriverDelegate` lets Sparkle show a scheduled update only when it would be in immediate focus; otherwise Mooring posts a notification ("Mooring <version> is available", "Open the menu bar icon to update.") and adds **Update Available…** after Settings… in the dropdown, which calls Check Now to bring the update forward. Looking at the update, or the update session ending, clears both. This matters from 0.1.0 on: the installed binary is the one that presents every later update. Mooring and its scripts never generate or read the private key; it stays in the maintainer's Keychain (`docs/RELEASING.md`). Build-from-source users update with `git pull && make install`.
 - **Uninstall (as built, stage 5):** Settings → Advanced → **Uninstall Mooring…** opens a confirmation sheet that lists the steps and has an "Also delete clipboard history" checkbox (off by default). Steps, in order:
   1. end every lease, so sleep returns to normal;
   2. turn lid sleep back on (`disablesleep 0` through the helper);
@@ -820,15 +820,15 @@ Recording history needs no permission. Auto-paste needs **Accessibility**, the s
   11. move the app to the Trash (`NSWorkspace.recycle`), then quit.
 
   A failing step doesn't stop the rest; the failures are listed in an alert before Mooring quits. If step 2 failed, the alert adds "Sleep may still be disabled. Run in Terminal: sudo pmset -a disablesleep 0". Cancel does nothing, and a second click while it runs is ignored. The Advanced page's caption lists what is removed rather than claiming "everything".
-- **Release (as built, stage 5):** `scripts/release.sh` builds `dist/` (zip, `.sig`, `appcast.xml`, `homebrew/mooring.rb`) and publishes nothing; the owner's steps are in `docs/RELEASING.md`. The Homebrew cask is for the project tap `EidanErlich/homebrew-tap`; it declares `auto_updates true` (Sparkle updates the app), quits `dev.mooring.app` on `brew uninstall`, zaps `~/Library/Application Support/Mooring` and the three preference plists (`dev.mooring.app`, `dev.mooring.windows`, `dev.mooring.clipboard`), and its caveats give the quarantine advice above (Open Anyway, or `xattr -dr com.apple.quarantine /Applications/Mooring.app`).
+- **Release (as built, stage 5):** `scripts/release.sh` builds `dist/` (zip, `.sig`, `appcast.xml`, `homebrew/mooring.rb`) and publishes nothing; the publish steps are in `docs/RELEASING.md`. The Homebrew cask is for the project tap `EidanErlich/homebrew-tap`; it declares `auto_updates true` (Sparkle updates the app), quits `dev.mooring.app` on `brew uninstall`, zaps `~/Library/Application Support/Mooring` and the three preference plists (`dev.mooring.app`, `dev.mooring.windows`, `dev.mooring.clipboard`), and its caveats give the quarantine advice above (Open Anyway, or `xattr -dr com.apple.quarantine /Applications/Mooring.app`).
 
 ### B. Open questions
 
-Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL-3.0; plain-snapshot vendoring with provenance docs; anchor icon (outline off, filled on); agents act automatically by default, lid mode for agents asks each time (superseded by stage 2c-1: by default only open-ended agent requests ask); lid mode on battery behind an explicit opt-in; no clipboard encryption beyond Maccy's; development is staged (Build brief below).
+Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL-3.0; plain-snapshot vendoring with provenance docs; anchor icon (outline off, filled on); agents act automatically by default, lid mode for agents asks each time (superseded by stage 2c-1: by default only open-ended agent requests ask); lid mode on battery behind an explicit opt-in; no clipboard encryption beyond Maccy's; development is staged (Build history below).
 
 - [x] Does launchd refuse to start a `dev.mooring.helper` binary that a user-level process swapped inside the (user-writable) app bundle? **Yes** (stage 1c, 2026-10-01, macOS 26.3.1): an ad-hoc-signed probe swapped in for the helper never ran; launchd logged `OS_REASON_CODESIGNING | Launch Constraint Violation` and AMFI `Constraint not matched`. No local path to root. Side effect worth knowing: after the refusal launchd marked the job `needs LWCR update` and would not spawn even the restored genuine helper until it was unregistered and approved again (and overwriting a signed binary in place spoils the kernel's signature cache: replace the file instead).
 - [ ] Is the 2-minute grace after `Stop` long enough for background shells Claude starts? Measure on real sessions in stage 2.
-- [x] Keep Loop's `Luminare` settings UI, or rebuild the Windows pages in plain SwiftUI for consistency? **Keep Luminare** (owner decision, 2026-10-03). The six pages are hosted in the Settings detail area; while Windows is off each shows only a "Windows is off" banner (see Engineering decisions, stage 3a).
+- [x] Keep Loop's `Luminare` settings UI, or rebuild the Windows pages in plain SwiftUI for consistency? **Keep Luminare** (decided 2026-10-03). The six pages are hosted in the Settings detail area; while Windows is off each shows only a "Windows is off" banner (see Engineering decisions, stage 3a).
 - [x] Does `SMAppService.daemon` accept a personal-team-signed helper on macOS 26? **Yes** (stage 1a spike, 2026-09-30, macOS 26.3.1): registered from the Debug build in DerivedData, approved once in Login Items & Extensions, flipped `disablesleep` with no password, kept accepting a rebuilt app, and after `sudo launchctl kickstart -k system/dev.mooring.helper` launchd respawned the rebuilt (hardened-runtime) helper binary, which answered with no re-approval. The `sudo mooring install-helper` fallback is not needed. Not yet observed: a reboot, and a certificate renewal.
 
 ### C. Milestones
@@ -842,30 +842,30 @@ Decided 2026-09-29: name **Mooring**, repo `github.com/EidanErlich/mooring`; GPL
 
 Level 1 alone replaces both Chai and Awayke and is worth releasing on its own; each later level starts only after the previous gate test passes on a real MacBook.
 
-## Build brief for agents
+## Development notes
 
-This section tells a coding agent exactly how to build Mooring. Read the whole spec first, then build only the stage you are given, and stop at that stage's owner checkpoint.
+What a contributor needs to build, sign and change Mooring. `CONTRIBUTING.md` has the short version.
 
 ### Project facts
 
 | Item | Value |
 | --- | --- |
-| Owner | Eidan Erlich, GitHub `EidanErlich` |
-| Repo | `github.com/EidanErlich/mooring` (private for now; decided 2026-09-30) |
-| License | GPL-3.0-only; upstream MIT notices kept |
+| Author | Eidan Erlich (GitHub `EidanErlich`) |
+| Repo | `github.com/EidanErlich/mooring` |
+| License | GPL-3.0-only (the window management is derived from Loop, GPLv3); upstream MIT notices kept, and bundled in the app as `THIRD_PARTY_NOTICES.md` |
 | App name / CLI | Mooring / `mooring` |
 | Bundle IDs | App `dev.mooring.app`; helper `dev.mooring.helper` (also its Mach service name); CLI `dev.mooring.cli` |
-| Dev and test machine | MacBook Pro, Apple M4 Pro, macOS 26 (Tahoe) |
+| Tested on | macOS 26, Apple silicon |
 | Deployment target | macOS 14 |
 | Toolchain | Xcode 26 (26.6 as of 2026-09-30); Swift 6 language mode with strict concurrency |
 | Signing | Free Apple ID personal team (Apple Development certificate); no Developer ID, no notarization |
 
 ### Repository setup
 
-- **Project generation:** XcodeGen from `project.yml`. The generated `Mooring.xcodeproj` is gitignored, so agents never hand-edit a `.pbxproj`.
+- **Project generation:** XcodeGen from `project.yml`. The generated `Mooring.xcodeproj` is gitignored, so nobody hand-edits a `.pbxproj`.
 - **Targets:** `Mooring` (app); `MooringHelper` (command-line tool embedded at `Contents/MacOS/dev.mooring.helper`, launchd plist at `Contents/Library/LaunchDaemons/dev.mooring.helper.plist`); `mooring` CLI (target `MooringCLI`, product name `mooring`, embedded at `Contents/Helpers/mooring`; not in `Contents/MacOS`, where it would collide with `Mooring` on case-insensitive volumes); local packages in `Packages/`; unit test targets per package.
-- **Signing config:** `Config/Local.xcconfig` (gitignored) holds `DEVELOPMENT_TEAM`; `Config/Local.xcconfig.example` is committed. A build-phase script writes the helper's allowed-client requirement from the app's signing certificate hash, so no team ID is hardcoded.
-- **Dependencies (Swift Package Manager, pinned):** Defaults, KeyboardShortcuts, Sauce (stage 1–4), Sparkle (stage 5), Luminare and Scribe only if stage 3 keeps them.
+- **Signing config:** `Config/Local.xcconfig` (gitignored) holds `MOORING_SIGN_IDENTITY` and `MOORING_TEAM` (and, for release builds, `MOORING_SPARKLE_PUBLIC_KEY`); `Config/Local.xcconfig.example` is committed. Without it, builds are ad-hoc signed, which is fine for everything except lid mode: the helper needs a stable signature, and a free Apple ID personal team is enough. A build-phase script writes the helper's allowed-client requirement from the app's signing certificate hash, so no team ID is hardcoded.
+- **Dependencies (Swift Package Manager, pinned in `Config/Package.resolved`):** Defaults, KeyboardShortcuts, Sauce, swift-log, SwiftHEXColors and Fuse (ClipKit), Sparkle (the app only), and Luminare, Scribe and Subsurface (WindowKit; all three are kept), plus their transitive packages. `scripts/third-party-notices.sh` turns their licenses into `THIRD_PARTY_NOTICES.md`.
 - **CI:** GitHub Actions on a macOS runner: bootstrap, unsigned build (`CODE_SIGNING_ALLOWED=NO`), unit tests. Nothing that needs the helper, lid or permissions runs in CI.
 
 ```
@@ -893,7 +893,22 @@ Code is copied without git history, from these exact commits:
 - Keep every copied file's original header. Changed files get a first line: `// Adapted from <repo>@<commit>: <original path>`.
 - `THIRD_PARTY/<Repo>/` holds the upstream `LICENSE` and an `UPSTREAM.md` with the repo URL, commit, date, license, every file taken with its new path, and a list of modifications.
 - `README.md` has a Credits section linking all four repos.
+- `THIRD_PARTY_NOTICES.md` (generated by `scripts/third-party-notices.sh` from `THIRD_PARTY/*/LICENSE` and the pinned SwiftPM packages' licenses) is copied into the app's `Contents/Resources/` with `LICENSE`, and Settings → Mooring → Advanced → Acknowledgements… opens it. Regenerate it whenever a snapshot or a package pin changes; CI fails when it is out of date.
 - Never copy: Chai's icons (Glyphish license), Loop's and Maccy's app icons, updaters, App Store review prompts.
+
+### Rules for contributors
+
+- Never leave sleep disabled: every test that touches lid mode sets `disablesleep 0` in teardown. `make reset-sleep` is the manual escape hatch.
+- Only the helper runs `pmset`. The app and CLI never call it directly.
+- Keep the helper under 250 lines with no dependencies.
+- No network access in app code except Sparkle, from stage 5.
+- Don't claim behaviour you couldn't observe (lid, battery, notifications, permission prompts); mark it "needs a manual check".
+- Swift 6 strict concurrency; `@MainActor` for UI and `AwakeEngine`; `os.Logger` with subsystem `dev.mooring`.
+- Changes offered back to Loop must follow Loop's `AI_POLICY.md`.
+
+## Implementation notes
+
+Where each upstream file went, and the decisions the code follows.
 
 ### File map
 
@@ -1108,10 +1123,10 @@ struct AwakeSettings: Codable, Equatable {
 
 **Stage 5: release tooling (as built)**
 
-Owner's standing instruction: keep it private. Everything to ship v0.1 is built and tested; **nothing is published**. No tag, GitHub Release, Pages deploy or tap repo exists, and no script runs one.
+Everything to ship v0.1 is built and tested, and **the scripts publish nothing**: no script creates a tag, GitHub Release, Pages deploy or tap repo. Publishing is done by hand (`docs/RELEASING.md`).
 
-- **Sparkle:** 2.10.0, pinned exactly (`Config/Package.resolved`) and linked into the app only. The feed is `https://eidanerlich.github.io/mooring/appcast.xml`. The EdDSA private key stays in the owner's Keychain, never in the repo or CI; releases are signed on the owner's Mac. The Makefile's `-packageAuthorizationProvider netrc` stops SwiftPM looking in the Keychain for GitHub credentials when it downloads Sparkle's binary.
-- **Key-gated updater:** `MOORING_SPARKLE_PUBLIC_KEY` (`Config/Shared.xcconfig`, empty; the owner sets it in `Config/Local.xcconfig`) feeds `SUPublicEDKey`. `UpdatesController` (`App/Updates/`) creates no updater and asks nothing when the key is empty, and makes the updater at most once when it is set. Tests use an injected `UpdaterDriving`, never real Sparkle or the network. The gentle-reminder decisions live in `UpdateReminder` (tested with a fake notification poster); `LiveSparkleUpdater` hands Sparkle's user-driver delegate calls to it. The Updates settings section appears only when an updater is available. `App/Updates` is classified as a non-agent folder in the agent wall test: the updater talks to Sparkle's feed only, never to the socket.
+- **Sparkle:** 2.10.0, pinned exactly (`Config/Package.resolved`) and linked into the app only. The feed is `https://eidanerlich.github.io/mooring/appcast.xml`. The EdDSA private key stays in the maintainer's Keychain, never in the repo or CI; releases are signed on the maintainer's Mac. The Makefile's `-packageAuthorizationProvider netrc` stops SwiftPM looking in the Keychain for GitHub credentials when it downloads Sparkle's binary.
+- **Key-gated updater:** `MOORING_SPARKLE_PUBLIC_KEY` (`Config/Shared.xcconfig`, empty; the maintainer sets it in `Config/Local.xcconfig`) feeds `SUPublicEDKey`. `UpdatesController` (`App/Updates/`) creates no updater and asks nothing when the key is empty, and makes the updater at most once when it is set. Tests use an injected `UpdaterDriving`, never real Sparkle or the network. The gentle-reminder decisions live in `UpdateReminder` (tested with a fake notification poster); `LiveSparkleUpdater` hands Sparkle's user-driver delegate calls to it. The Updates settings section appears only when an updater is available. `App/Updates` is classified as a non-agent folder in the agent wall test: the updater talks to Sparkle's feed only, never to the socket.
 - **Uninstall:** see Appendix A. `Uninstaller` runs the steps through one `UninstallPerforming` seam; tests never build the real steps. `Uninstaller.removeSupportFiles(in:)` and `Uninstaller.summary(_:)` are tested on temporary folders and fake failures, and `SettingsDomainsRemover` with a recording closure. `make uninstall` also removes `~/.local/bin/mooring`, but only a symlink whose target is under `/Applications/Mooring.app/` (a sibling such as `Mooring.app.old` does not match), and its paths are quoted so a path with spaces works. `scripts/test-make-uninstall.sh` runs it against a temporary `HOME` and a stub `pkill`.
 - **`scripts/release.sh`:**
   - Flags: `--dry-run --app PATH` (uses a built app; no tests, build or signing; the appcast signature is empty; the clean-tree and tag checks are skipped unless `--check-git` is also given), `--publish` (prints the tag, `gh release`, `gh-pages` appcast and tap commands and runs none of them; refused together with `--dry-run`), and `--check-git`.
@@ -1120,18 +1135,18 @@ Owner's standing instruction: keep it private. Everything to ship v0.1 is built 
   - Outputs, all in the gitignored `dist/`: `Mooring-<version>.zip`, its `.sig`, `appcast.xml` and `homebrew/mooring.rb` (a cask for `EidanErlich/homebrew-tap` with the zip's sha256, `auto_updates true`, `uninstall quit:`, `zap trash:` and caveats giving Appendix A's quarantine advice).
   - Makefile: `make release` runs the script with no flags (`make test` also runs `scripts/test-release.sh`); `make build-release` is the Release build that `make install` now depends on.
   - CI: a "Release dry run" step after the unit tests runs the dry run on the Debug app and checks that the zip, appcast and cask exist, that the appcast is well-formed XML and that the cask parses (`ruby -c`).
-- **Version:** `MARKETING_VERSION` is **0.1.0**, and the plugin stays 0.0.4. `CURRENT_PROJECT_VERSION = $(MARKETING_VERSION)`, so `CFBundleVersion` (the appcast's `sparkle:version`) follows the marketing version and always rises with releases; Sparkle's comparator handles dotted versions. The build number is no longer independent, and nothing used it. The tag `v0.1.0` is **not** created: it is the owner's checkpoint.
+- **Version:** `MARKETING_VERSION` is **0.1.0**, and the plugin stays 0.0.4. `CURRENT_PROJECT_VERSION = $(MARKETING_VERSION)`, so `CFBundleVersion` (the appcast's `sparkle:version`) follows the marketing version and always rises with releases; Sparkle's comparator handles dotted versions. The build number is no longer independent, and nothing used it. The tag `v0.1.0` is **not** created by the scripts: it is made by hand when publishing.
 - **Signing:** a release is signed with the maintainer's own certificate; keep the same one across releases so Accessibility grants survive updates; if it ever changes, the release notes tell users to re-grant.
-- **Docs:** README has Install, Updates, Uninstall and a Releasing pointer; `docs/RELEASING.md` is the owner's publish checklist. Leftovers are in `docs/BACKLOG.md` ("Release (5 leftovers)").
-- **Owner check:** generate the Sparkle keys (and back the private key up offline), put the public key in `Config/Local.xcconfig`, run `bash scripts/release.sh --publish` once and inspect the `dist/` it built; create `EidanErlich/homebrew-tap` and enable Pages; run the commands it printed (the first block tags v0.1.0), then verify the tag with `git ls-remote --tags origin`; clean-install on a second user account and confirm Gatekeeper's block and the quarantine fix. Also: `claude plugin marketplace remove mooring-app` (the Uninstall plugin step) also uninstalls the plugin; confirm that reads right.
+- **Docs:** README has Install, Updates, Uninstall and a Releasing pointer; `docs/RELEASING.md` is the publish checklist. Leftovers are in `docs/BACKLOG.md` ("Release (5 leftovers)").
+- **Manual check:** generate the Sparkle keys (and back the private key up offline), put the public key in `Config/Local.xcconfig`, run `bash scripts/release.sh --publish` once and inspect the `dist/` it built; create `EidanErlich/homebrew-tap` and enable Pages; run the commands it printed (the first block tags v0.1.0), then verify the tag with `git ls-remote --tags origin`; clean-install on a second user account and confirm Gatekeeper's block and the quarantine fix. Also: `claude plugin marketplace remove mooring-app` (the Uninstall plugin step) also uninstalls the plugin; confirm that reads right.
 
-**Gates between levels** (Appendix C, Milestones): a level is done only when its stages' owner checkpoints below have passed.
+**Gates between levels** (Appendix C, Milestones): a level is done only when its stages' manual checks below have passed.
 
-### Stages
+### Build history
 
-Each stage is one branch and one pull request titled `Stage N: …`, and ends at its owner checkpoint.
+Mooring was built in stages, each one branch and one pull request titled `Stage N: …`. The table records what each stage built, what the automated checks covered, and the manual check that closed it.
 
-| Stage | Builds | Agent verifies | Owner checkpoint |
+| Stage | Builds | Automated checks | Manual check |
 | --- | --- | --- | --- |
 | 0 Scaffold | Repo, `project.yml`, Makefile, CI, LICENSE, THIRD\_PARTY, README; an empty menu-bar app with the outline anchor | `make bootstrap build test` passes; CI green | Launches the app and sees the icon |
 | 1a Helper spike | Minimal helper: register, set and read `disablesleep`, caller check; a debug menu item to flip it | `pmset -g \| grep SleepDisabled` flips between 1 and 0 | Approves the helper in System Settings. If registration fails, switch to the `sudo mooring install-helper` fallback |
@@ -1145,14 +1160,3 @@ Each stage is one branch and one pull request titled `Stage N: …`, and ends at
 | 3b Agent windows (built, 0.0.5) | `win.list`, `win.arrange`, `win.undo` and `win.layout` in the app, with `mooring win list / arrange / do / undo / layout / list-regions`; five MCP window tools (9 in all); gating by Windows state and Settings → Agents → "Window arrangement by agents" (Automatic · Ask first · Off) with the `mooring.window-approval` notification; undo of the last 10 arrangements; saved layouts; the skill covers windows; version 0.0.5 (plugin 0.0.4) | `Arranger`, handler, CLI and MCP tests over a fake `WindowSystem`; the full suite passes | With Accessibility granted, arranges three TextEdit windows and undoes them; asks Claude for the Chrome / iTerm / Slack layout; tries Ask first (Allow, then Deny) and `win layout save` / `apply` |
 | 4 ClipKit (built, 0.0.6) | Vendored Maccy@c376789 as `Packages/ClipKit`; `ClipboardController` and the off-by-default switch; the dropdown's Clipboard › submenu and the ⇧⌘C popup (`ClipboardPanel`); Settings → Clipboard (History, Ignore Rules, Appearance) and the Shortcuts row; ignore rules, never-recorded types, retention; the agent wall tests; version 0.0.6 (plugin unchanged at 0.0.4) | ClipKit's 91 Maccy tests plus its own tests on a private pasteboard that prove the real one is untouched; controller, submenu, settings and shortcut-conflict tests; `AgentWallTests` (9) and `AgentWallMCPTests` fail the build if any IPC op, MCP tool, intent, URL route or AppleScript path touches ClipKit; the full suite passes | Leaves Clipboard off and finds no store; turns it on, copies text, an image and a file, searches, pins and pastes; copies from 1Password and confirms it isn't recorded; times the popup |
 | 5 Release (built, 0.1.0) | Key-gated opt-in Sparkle updater (2.10.0) with Check Now; Settings → Advanced → Uninstall Mooring… and a `make uninstall` that removes the CLI link; `scripts/release.sh` (zip, signature, appcast, Homebrew cask in `dist/`; `--dry-run`, `--publish` prints only) with `make release` and a CI dry run; README Install, Updates, Uninstall; `docs/RELEASING.md`; version 0.1.0 (plugin 0.0.4). Nothing is published | Updater, uninstall and release-script tests, including a dry run on a fixture app; the full suite passes | Follows `docs/RELEASING.md`: Sparkle keys, `scripts/release.sh --publish` (one build), tap repo and Pages, the printed publish commands, a clean install on a second macOS user account; tags v0.1.0 |
-
-### Rules for agents
-
-- Build only the assigned stage. At the end, list exactly what the owner must do for the checkpoint.
-- Never leave sleep disabled: every test that touches lid mode sets `disablesleep 0` in teardown. `make reset-sleep` is the manual escape hatch.
-- Only the helper runs `pmset`. The app and CLI never call it directly.
-- Keep the helper under 250 lines with no dependencies.
-- No network access in app code except Sparkle, from stage 5.
-- Don't claim behaviour you couldn't observe (lid, battery, notifications, permission prompts); mark it "needs owner check".
-- Swift 6 strict concurrency; `@MainActor` for UI and `AwakeEngine`; `os.Logger` with subsystem `dev.mooring`.
-- Changes offered back to Loop must follow Loop's `AI_POLICY.md`.
