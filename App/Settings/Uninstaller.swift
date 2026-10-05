@@ -101,6 +101,23 @@ enum Uninstaller {
         if let firstError { throw firstError }
     }
 
+    static let dragToTrashMessage = "macOS didn't let Mooring move itself. Finder shows it now: drag it to the Trash."
+
+    /// Moves `app` to the Trash. When Mooring trashes its own running bundle, macOS can move it and still report an
+    /// error, so the outcome is judged by whether the app has left its place. If it's really still there, Finder
+    /// shows it so it can be dragged to the Trash by hand.
+    static func moveToTrash(
+        _ app: URL, recycle: (URL) async throws -> Void, exists: (URL) -> Bool, reveal: (URL) -> Void
+    ) async throws {
+        do {
+            try await recycle(app)
+        } catch {
+            guard exists(app) else { return }
+            reveal(app)
+            throw UninstallStepError(errorDescription: dragToTrashMessage)
+        }
+    }
+
     /// The failure summary shown before quitting. If lid sleep may still be off, it says how to fix that by hand.
     static func summary(_ failures: [UninstallFailure]) -> String {
         var text = failures.map { "• \($0.step.title): \($0.message)" }.joined(separator: "\n")
@@ -247,7 +264,13 @@ final class LiveUninstallSteps: UninstallPerforming {
         case .deleteClipboardHistory: try deleteClipboardHistory()
         case .removeSupportFiles: try Uninstaller.removeSupportFiles(in: FileLeaseStore.defaultDirectory)
         case .removeSettings: SettingsDomainsRemover.shared.remove()
-        case .moveAppToTrash: _ = try await NSWorkspace.shared.recycle([Bundle.main.bundleURL])
+        case .moveAppToTrash:
+            try await Uninstaller.moveToTrash(
+                Bundle.main.bundleURL,
+                recycle: { _ = try await NSWorkspace.shared.recycle([$0]) },
+                exists: { FileManager.default.fileExists(atPath: $0.path) },
+                reveal: { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
+            )
         }
     }
 
