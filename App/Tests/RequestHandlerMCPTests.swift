@@ -33,6 +33,20 @@ struct RequestHandlerMCPTests {
         #expect(try #require(fixture.lease("mcp-claude-desktop-1")).owner == .mcp(client: "Claude Desktop"))
     }
 
+    @Test func extendingAnExpiredMCPLeaseStillNamesTheClient() async throws {
+        let fixture = RequestFixture()
+        _ = await mcpAcquire(fixture)
+        // Expired, but not yet ticked away: the extension, which sends no reason, starts a fresh lease.
+        fixture.knobs.clock.addTimeInterval(1201)
+
+        #expect(await mcpAcquire(fixture).ok)
+        #expect(try #require(fixture.lease("mcp-claude-desktop-1")).reason == "Requested by Claude Desktop")
+
+        // Other callers keep the id.
+        _ = await fixture.acquire(.lease, id: "job", ttl: 600)
+        #expect(try #require(fixture.lease("job")).reason == "job")
+    }
+
     @Test func mcpLidWithEndNeedsNoPromptByDefault() async throws {
         let fixture = RequestFixture()
 
