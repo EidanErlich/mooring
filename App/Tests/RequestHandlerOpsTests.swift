@@ -43,6 +43,7 @@ struct RequestHandlerOpsTests {
         let second = await fixture.release(.lease, id: "job")
 
         #expect(releasedFlag(first) == true)
+        #expect(releasedExpiry(first) == nil)
         #expect(releasedFlag(second) == false)
         #expect(second.ok)
         #expect(fixture.lease("job") == nil)
@@ -55,13 +56,16 @@ struct RequestHandlerOpsTests {
         let sooner = await fixture.release(.lease, id: "job", after: 60)
         #expect(releasedFlag(sooner) == true)
         #expect(try #require(fixture.lease("job")).expiresAt == fixture.clock.addingTimeInterval(60))
+        #expect(releasedExpiry(sooner) == fixture.clock.addingTimeInterval(60))
 
-        _ = await fixture.release(.lease, id: "job", after: 7200)
+        let later = await fixture.release(.lease, id: "job", after: 7200)
         #expect(try #require(fixture.lease("job")).expiresAt == fixture.clock.addingTimeInterval(60))
+        #expect(releasedExpiry(later) == fixture.clock.addingTimeInterval(60))
 
         let missing = await fixture.release(.lease, id: "gone", after: 60)
         #expect(missing.ok)
         #expect(releasedFlag(missing) == false)
+        #expect(releasedExpiry(missing) == nil)
     }
 
     @Test func releaseLeaseNeedsAnID() async {

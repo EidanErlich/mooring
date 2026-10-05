@@ -29,12 +29,12 @@ extension RequestHandler {
             guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
             try requireUnreserved(id)
             guard engine.leases.contains(where: { $0.id == id }) else { return ReleaseResult(released: false) }
-            if let after {
-                engine.shorten(id: id, to: now().addingTimeInterval(after))
-            } else {
+            guard let after else {
                 engine.release(id: id)
+                return ReleaseResult(released: true)
             }
-            return ReleaseResult(released: true)
+            engine.shorten(id: id, to: now().addingTimeInterval(after))
+            return ReleaseResult(released: true, expiresAt: engine.leases.first { $0.id == id }?.expiresAt)
         }
     }
 

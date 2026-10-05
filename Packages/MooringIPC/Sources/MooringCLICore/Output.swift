@@ -49,7 +49,7 @@ enum CLIText {
         case (.acquire(let acquired), .acquire(let request)):
             acquire(acquired, kind: request.kind, now: now, processes: processes)
         case (.renew(let lease), _): "Renewed \(lease.id) · \(timeText(lease, now: now))"
-        case (.release(let released), .release(let request)): release(released, request: request)
+        case (.release(let released), .release(let request)): release(released, request: request, now: now)
         case (.status(let status), _): StatusText.human(status, now: now)
         case (.notify(let result), _): result.posted ? "Notified" : "Not notified"
         case (.winList(let list), _): WinText.list(list)
@@ -87,12 +87,24 @@ enum CLIText {
         return "\(watching) · \(remaining(expiry.timeIntervalSince(now))) cap"
     }
 
-    private static func release(_ result: ReleaseResult, request: ReleaseArgs) -> String {
+    private static func release(_ result: ReleaseResult, request: ReleaseArgs, now: Date) -> String {
         let name = request.id ?? "lease"
         switch request.kind {
         case .off: return result.released ? "Off" : "Already off"
-        case .lease: return result.released ? "Released \(name)" : "\(name) wasn't active"
+        case .lease:
+            guard result.released else { return "\(name) wasn't active" }
+            guard let after = request.after else { return "Released \(name)" }
+            return releaseAfter(name, after: after, expiresAt: result.expiresAt, now: now)
         }
+    }
+
+    /// "job ends in 2m", or "job already ends in 1m, sooner than 2m" when `--after` left an earlier expiry alone.
+    /// The two are compared as printed, so the moment the reply took to arrive doesn't count as sooner.
+    private static func releaseAfter(_ name: String, after: TimeInterval, expiresAt: Date?, now: Date) -> String {
+        let requested = remaining(after)
+        guard let expiresAt else { return "\(name) ends in \(requested)" }
+        let left = remaining(expiresAt.timeIntervalSince(now))
+        return left == requested ? "\(name) ends in \(left)" : "\(name) already ends in \(left), sooner than \(requested)"
     }
 }
 

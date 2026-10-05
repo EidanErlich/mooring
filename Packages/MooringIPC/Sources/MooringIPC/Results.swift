@@ -74,9 +74,13 @@ public struct AcquireResult: Codable, Sendable, Equatable {
 
 public struct ReleaseResult: Codable, Sendable, Equatable {
     public var released: Bool
+    /// When a lease released with `after` now ends: the grace period's end, or the lease's own expiry when that was sooner.
+    /// Absent for an immediate release, and on the wire from older apps.
+    public var expiresAt: Date?
 
-    public init(released: Bool) {
+    public init(released: Bool, expiresAt: Date? = nil) {
         self.released = released
+        self.expiresAt = expiresAt
     }
 }
 

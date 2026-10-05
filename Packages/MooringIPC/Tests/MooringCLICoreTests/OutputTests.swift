@@ -203,6 +203,26 @@ private let threeLeases = [
     #expect(gone.capture.stdout == "job wasn't active\nAlready off\n")
 }
 
+@Test func releaseAfterSaysWhenItEnds() async {
+    /// What `lease release job --after <after>` prints when the app reports the lease now ends at `expiresAt`.
+    func output(after: String, expiresAt: Date?) async -> String {
+        let reply = Response.success(id: "r", .release(ReleaseResult(released: true, expiresAt: expiresAt)))
+        let harness = Harness(client: RecordingClient(reply: .success(reply)))
+        #expect(await harness.run(["lease", "release", "job", "--after", after]) == 0)
+        return harness.capture.stdout
+    }
+    #expect(await output(after: "1m", expiresAt: fixedNow.addingTimeInterval(60)) == "job ends in 1m\n")
+    #expect(await output(after: "1h30m", expiresAt: fixedNow.addingTimeInterval(5400)) == "job ends in 1h 30m\n")
+    // --after only shortens, so a lease that already ends sooner keeps its expiry.
+    #expect(await output(after: "10m", expiresAt: fixedNow.addingTimeInterval(120)) == "job already ends in 2m, sooner than 10m\n")
+    // An app that doesn't report the expiry still applied --after.
+    #expect(await output(after: "2m", expiresAt: nil) == "job ends in 2m\n")
+
+    let gone = Harness(client: RecordingClient(reply: .success(.success(id: "r", .release(ReleaseResult(released: false))))))
+    _ = await gone.run(["lease", "release", "job", "--after", "2m"])
+    #expect(gone.capture.stdout == "job wasn't active\n")
+}
+
 @Test func statusCommandPrintsTheBlock() async {
     let harness = Harness(client: RecordingClient(reply: .success(.success(id: "r", .status(status(leases: threeLeases))))))
     #expect(await harness.run(["status"]) == 0)
