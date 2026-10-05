@@ -1,6 +1,6 @@
-# Backlog
+# Known issues and ideas
 
-Small issues found in review and deferred. None of them blocked merge. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
+Small issues found in review and deferred, plus ideas for later. None of them blocked a release. The most user-visible ones are listed first in each section. Delete an item once it's fixed.
 
 ## Claude Code plugin (2b leftovers)
 - `doctor`'s plugin detail can name the GitHub copy when both copies are enabled and `claude plugin list` lists it first; prefer the app copy explicitly.
@@ -67,7 +67,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Build noise and docs:** the vendored code gives deprecation warnings (macOS 13 to 14) and an upstream `swiftui-introspect` manifest warning; the Scribe comment in `Packages/WindowKit/Package.swift` says `Package.resolved` fixes the revision, but the app's pin is `Config/Package.resolved`; `UPSTREAM.md` words the test-suite condition for Loop's settings loosely (the code checks `XCTestConfigurationFilePath`).
 - `gesturesAvailable` sits between `menuActions(primary:)` and its doc comment, so the comment attaches to the wrong declaration.
 - `everyLoaderSymbolIsChecked` doesn't include the MultitouchSupport symbol list.
-- Turn On without Accessibility shows macOS's own Accessibility alert alongside Mooring's sheet; confirm in the owner check that this reads well.
+- Turn On without Accessibility shows macOS's own Accessibility alert alongside Mooring's sheet; confirm in a manual check that this reads well.
 
 
 ## Agent windows (3b leftovers)
@@ -116,7 +116,7 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - there is no `OSAScriptingDefinition` key check in `Info.plist`;
   - the scan reads Swift source text only, not non-Swift files or linked symbols; the `Metadata.appintents` check reads the test host's build and skips if there is none;
   - hardening idea: also assert the app declares no `NSServices` in `Info.plist` and donates nothing to Core Spotlight (`CSSearchableIndex`), two more routes by which history could leave the app.
-- **Owner checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint (now refreshed when the popup becomes key); holding ⌥ in the open Clipboard submenu swaps Clear for Clear All (the rows are hosted SwiftUI views, and only the `isAlternate` setup is unit-tested); Delete Clipboard History… removes the folder.
+- **Manual checks, not yet done:** a copy from the real 1Password never appears; the popup opens in under 100 ms with 200 items; the Clear alert over the dropdown, and the popup's placement and footer hint (now refreshed when the popup becomes key); holding ⌥ in the open Clipboard submenu swaps Clear for Clear All (the rows are hosted SwiftUI views, and only the `isAlternate` setup is unit-tested); Delete Clipboard History… removes the folder.
 
 ## Release (5 leftovers)
 
@@ -124,10 +124,10 @@ Small issues found in review and deferred. None of them blocked merge. The most 
 - **Uninstall scope:** a Claude plugin installed from GitHub (`mooring@mooring`) is left installed, by design. The in-app CLI step removes only a link to this app's own bundled `mooring`, while `make uninstall` removes any link under `/Applications/Mooring.app/`.
 - **Uninstall tests:** `make uninstall`'s refusal guard in `scripts/test-make-uninstall.sh` can't fire (isolation comes from the overrides, which is sound); the test log shows "Unable to find service status" noise that predates stage 5.
 - **Updater:** the misleading `#require` message in `ClaudePluginFilesTests`.
-- **Release script:** a real (non-dry) run was never exercised end to end by an agent: it needs the owner's signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`). The key and signature checks, and the check of `origin`'s tags, are tested with fixtures and shimmed `make` and `git`.
-- **Owner checks, not yet done:**
+- **Release script:** a real (non-dry) run hasn't been exercised end to end yet: it needs a real signing identity and Sparkle key. `sign_update` was never run, and `shellcheck` wasn't available (only `bash -n`). The key and signature checks, and the check of `origin`'s tags, are tested with fixtures and shimmed `make` and `git`.
+- **Manual checks, not yet done:**
   - Sparkle keys (and the offline backup), `bash scripts/release.sh --publish` and a look at the `dist/` it built (`docs/RELEASING.md`);
-  - with the owner's identity, the embedded Sparkle.framework still passes `codesign --verify --deep --strict` after Xcode re-signs it;
+  - with a real signing identity, the embedded Sparkle.framework still passes `codesign --verify --deep --strict` after Xcode re-signs it;
   - a clean install on a second user account: the Gatekeeper block, **Open Anyway** and the `xattr` fix, and the first-launch update consent;
   - **Uninstall Mooring…** on a real install, including that `claude plugin marketplace remove mooring-app` (which also uninstalls the plugin) reads right;
   - the tap repo, Pages and the printed publish commands (the first one tags `v0.1.0`);
@@ -194,7 +194,6 @@ Small issues found in review and deferred. None of them blocked merge. The most 
   - there's an unused `import SwiftUI` in `DropdownModel.swift`;
   - lease-row sync has an unreachable "move" branch, and builds and strips "lease." strings.
 - **Tests:** no expiry-while-open test, and the 300 pt check skips the header.
-- **Docs:** the native-menu design spec header still says "awaiting owner review".
 
 ## Stage 6 leftovers
 
@@ -216,7 +215,7 @@ Found while hardening v0.1 and deferred. Still deferred from before, as the stag
   - `ensureCLILinked` has no transient guard of its own (only the install path reaches it).
 - **Dropdown and socket:**
   - hosted rows' countdown titles update per sync, not per second;
-  - VoiceOver may read switch rows twice (an owner check);
+  - VoiceOver may read switch rows twice (needs a manual check);
   - a pre-existing Sendable warning at `DropdownMenu.swift:131`;
   - `SocketServer.stop()` doesn't reset the accept back-off's episode flag.
 - **Notify:** the rate limit counts a post that wasn't shown.
