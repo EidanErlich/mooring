@@ -169,7 +169,7 @@ About 30 lines. It says:
 
 ## Testing
 
-- **Task 1, the payload test (throwaway):**
+- **The payload test (throwaway, done first):**
   1. A local plugin with a hook on every documented event appends stdin JSON and the hook's process chain (`ps -o pid,ppid,comm`) to a scratch file.
   2. Run one short Claude session: a prompt, a tool call, a subagent, a permission prompt, then exit.
   3. Record the event names, field names, notification types and parent chain in the spec's facts section, and keep anonymized payloads as test fixtures.
@@ -223,7 +223,7 @@ About 30 lines. It says:
   - the hooks.json sketch updated.
 - **Agent control and approvals:** the two new settings ("Keep awake while agents work" now has Automatic / Only when asked, and there is a waiting timeout).
 - **Engineering decisions:** the `hook` op, and `HookPolicy` in AwakeKit.
-- **Stages:** row 2b.
+- **Build history:** row 2b.
 
 ## Out of scope
 

@@ -113,7 +113,7 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
 
 - **Dropped:** Loop's Icon page and About page.
 - **Pages while Windows is off:** each one shows only a banner with "Windows is off" and **Turn On…** (Behavior also keeps the Window Manager toggle). Loop's pages are not built, because building them creates `SettingsWindowManager.shared` and Luminare views, which would break "loads none of WindowKit" while off. So settings can't be edited before turning Windows on (amended during the build).
-- **Hosting:** Luminare views are hosted inside Mooring's `NavigationSplitView` detail area. If Luminare needs its own window chrome, the Windows group opens Loop's settings window instead, titled "Mooring: Windows", and the sidebar item opens that. The plan records which.
+- **Hosting:** Luminare views are hosted inside Mooring's `NavigationSplitView` detail area. If Luminare needs its own window chrome, the Windows group opens Loop's settings window instead, titled "Mooring: Windows", and the sidebar item opens that. The choice is made when the Windows pages are built.
 
 ## General → Shortcuts
 

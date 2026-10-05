@@ -73,7 +73,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
   - actions: **Allow once**, **Always allow this agent** and **Deny**. Category actions are static, so the title can't name the agent; the agent's name leads the body instead ("<Agent> · <reason> · <end>");
   - the request id goes in `userInfo`;
   - macOS lists the actions under the notification's **Options** menu. `NSUserNotificationAlertStyle` is `alert`, so requests stay on screen until answered instead of vanishing as banners.
-- **Clicking the notification body** opens Settings → Agents and counts as no answer.
+- **Clicking the notification body** opens Settings → Awake → Agents and counts as no answer.
 - **At launch,** the app withdraws delivered approvals left from an earlier run, whose buttons would answer nothing.
 - **Permission:** requested the first time an approval is needed. If it's denied or off, the request is refused immediately with the notifications message.
 - **Waiting:**
@@ -163,7 +163,7 @@ One line is added to `skills/mooring/SKILL.md`: "To keep the Mac awake with the 
   - the new settings keys;
   - `approve.wait` stays reserved but unused;
   - `pendingApproval` and `notifications` on the wire.
-- **Stages:** split row 2c into 2c-1 and 2c-2.
+- **Build history:** split row 2c into 2c-1 and 2c-2.
 
 ## Out of scope
 

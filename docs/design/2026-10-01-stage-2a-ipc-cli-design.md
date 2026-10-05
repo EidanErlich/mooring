@@ -6,7 +6,7 @@ Oct 1, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 A `mooring` command that scripts, terminals and agents use to keep the Mac awake. It talks to the running app over a local socket, and every request becomes a lease in the same engine the menu uses. The menu shows who holds each lease, and only the app ever talks to the root helper.
 
-Stage gate (SPEC.md, Stages, 2a): `mooring anchor -- sleep 20` shows in `mooring status --json`, and exit codes match 2.2.
+Stage gate (SPEC.md, Build history, 2a): `mooring anchor -- sleep 20` shows in `mooring status --json`, and exit codes match 2.2.
 
 SPEC.md 2.1, 2.2, 2.6 and Engineering decisions ("Socket protocol") already fix the socket path and modes, the peer-uid check, the newline-delimited JSON shapes, the commands and the exit codes. This spec fills the gaps and records the decisions made.
 
@@ -201,7 +201,7 @@ Exit 0 when nothing failed, 1 otherwise.
   - doctor reads lid sleep through the helper;
   - `MooringCLICore` and `swift-argument-parser`;
   - `Lease.ttl`.
-- **Stages:** 2a gets agent holds and the lease-row fix. The URL scheme and App Intents move next to 2c.
+- **Build history:** 2a gets agent holds and the lease-row fix. The URL scheme and App Intents move next to 2c.
 
 ## Out of scope
 

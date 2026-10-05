@@ -101,7 +101,7 @@ A step that fails doesn't stop the rest; Mooring lists what didn't finish before
 - **No network** unless the build has an update key and you opt in to update checks (automatic checks, or **Check Now**); then it fetches only the appcast and the update itself. A build without the key, which is any build from source unless you add one, never touches the network.
 - **Clipboard history stays on your Mac**, in `~/Library/Application Support/Mooring/Clipboard/`: a folder only you can open (mode 0700), left out of backups, and **not encrypted**. Copies from password managers and other concealed copies are never recorded. Clipboard is off until you turn it on.
 - **Agents can't read the clipboard history**: no command, MCP tool, link, Shortcuts action or AppleScript call returns it (see [Clipboard](#clipboard)).
-- Logs go to the macOS unified log (subsystem `dev.mooring`) and never contain clipboard contents.
+- Mooring logs to the macOS unified log (subsystem `dev.mooring`), and the bundled window and clipboard code log to their own loggers. No log line contains clipboard contents.
 
 Security issues: see [SECURITY.md](SECURITY.md).
 
@@ -141,8 +141,8 @@ Everything below ends in the same lease engine as the menu and the `mooring` com
 
 - **Raycast, Alfred and scripts:** open `mooring://on?for=1h&level=lid`, `mooring://off` or `mooring://toggle`. `for` takes `90s`, `15m`, `2h` or `1h30m`; `level` is `system`, `display`, `lid` or `display,lid`. A link counts as an agent, named after the app that sent it, so a lid link with no end asks first. Mistakes show up as a notification.
 - **Shortcuts, Siri and Spotlight:** "Keep Mac Awake" (an empty Duration means until turned off), "Let Mac Sleep" and "Get Awake Status".
-- **Claude Desktop, Cursor and other MCP clients:** in Settings → Agents → Other agents (MCP), click Add for Claude Desktop or Cursor and restart it; for any other client, click Copy config and paste it into the client's `mcp.json`. The server offers `keep_awake`, `release_awake`, `awake_status`, `notify`, and the window tools `list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout` and `apply_layout`. `mooring doctor` checks the setup.
-- **Telling you a job is done:** `mooring notify "Done" "what finished"`, or the MCP `notify` tool. Settings → Agents → "Let agents post notifications" turns it off for agents.
+- **Claude Desktop, Cursor and other MCP clients:** in Settings → Awake → Agents → Other agents (MCP), click Add for Claude Desktop or Cursor and restart it; for any other client, click Copy config and paste it into the client's `mcp.json`. The server offers `keep_awake`, `release_awake`, `awake_status`, `notify`, and the window tools `list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout` and `apply_layout`. `mooring doctor` checks the setup.
+- **Telling you a job is done:** `mooring notify "Done" "what finished"`, or the MCP `notify` tool. Settings → Awake → Agents → "Let agents post notifications" turns it off for agents.
 
 ## Windows
 
@@ -150,7 +150,7 @@ Mooring also includes a window manager, [Loop](https://github.com/MrKai77/Loop),
 
 ### Agents can arrange windows
 
-With Windows on, an agent can move and resize your windows from a plain request ("Chrome on the right half, iTerm bottom left"). `mooring win list` shows the windows, `mooring win arrange chrome=right-half iterm=bottom-left` places them in one go, and `mooring win undo` puts them back; the Claude Code plugin and the MCP tools (`list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout`, `apply_layout`) do the same. `mooring win layout save coding` keeps an arrangement to apply later. Settings → Agents → "Window arrangement by agents" chooses Automatic, Ask first (a notification with Allow and Deny) or Off (agents can't even list windows). Agents get only regions that move and resize windows, so `mooring win undo` can always put them back.
+With Windows on, an agent can move and resize your windows from a plain request ("Chrome on the right half, iTerm bottom left"). `mooring win list` shows the windows, `mooring win arrange chrome=right-half iterm=bottom-left` places them in one go, and `mooring win undo` puts them back; the Claude Code plugin and the MCP tools (`list_windows`, `arrange_windows`, `undo_arrangement`, `save_layout`, `apply_layout`) do the same. `mooring win layout save coding` keeps an arrangement to apply later. Settings → Awake → Agents → "Window arrangement by agents" chooses Automatic, Ask first (a notification with Allow and Deny) or Off (agents can't even list windows). Agents get only regions that move and resize windows, so `mooring win undo` can always put them back.
 
 ## Clipboard
 

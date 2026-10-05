@@ -19,7 +19,7 @@ dist/
 
 .DS_Store
 
-# Superpowers plan workspaces (ledgers, briefs)
+# Local planning scratch
 .superpowers/
 *.xcuserdatad
 

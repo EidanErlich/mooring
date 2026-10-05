@@ -274,7 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 /// Forwards notification responses to the approval centers. Tapping an
-/// approval's body opens Settings → Agents; it and dismissal don't answer.
+/// approval's body opens Settings → Awake → Agents; it and dismissal don't answer.
 private final class NotificationResponder: NSObject, UNUserNotificationCenterDelegate {
     private let approvals: LidApprovalCenter
     private let windowApprovals: WindowApprovalCenter

@@ -4,7 +4,7 @@ Thanks for helping. Bug reports, fixes and small improvements are welcome; for a
 
 ## Build and test
 
-You need macOS 14 or later, Xcode 26 and [Homebrew](https://brew.sh).
+You need Xcode 26 (on macOS 26) and [Homebrew](https://brew.sh). Mooring is built with Xcode 26, and the app runs on macOS 14 or later.
 
 ```sh
 make bootstrap   # once: installs XcodeGen and SwiftLint, generates Mooring.xcodeproj

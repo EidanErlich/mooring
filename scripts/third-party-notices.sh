@@ -76,7 +76,9 @@ for dir in "$ROOT"/THIRD_PARTY/*/; do
     license="$(upstream_field "$upstream" License | sed 's/ (see LICENSE in this folder)$//')"
     used="$(upstream_field "$upstream" 'Used for')"
     [ -n "$repo" ] && [ -n "$commit" ] && [ -n "$license" ] || fail "THIRD_PARTY/$name/UPSTREAM.md lacks Repo, Commit or License"
-    echo "| $name | vendored | $license | $repo |" >> "$table"
+    kind="vendored"
+    case "$used" in "reference only"*) kind="reference only (no code copied)" ;; esac
+    echo "| $name | $kind | $license | $repo |" >> "$table"
     {
         echo
         echo "### $name"

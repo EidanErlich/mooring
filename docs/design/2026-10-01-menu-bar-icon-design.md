@@ -106,7 +106,7 @@ VoiceOver reads one sentence built from the same inputs:
   - Awake and Off are templates and Attention isn't;
   - `[⚓ LID 1:12]` is wider than `[⚓ 1:12]`, which is wider than `[⚓]`.
 - **`LeaseText.endingLast`** in AwakeKit, plus `StatusLine` still passing its existing tests.
-- **Visual check by the executor:** render every state at 1× and 2× on light and dark bars and inspect them.
+- **Manual visual check:** render every state at 1× and 2× on light and dark bars and inspect them.
 - **Manual check:** the real menu bar in light mode, dark mode, with the dropdown open (inverted), and in lid mode on battery.
 
 ## Spec changes (docs/SPEC.md)

@@ -14,7 +14,7 @@ This builds on 3a (WindowKit, `WindowsController`), and follows SPEC.md 3.4.
 | --- | --- | --- |
 | Where the work happens | **In the app**, through new socket ops `win.list`, `win.arrange`, `win.undo` and `win.layout` (names SPEC already reserves). The CLI and MCP server only relay. | Only the app holds Accessibility and WindowKit. |
 | When Windows is off | Every `win` op fails with `denied`: "Windows is off. Turn it on in Mooring (Windows › Turn On…)." It never turns Windows on by itself. | Off means off (3a). Turning it on needs a person and Accessibility. |
-| Agent control | The existing `AwakeSettings.agentWindows` (`automatic` · `askFirst` · `off`), shown in Settings → Agents as "Window arrangement by agents". People are never asked. Under Off an agent gets nothing, not even `win.list`. | Already in SPEC's table and in the settings model. |
+| Agent control | The existing `AwakeSettings.agentWindows` (`automatic` · `askFirst` · `off`), shown in Settings → Awake → Agents as "Window arrangement by agents". People are never asked. Under Off an agent gets nothing, not even `win.list`. | Already in SPEC's table and in the settings model. |
 | Ask first | A notification (category `mooring.window-approval`): "<Agent> wants to arrange 3 windows", with a body listing the placements (agent text without control characters, at most 40 characters each, and "May open apps that aren't running." when the plan launches or is a layout), and buttons **Allow** and **Deny**. It waits 60 s; no answer → `denied`. | Same pattern as 2c-1 lid approvals. |
 | Who is an agent | The same detection as 2c-1 (ancestry, MCP `client`, links). | One rule everywhere. |
 | Exit codes | `win arrange` exits 0 only when every placement is `ok`; 2 when any is `partial`, `ambiguous`, `not_running`, `not_found` or `failed`; 1 for a bad plan. | SPEC: "exits 0 only when every placement is ok". Exit 2 already means "done, but not fully". |
@@ -74,7 +74,7 @@ Results are text, plus `structuredContent` with the per-placement results. The t
 - offer `mooring win undo`;
 - if Windows is off, tell the user to turn it on from the menu bar.
 
-## Settings → Agents
+## Settings → Awake → Agents
 
 "Window arrangement by agents": Automatic · Ask first · Off, with the caption "Agents can move and resize your windows with `mooring win` and MCP. Windows must be on."
 

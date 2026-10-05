@@ -85,8 +85,7 @@ Small issues found in review and deferred, plus ideas for later. None of them bl
   - the message for a plan that can't be decoded at the root path ends in a dangling "at";
   - the plan file is read before the size cap is checked;
   - `CommandRunner` has a speculative undo rewrite;
-  - error prefixes are mixed;
-  - the root `mooring --help` doesn't list `win`.
+  - error prefixes are mixed.
 - **MCP:** the "Unexpected reply" text is hard-coded with a default branch, and the undo or-pattern and the path helper are hard to read.
 - **Code and tests:** a dead `.launch` branch and a catch-all in the Arranger; test temp folders and a lingering task are not cleaned up; `FakeNotificationPoster` ignores the category, so there is no cross-category withdraw test; the unsigned-build helper warning in the test log is environmental.
 - The process-wide 1.5 s Accessibility timeout set when Windows starts isn't reset when it stops.

@@ -6,7 +6,7 @@ Oct 1, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 The dropdown is a custom floating panel (adapted from Maccy's `FloatingPanel`). With "Automatically hide and show the menu bar" on, the bar slides away while the panel is open, because macOS keeps the bar shown only for a real menu. A non-activating accessory app has no API to hold it (spike, 2026-10-01). The stopgap in PR #5 moves or closes the panel with the bar, but the bar still hides.
 
-Chai's dropdown is a real `NSMenu` (SwiftUI `MenuBarExtra`, menu style), and the bar stays put. A throwaway spike tried a real `NSMenu` whose rows are SwiftUI views (switches, ✓ rows, live countdown, ✕ buttons, a multi-select app submenu). It felt "way better".
+Chai's dropdown is a real `NSMenu` (SwiftUI `MenuBarExtra`, menu style), and the bar stays put. A throwaway spike tried a real `NSMenu` whose rows are SwiftUI views (switches, ✓ rows, live countdown, ✕ buttons, a multi-select app submenu). In testing, the native menu felt noticeably better.
 
 ## Decision
 
