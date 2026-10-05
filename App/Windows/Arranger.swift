@@ -30,7 +30,7 @@ final class Arranger {
     /// Why undo removed a kept arrangement whose windows it still couldn't find.
     static let givenUp = "still couldn't find the window; removed from undo"
     /// Why a running app's window can't be placed when Accessibility lists none, as on another Space.
-    static let noWindowsHere = "has no windows here (they may be on another Space or minimized; switch to them and try again)"
+    static let noWindowsHere = "has no windows here (they may be on another Space or in full screen; switch to them and try again)"
 
     let system: any WindowSystem
     let layouts: LayoutStore

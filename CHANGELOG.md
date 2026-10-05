@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 (2026-10-05)
+
+Polish found by end-to-end testing of 0.1.0.
+
+- **CLI:** parse errors print `mooring: <message>` and a usage hint, like every other error. `lease release --after` says when the lease will end, instead of "Released".
+- **Windows:** `win do` on an app with no windows on this Space says they may be on another Space or in full screen.
+- **Homebrew:** the cask uses Homebrew's current `depends_on macos: :sonoma`.
+- **Docs:** `notify` titles longer than 80 characters are cut, not refused.
+
 ## 0.1.0 (2026-10-05)
 
 The first release.

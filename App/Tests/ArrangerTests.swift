@@ -98,7 +98,7 @@ struct ArrangerTests {
 
     @Test func noVisibleWindowsHintsAtOtherSpaces() async {
         hideWindows(of: [WindowFixture.slack])
-        let hint = "has no windows here (they may be on another Space or minimized; switch to them and try again)"
+        let hint = "has no windows here (they may be on another Space or in full screen; switch to them and try again)"
         let results = await arrange(WinPlacement(app: "slack", region: "left-half"))
         #expect(results == [WinPlacementResult(app: "slack", status: .notFound, reason: hint)])
         // A title can't match when there are no windows to look at, so the hint is the same.
