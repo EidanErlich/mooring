@@ -118,20 +118,24 @@ struct MCPSession {
 extension MCPSession {
     /// Creates `mcp-<slug>-<pid>-<n>`, or extends one of this client's leases, watching this server's own process. The pid
     /// keeps two servers for one client (two Claude Code sessions, say) from sharing, and so merging, a lease. At most
-    /// 4 + 24 + 1 + 10 + 1 + n digits, well within the app's 64-character ids.
+    /// 4 + 24 + 1 + 10 + 1 + n digits, well within the app's 64-character ids. Only a new lease gets the default reason;
+    /// an extension with none sends none, so the app keeps the lease's own.
     private mutating func keepAwake(minutes: Int, level: String, reason: String?, leaseID: String?) async -> JSONValue {
         let id: String
+        let sentReason: String?
         if let leaseID {
             guard ownLeases.contains(leaseID) else { return MCPTools.failure(MCPTools.foreignLease) }
             id = leaseID
+            sentReason = reason
         } else {
             leasesMade += 1
             id = "mcp-\(MCPClientName.slug(displayName))-\(environment.ownPID)-\(leasesMade)"
+            sentReason = reason ?? "Requested by \(displayName)"
         }
         let ttl = Double(minutes * 60)
         let args = RequestArgs.acquire(AcquireArgs(
             kind: .lease, id: id, level: level, ttl: ttl, watchPid: environment.ownPID,
-            reason: reason ?? "Requested by \(displayName)", agent: nil, client: wireClient
+            reason: sentReason, agent: nil, client: wireClient
         ))
         switch await send(args, through: environment.acquireClient(kind: .lease, level: level)) {
         case .done(let result, let request):
