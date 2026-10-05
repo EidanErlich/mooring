@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Mooring</title>
+    <link>https://eidanerlich.github.io/mooring/appcast.xml</link>
+    <description>Mooring updates</description>
+    <language>en</language>
+    <item>
+      <title>Version 0.1.0</title>
+      <pubDate>Mon, 05 Oct 2026 20:26:07 +0000</pubDate>
+      <sparkle:version>0.1.0</sparkle:version>
+      <sparkle:shortVersionString>0.1.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:releaseNotesLink>https://github.com/EidanErlich/mooring/releases/tag/v0.1.0</sparkle:releaseNotesLink>
+      <enclosure url="https://github.com/EidanErlich/mooring/releases/download/v0.1.0/Mooring-0.1.0.zip" sparkle:edSignature="HcdlrfzUp16rjKOtqX7n99oD2LPPnG1txuFmo4j0q+Yu8dyNJwWx6NULF8KWBzZcj4zgLCtbsjaQG2x/YKr+Cg==" length="12705147" type="application/octet-stream"/>
+    </item>
+  </channel>
+</rss>
