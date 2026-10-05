@@ -4,10 +4,31 @@ import SwiftUI
 
 /// The parts of Mooring › Advanced, in order.
 enum AdvancedSection: Hashable {
-    case updates, logs, diagnostics, uninstall
+    case updates, logs, diagnostics, acknowledgements, uninstall
 }
 
-/// Mooring › Advanced: updates (only with a Sparkle key), logs, diagnostics and uninstall. (The spec's "log level"
+/// The license files bundled in Contents/Resources by the "Bundle license notices" build phase
+/// (scripts/third-party-notices.sh).
+enum Acknowledgements {
+    static let buttonTitle = "Acknowledgements…"
+    static let caption = "Mooring's license (GPL-3.0) and the licenses of the projects it builds on."
+
+    static func noticesURL(in bundle: Bundle = .main) -> URL? {
+        bundle.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md")
+    }
+
+    static func licenseURL(in bundle: Bundle = .main) -> URL? {
+        bundle.url(forResource: "LICENSE", withExtension: nil)
+    }
+
+    /// Opens the notices in the default app for Markdown files.
+    static func open() {
+        guard let url = noticesURL() else { return }
+        NSWorkspace.shared.open(url)
+    }
+}
+
+/// Mooring › Advanced: updates (only with a Sparkle key), logs, diagnostics, acknowledgements and uninstall. (The spec's "log level"
 /// is left out: os.Logger levels are controlled by the system, not the app.)
 struct AdvancedSettingsPage: View {
     static let updatesToggleTitle = "Check for updates automatically"
@@ -30,7 +51,7 @@ struct AdvancedSettingsPage: View {
 
     /// Updates appears only when a public key makes the updater available.
     static func sections(updates: UpdatesController?) -> [AdvancedSection] {
-        (updates?.isAvailable == true ? [.updates] : []) + [.logs, .diagnostics, .uninstall]
+        (updates?.isAvailable == true ? [.updates] : []) + [.logs, .diagnostics, .acknowledgements, .uninstall]
     }
 
     var body: some View {
@@ -40,6 +61,7 @@ struct AdvancedSettingsPage: View {
                 case .updates: if let updates { updatesSection(updates) }
                 case .logs: logsSection
                 case .diagnostics: diagnosticsSection
+                case .acknowledgements: acknowledgementsSection
                 case .uninstall: uninstallSection
                 }
             }
@@ -47,6 +69,14 @@ struct AdvancedSettingsPage: View {
         .formStyle(.grouped)
         .navigationTitle("Advanced")
         .sheet(isPresented: $uninstall.isPresented) { UninstallSheet(model: uninstall) }
+    }
+
+    private var acknowledgementsSection: some View {
+        Section("Acknowledgements") {
+            Button(Acknowledgements.buttonTitle) { Acknowledgements.open() }
+                .disabled(Acknowledgements.noticesURL() == nil)
+            Text(Acknowledgements.caption).font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     private var uninstallSection: some View {
