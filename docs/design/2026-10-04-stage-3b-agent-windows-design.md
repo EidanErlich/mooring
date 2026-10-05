@@ -1,6 +1,6 @@
 # Stage 3b: Agent windows
 
-Oct 4, 2026 · Eidan Erlich · Status: design decided under the owner's standing instruction to complete the project end to end (decisions follow SPEC.md 3.4 and the decisions made so far)
+Oct 4, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -110,9 +110,9 @@ Results are text, plus `structuredContent` with the per-placement results. The t
   - a person is never asked.
 - **CLI:** argument plans parse (`app=region@screen`), and exit codes are 0, 2 and 1.
 - **MCP:** 9 tools; `arrange_windows` relays one plan.
-- **Live:** with Accessibility granted, arranging three TextEdit windows returns `ok` frames, and `undo` restores them. This runs in the owner check: the test runner can't hold Accessibility.
+- **Live:** with Accessibility granted, arranging three TextEdit windows returns `ok` frames, and `undo` restores them. This runs in the manual check: the test runner can't hold Accessibility.
 
-## Owner check
+## Manual check
 
 1. Turn Windows on.
 2. Ask Claude: "Put Chrome on the right half, iTerm bottom left and Slack top left". It calls `mooring win list`, then one `arrange`, and reports. Then say "undo".

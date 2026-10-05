@@ -1,7 +1,7 @@
 import AwakeKit
 import Foundation
 
-/// What kind of awake the pill's label describes (docs/superpowers/specs/2026-10-01-menu-bar-icon-design.md).
+/// What kind of awake the pill's label describes (docs/design/2026-10-01-menu-bar-icon-design.md).
 enum AwakeKind: Equatable {
     case indefinite
     case task

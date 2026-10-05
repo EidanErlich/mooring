@@ -1,6 +1,6 @@
 import AppKit
 
-/// Draws the menu-bar icon (docs/superpowers/specs/2026-10-01-menu-bar-icon-design.md):
+/// Draws the menu-bar icon (docs/design/2026-10-01-menu-bar-icon-design.md):
 /// a dimmed anchor when off, a solid pill when awake (anchor, optional LID tag and one
 /// kind label, all cut out so macOS tints it as a template), and an orange "!" pill
 /// when something needs attention. Decisions about *what* to show live in MenuBarState.

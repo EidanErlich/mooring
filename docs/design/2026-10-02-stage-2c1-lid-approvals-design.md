@@ -1,6 +1,6 @@
 # Stage 2c-1: lid mode for agents, with approvals
 
-Oct 2, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 2, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -10,7 +10,7 @@ Lid mode for work that has an end needs no prompt. That covers work tied to a pr
 
 This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`, the `mooring://` URL scheme and App Intents), gets its own spec.
 
-## Owner decisions (2026-10-02)
+## Decisions (2026-10-02)
 
 | Question | Decision |
 | --- | --- |
@@ -144,7 +144,7 @@ One line is added to `skills/mooring/SKILL.md`: "To keep the Mac awake with the 
 - **CLI:** the 65 s timeout applies only to lid requests; `denied` exits 2 with the message; `status` shows the pending text; doctor check 7 covers its cases.
 - **Settings:** older settings decode to the defaults, and the new keys round-trip.
 
-## Owner check
+## Manual check
 
 1. On AC, start a Claude task and close the lid. Claude keeps working, and the LID tag shows.
 2. Ask Claude to run `mooring lease acquire job-x --level lid --ttl 30m --watch-pid auto`. No prompt.

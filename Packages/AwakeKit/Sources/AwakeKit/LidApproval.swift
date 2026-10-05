@@ -8,7 +8,7 @@ public enum LidDecision: Equatable, Sendable {
 }
 
 /// Whether an agent's lid-mode request is allowed, needs the person's approval, or is refused
-/// (docs/superpowers/specs/2026-10-02-stage-2c1-lid-approvals-design.md, "The decision").
+/// (docs/design/2026-10-02-stage-2c1-lid-approvals-design.md, "The decision").
 public enum LidApproval {
     /// `agentName == nil` means a person, who is never asked. `hasEnd` is false for a lease
     /// with no expiry and no watched process.

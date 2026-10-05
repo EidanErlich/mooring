@@ -1,6 +1,6 @@
 # Stage 2c-2: MCP server, `mooring://` links and Shortcuts
 
-Oct 3, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 3, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -13,7 +13,7 @@ Every way you or an agent might reach for "keep the Mac awake" ends in the same 
 
 This is the second half of SPEC.md stage 2c. 2c-1 (lid approvals) is merged, and everything here uses its rules for who counts as an agent and when lid mode asks.
 
-## Owner decisions (2026-10-03)
+## Decisions (2026-10-03)
 
 | Question | Decision |
 | --- | --- |
@@ -213,7 +213,7 @@ The CLI reads the same two files with the same pure code, via MooringCLICore; th
   - an old path → Needs update.
 - **CLI:** `mooring notify` exits 0 or 2. `doctor` check 8 covers its three states.
 
-## Owner check
+## Manual check
 
 1. **Shortcuts:** run "Keep Mac Awake" for 30 min. The menu shows it. "Get Awake Status" reports on, with the summary.
 2. **Raycast:**

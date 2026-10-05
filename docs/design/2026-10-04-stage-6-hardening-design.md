@@ -1,6 +1,6 @@
 # Stage 6: v0.1 hardening
 
-Oct 4, 2026 · Eidan Erlich · Status: decided under the owner's standing instruction to complete the project end to end. Every item comes from `docs/BACKLOG.md` and was checked against the code before it was picked.
+Oct 4, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 

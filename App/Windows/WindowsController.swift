@@ -33,7 +33,7 @@ protocol AccessibilitySheetPresenting: AnyObject {
     func close()
 }
 
-/// Owns Windows' lifecycle (docs/superpowers/specs/2026-10-03-stage-3a-windowkit-design.md, "Off means off").
+/// Owns Windows' lifecycle (docs/design/2026-10-03-stage-3a-windowkit-design.md, "Off means off").
 /// While off, nothing in WindowKit is created and Accessibility is never asked about.
 @MainActor @Observable
 final class WindowsController {

@@ -1,6 +1,6 @@
 # Stage 3a: WindowKit (Loop inside Mooring)
 
-Oct 3, 2026 · Eidan Erlich · Status: built (0.0.4)
+Oct 3, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -10,7 +10,7 @@ It is **off by default**. Mooring asks for Accessibility only when you turn Wind
 
 This is the first half of SPEC.md stage 3. **3b**, agent windows (`mooring win list / arrange / undo / layout`, MCP window tools and a skill update), gets its own spec and builds on this one.
 
-## Owner decisions (2026-10-03)
+## Decisions (2026-10-03)
 
 | Question | Decision |
 | --- | --- |
@@ -21,7 +21,7 @@ This is the first half of SPEC.md stage 3. **3b**, agent windows (`mooring win l
 
 ## Vendoring
 
-- **The snapshot** is Loop at `0ac6d834fb2cb542e62748021a88ee0f6a728fd7` (2026-09-29), copied as plain files with no git history, following the Build brief's vendoring rules:
+- **The snapshot** is Loop at `0ac6d834fb2cb542e62748021a88ee0f6a728fd7` (2026-09-29), copied as plain files with no git history, following the vendoring rules (SPEC.md, Development notes):
   - every copied file keeps its original header;
   - every changed file gains a first line, `// Adapted from Loop@0ac6d83: <original path>`;
   - `THIRD_PARTY/Loop/UPSTREAM.md` lists every file taken (old path → new path) and every modification.
@@ -167,9 +167,9 @@ A new sidebar group with Loop's Luminare pages, hosted in Mooring's Settings win
 - **Capability checks:** a forced failure hides the dependent feature and doesn't crash (including MultitouchSupport and the Gestures page, and window-id lookup and the submenu's line).
 - **Shortcuts:** duplicate chords are flagged on both rows; a chord matching an enabled system hotkey is flagged; disabled system hotkeys aren't.
 - **Dropdown:** Windows off shows only **Turn On…**; Windows on shows the five actions with their chords, More Actions and the switch.
-- **CI:** one CI run's time is recorded in the plan's ledger. If it grows by more than about 50%, cache SwiftPM packages in the workflow.
+- **CI:** if a CI run's time grows by more than about 50%, cache SwiftPM packages in the workflow.
 
-## Owner check
+## Manual check
 
 1. Use Mooring with Windows off. No Accessibility prompt ever appears.
 2. Choose **Windows › Turn On…**. Mooring is in the Accessibility list (if not, add it with +). Grant it. Windows switches on by itself.

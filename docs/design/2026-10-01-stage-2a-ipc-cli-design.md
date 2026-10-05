@@ -1,6 +1,6 @@
 # Stage 2a: IPC and the `mooring` CLI
 
-Oct 1, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 1, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -8,9 +8,9 @@ A `mooring` command that scripts, terminals and agents use to keep the Mac awake
 
 Stage gate (SPEC.md, Stages, 2a): `mooring anchor -- sleep 20` shows in `mooring status --json`, and exit codes match 2.2.
 
-SPEC.md 2.1, 2.2, 2.6 and Engineering decisions ("Socket protocol") already fix the socket path and modes, the peer-uid check, the newline-delimited JSON shapes, the commands and the exit codes. This spec fills the gaps and records the owner's decisions.
+SPEC.md 2.1, 2.2, 2.6 and Engineering decisions ("Socket protocol") already fix the socket path and modes, the peer-uid check, the newline-delimited JSON shapes, the commands and the exit codes. This spec fills the gaps and records the decisions made.
 
-## Owner decisions (2026-10-01)
+## Decisions (2026-10-01)
 
 | Question | Decision |
 | --- | --- |
@@ -179,7 +179,7 @@ Exit 0 when nothing failed, 1 otherwise.
   - `anchor -- sleep 20` is listed in `status --json`, then gone;
   - exit codes 0, 1, 2 and 3 (3 with the app quit and `--no-launch`).
 
-## Owner check
+## Manual check
 
 1. Settings → Install command-line tool, then `mooring doctor` in a new terminal.
 2. `mooring on --for 30m`: the pill and menu update. Then `mooring off`.

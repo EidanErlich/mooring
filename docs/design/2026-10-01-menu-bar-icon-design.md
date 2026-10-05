@@ -1,20 +1,20 @@
 # Menu-bar icon redesign
 
-Oct 1, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 1, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Why
 
 The stage 1 icon is an anchor that is outline when off and filled when on, with 7–9 pt badges for lid mode and battery and a 5 pt attention dot. At menu-bar size, three things go wrong:
 
 - On and off look almost the same.
-- The badges are close to unreadable. The owner could barely see the battery badge.
+- The badges are close to unreadable. The battery badge was barely visible.
 - The icon says nothing about *how* the Mac is being kept awake.
 
 The goal is a practical icon that reads at a glance, not a decorative one.
 
 **Principle:** at about 16 pt, a symbol drawn inside a symbol stops reading. States are told apart by whole shapes (a solid pill, or none), by short text, and by one sparing use of colour, never by small badges.
 
-## What the owner decided
+## Decisions
 
 | Question | Decision |
 | --- | --- |
@@ -107,7 +107,7 @@ VoiceOver reads one sentence built from the same inputs:
   - `[⚓ LID 1:12]` is wider than `[⚓ 1:12]`, which is wider than `[⚓]`.
 - **`LeaseText.endingLast`** in AwakeKit, plus `StatusLine` still passing its existing tests.
 - **Visual check by the executor:** render every state at 1× and 2× on light and dark bars and inspect them.
-- **Owner check:** the real menu bar in light mode, dark mode, with the dropdown open (inverted), and in lid mode on battery.
+- **Manual check:** the real menu bar in light mode, dark mode, with the dropdown open (inverted), and in lid mode on battery.
 
 ## Spec changes (docs/SPEC.md)
 
