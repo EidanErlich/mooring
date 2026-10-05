@@ -6,7 +6,7 @@ Mooring has no paid Apple account, so a release is signed with the maintainer's 
 
 ## Signing identity and privacy
 
-Your release certificate's name and your Team ID are embedded in every app you sign, and anyone who downloads a release can read them with `codesign -dv /Applications/Mooring.app` (the `Authority=` and `TeamIdentifier=` lines). For an Apple Development certificate, the name is `Apple Development: <your Apple ID email> (<certificate id>)`, so a release signed with your personal Apple ID publishes that email address.
+Your release certificate's name and your Team ID are embedded in every app you sign, and anyone who downloads a release can read them with `codesign -dvv /Applications/Mooring.app` (the `Authority=` and `TeamIdentifier=` lines). For an Apple Development certificate, the name is `Apple Development: <your Apple ID email> (<certificate id>)`, so a release signed with your personal Apple ID publishes that email address.
 
 To keep a personal email out of releases, create a separate free Apple ID just for the project, add it in Xcode → Settings → Accounts, and sign releases with the Apple Development certificate of its personal team (its identity and Team ID go in `Config/Local.xcconfig`). Decide before the first release: changing the certificate later means everyone has to grant Accessibility again. Never commit `Config/Local.xcconfig`, certificates (`.p12`, `.cer`) or provisioning profiles; `.gitignore` already excludes them.
 
@@ -62,7 +62,7 @@ This is the one build of the release. The script:
 1. checks the tree is clean and the tag is unused, locally and on `origin`;
 2. runs `make test`;
 3. builds Release with the identity in `Local.xcconfig` (`make build-release`);
-4. refuses the build if `Contents/Resources/` lacks `LICENSE` or `THIRD_PARTY_NOTICES.md`, if its `SUPublicEDKey` is empty (a release without it could never update itself), or if it isn't signed with a certificate (ad-hoc, or no Authority or TeamIdentifier in `codesign -dv`);
+4. refuses the build if `Contents/Resources/` lacks `LICENSE` or `THIRD_PARTY_NOTICES.md`, if its `SUPublicEDKey` is empty (a release without it could never update itself), or if it isn't signed with a certificate (ad-hoc, or no Authority or TeamIdentifier in `codesign -dvv`);
 5. verifies it with `codesign --verify --deep --strict`;
 6. zips it with `ditto -c -k --sequesterRsrc --keepParent` (extended attributes go in `__MACOSX/`, so even a plain `unzip` gives an intact app);
 7. signs the zip with Sparkle's `sign_update`, using the key in your Keychain (macOS may ask to allow access);

@@ -80,7 +80,7 @@ check_notices() { # app
 # A real release is signed with the maintainer's own certificate: not ad-hoc, with an Authority and a team.
 check_signature() { # app
     local info
-    info="$(codesign -dv "$1" 2>&1 || true)"
+    info="$(codesign -dvv "$1" 2>&1 || true)"  # -dvv: plain -dv leaves out the Authority lines
     if printf '%s\n' "$info" | grep -q '^Signature=adhoc' \
         || ! printf '%s\n' "$info" | grep -q '^Authority=' \
         || ! printf '%s\n' "$info" | grep -q '^TeamIdentifier=' \

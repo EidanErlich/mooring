@@ -229,7 +229,8 @@ plutil -replace SUPublicEDKey -string 'dGVzdC1wdWJsaWMta2V5' "$app/Contents/Info
 check "real run: an app with a key passes the key check" "$?"
 
 # Ad-hoc (codesign -s -, never a real identity) and unsigned fixtures fail; a shimmed codesign that reports
-# an Authority and a TeamIdentifier stands in for a real certificate.
+# an Authority and a TeamIdentifier stands in for a real certificate. Like the real tool, the shim prints the
+# Authority lines only at -dvv: plain -dv leaves them out, which once made every real signature look ad-hoc.
 adhoc="$(fixture_app "$WORK/bad/adhoc" 9.9.9)"
 chmod +x "$adhoc/Contents/MacOS/Mooring"
 codesign -s - "$adhoc" 2>/dev/null
@@ -240,11 +241,11 @@ unsigned="$(fixture_app "$WORK/bad/unsigned" 9.9.9)"
 check "real run: an unsigned app is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/bad/sig2"; echo $?)"
 signer="$WORK/bad/signer"
 mkdir -p "$signer"
-printf '#!/bin/sh\nprintf "Authority=Apple Development: Test (TEST000000)\\nTeamIdentifier=TEAM000000\\n" >&2\n' > "$signer/codesign"
+printf '#!/bin/sh\ncase "$*" in *-dvv*) printf "Authority=Apple Development: Test (TEST000000)\\n" >&2 ;; esac\nprintf "TeamIdentifier=TEAM000000\\n" >&2\n' > "$signer/codesign"
 chmod +x "$signer/codesign"
 (PATH="$signer:$PATH"; check_signature "$unsigned") >"$WORK/bad/sig3" 2>&1
 check "real run: a certificate signature passes" "$?"
-printf '#!/bin/sh\nprintf "Authority=Apple Development: Test (TEST000000)\\nTeamIdentifier=not set\\n" >&2\n' > "$signer/codesign"
+printf '#!/bin/sh\ncase "$*" in *-dvv*) printf "Authority=Apple Development: Test (TEST000000)\\n" >&2 ;; esac\nprintf "TeamIdentifier=not set\\n" >&2\n' > "$signer/codesign"
 (PATH="$signer:$PATH"; check_signature "$unsigned") >"$WORK/bad/sig4" 2>&1
 check "real run: no TeamIdentifier is an error" "$([ $? -ne 0 ] && grep -q 'Set MOORING_SIGN_IDENTITY' "$WORK/bad/sig4"; echo $?)"
 
