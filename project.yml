@@ -70,6 +70,13 @@ targets:
         outputFiles:
           - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/ClaudePlugin/.claude-plugin/marketplace.json
         basedOnDependencyAnalysis: false   # the plugin folder is copied whole, so any file in it can change
+      - name: Bundle license notices
+        # LICENSE and THIRD_PARTY_NOTICES.md (THIRD_PARTY/ plus the pinned packages' licenses) into Contents/Resources.
+        script: '"$SRCROOT/scripts/third-party-notices.sh" "${BUILD_DIR%/Build/*}/SourcePackages/checkouts" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Resources"'
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/THIRD_PARTY_NOTICES.md
+          - $(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Resources/LICENSE
+        basedOnDependencyAnalysis: false   # package pins and THIRD_PARTY files can change with no input listed
     settings:
       base:
         PRODUCT_NAME: Mooring

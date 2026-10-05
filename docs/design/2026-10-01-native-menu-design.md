@@ -1,12 +1,12 @@
 # The dropdown as a real menu
 
-Oct 1, 2026 · Eidan Erlich · Status: option chosen and spike approved in conversation; spec awaiting owner review
+Oct 1, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Why
 
 The dropdown is a custom floating panel (adapted from Maccy's `FloatingPanel`). With "Automatically hide and show the menu bar" on, the bar slides away while the panel is open, because macOS keeps the bar shown only for a real menu. A non-activating accessory app has no API to hold it (spike, 2026-10-01). The stopgap in PR #5 moves or closes the panel with the bar, but the bar still hides.
 
-Chai's dropdown is a real `NSMenu` (SwiftUI `MenuBarExtra`, menu style), and the bar stays put. The owner tried a throwaway spike: a real `NSMenu` whose rows are SwiftUI views (switches, ✓ rows, live countdown, ✕ buttons, a multi-select app submenu). It felt "way better".
+Chai's dropdown is a real `NSMenu` (SwiftUI `MenuBarExtra`, menu style), and the bar stays put. A throwaway spike tried a real `NSMenu` whose rows are SwiftUI views (switches, ✓ rows, live countdown, ✕ buttons, a multi-select app submenu). In testing, the native menu felt noticeably better.
 
 ## Decision
 
@@ -75,7 +75,7 @@ A menu can't reliably hold a focused search field. The Clipboard popup (⇧⌘C)
   - `willHighlight` sets the highlighted tag;
   - `menuDidClose` clears it and sets `isOpen = false`.
 - **Existing:** `DropdownModelTests` (`DurationPick`), `AppSessionTextTests`, `MenuRowLayoutTests` (updated), `ClickRouterTests` (the open action still opens).
-- **Owner check:** the bar stays shown with auto-hide on and in a full-screen app; switches, ✓ rows, multi-select apps, countdown and ✕ behave as in the spike; arrow keys highlight; light and dark mode.
+- **Manual check:** the bar stays shown with auto-hide on and in a full-screen app; switches, ✓ rows, multi-select apps, countdown and ✕ behave as in the spike; arrow keys highlight; light and dark mode.
 
 ## Out of scope
 

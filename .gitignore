@@ -19,5 +19,14 @@ dist/
 
 .DS_Store
 
-# Superpowers plan workspaces (ledgers, briefs)
+# Local planning scratch
 .superpowers/
+*.xcuserdatad
+
+# Local Claude Code settings
+.claude/
+
+# Signing material never belongs in the repo
+*.p12
+*.cer
+*.mobileprovision

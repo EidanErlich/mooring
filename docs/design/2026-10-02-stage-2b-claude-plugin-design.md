@@ -1,6 +1,6 @@
 # Stage 2b: the Claude Code plugin
 
-Oct 2, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 2, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -17,7 +17,7 @@ Success is SPEC.md 2.8:
 
 This builds on stage 2a: the socket, the `mooring` CLI, named leases with `--watch-pid auto`, and the merge-on-re-acquire rule.
 
-## Owner decisions (2026-10-02)
+## Decisions (2026-10-02)
 
 | Question | Decision |
 | --- | --- |
@@ -81,7 +81,6 @@ One lease per session, `claude-<session_id>`:
 - **Renewals only ever extend:** a renew sets the expiry to the later of its current value and its new one, so a short tool event never cuts a long Bash hold. Only the waiting timeout and the `Stop` grace set the expiry outright.
 - **"Only when asked":** every hook request is acknowledged and does nothing. Agent holds and `mooring anchor` still work.
 - **Crashes:** if Claude dies, the watched pid exits and the lease ends at once. If the pid can't be resolved, the 15 min expiry is the backstop.
-- The owner approved the background-task `Stop` rule on 2026-10-02. The internal-agent rule was a controller ruling.
 
 ## Components
 
@@ -170,7 +169,7 @@ About 30 lines. It says:
 
 ## Testing
 
-- **Task 1, the payload test (throwaway):**
+- **The payload test (throwaway, done first):**
   1. A local plugin with a hook on every documented event appends stdin JSON and the hook's process chain (`ps -o pid,ppid,comm`) to a scratch file.
   2. Run one short Claude session: a prompt, a tool call, a subagent, a permission prompt, then exit.
   3. Record the event names, field names, notification types and parent chain in the spec's facts section, and keep anonymized payloads as test fixtures.
@@ -204,7 +203,7 @@ About 30 lines. It says:
 - **`DoctorTests`:** plugin pass, fail and skip, plus the version warning.
 - **Repo marketplace:** `marketplace.json` and `plugin.json` parse as JSON with the required fields, and the bundled copy matches the source folder.
 
-## Owner check
+## Manual check
 
 1. Settings → Awake → Agents → Install. `mooring doctor` shows ✓ Claude plugin.
 2. Start a Claude task. The menu shows "Claude Code · <folder>".
@@ -224,7 +223,7 @@ About 30 lines. It says:
   - the hooks.json sketch updated.
 - **Agent control and approvals:** the two new settings ("Keep awake while agents work" now has Automatic / Only when asked, and there is a waiting timeout).
 - **Engineering decisions:** the `hook` op, and `HookPolicy` in AwakeKit.
-- **Stages:** row 2b.
+- **Build history:** row 2b.
 
 ## Out of scope
 

@@ -5,7 +5,12 @@ on:
     branches: [main]
   pull_request:
 
-# Private repo: macOS minutes are metered, so drop superseded runs.
+# The workflow needs no secrets and only reads the repo. It runs on pull_request (never
+# pull_request_target), so a fork's PR gets a read-only token and no secrets.
+permissions:
+  contents: read
+
+# Drop superseded runs.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -15,6 +20,8 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Bootstrap
         run: make bootstrap
       - name: Build (unsigned)
@@ -22,14 +29,17 @@ jobs:
       - name: Unit tests
         run: make test XCODEBUILD_FLAGS="CODE_SIGNING_ALLOWED=NO"
       - name: Release dry run
-        # Proves the release tooling without secrets: no signing, tests or publishing. The appcast must be XML
-        # and the cask must parse as Ruby.
+        # Proves the release tooling without secrets: no signing, tests or publishing. The appcast must be XML,
+        # the zip must carry the license notices and the cask must parse as Ruby.
         run: |
           scripts/release.sh --dry-run --app build/DerivedData/Build/Products/Debug/Mooring.app
           for f in dist/Mooring-*.zip dist/appcast.xml dist/homebrew/mooring.rb; do
             test -s "$f" || { echo "missing $f"; exit 1; }
           done
           xmllint --noout dist/appcast.xml
+          for f in LICENSE THIRD_PARTY_NOTICES.md; do
+            unzip -Z1 dist/Mooring-*.zip | grep -qx "Mooring.app/Contents/Resources/$f" || { echo "zip lacks $f"; exit 1; }
+          done
           ruby -c dist/homebrew/mooring.rb
       - name: Lint (non-blocking)
         run: make lint

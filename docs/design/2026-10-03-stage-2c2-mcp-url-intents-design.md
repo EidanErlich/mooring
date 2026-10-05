@@ -1,6 +1,6 @@
 # Stage 2c-2: MCP server, `mooring://` links and Shortcuts
 
-Oct 3, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 3, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -13,7 +13,7 @@ Every way you or an agent might reach for "keep the Mac awake" ends in the same 
 
 This is the second half of SPEC.md stage 2c. 2c-1 (lid approvals) is merged, and everything here uses its rules for who counts as an agent and when lid mode asks.
 
-## Owner decisions (2026-10-03)
+## Decisions (2026-10-03)
 
 | Question | Decision |
 | --- | --- |
@@ -75,7 +75,7 @@ The tool list is fixed at build time. A test asserts exactly these four names, a
   - its body is the body;
   - it uses no category, so it has no buttons.
 - **Rate limit:** one per 30 s per caller name. A faster call gets `denied` with "Rate-limited: try again in N s". A last notification that seems to be in the future (the clock moved back) counts as expired, so a clock change never blocks a caller for longer than 30 s.
-- **Setting:** Settings → Agents → **"Let agents post notifications"**, `AwakeSettings.agentNotifications: Bool = true`. When it's off, `notify` gets `denied` with "Notifications from agents are turned off in Settings". It applies to agent callers only; your own `mooring notify` always posts.
+- **Setting:** Settings → Awake → Agents → **"Let agents post notifications"**, `AwakeSettings.agentNotifications: Bool = true`. When it's off, `notify` gets `denied` with "Notifications from agents are turned off in Settings". It applies to agent callers only; your own `mooring notify` always posts.
 - **If notifications aren't allowed,** `notify` gets `denied` with "Turn on notifications for Mooring in System Settings". Lid approvals keep 2c-1's longer message, which ends "to approve lid mode".
 - **The CLI:** `mooring notify "<title>" ["<body>"]` exits 0 when posted and 2 when denied.
 - **The skill** gets one line: "When a long job finishes and the user may be away, `mooring notify "Done" "<what finished>"` tells them."
@@ -116,7 +116,7 @@ These are trusted like the menu: a person runs them. They live in the app target
 - **An action that runs before the app has set itself up** (a Shortcut that launches Mooring) waits for the request handler: `IntentActions` owns the `HandlerGate` that the app hands its handler to, so an action never finds Mooring "not running".
 - **Excluded:** clipboard intents (Part 4), and intents for named leases.
 
-## Settings → Agents → "Other agents (MCP)"
+## Settings → Awake → Agents → "Other agents (MCP)"
 
 A new section under Lid mode:
 
@@ -152,7 +152,7 @@ A new section under Lid mode:
 A new check 8, **"MCP clients"**:
 - ✓ "Claude Desktop, Cursor" (those with Added);
 - – "none added";
-- ✗ "Claude Desktop needs update", when an entry's command doesn't exist or isn't this app's, with the fix "Settings → Agents → Update".
+- ✗ "Claude Desktop needs update", when an entry's command doesn't exist or isn't this app's, with the fix "Settings → Awake → Agents → Update".
 
 The CLI reads the same two files with the same pure code, via MooringCLICore; the app isn't involved.
 
@@ -213,7 +213,7 @@ The CLI reads the same two files with the same pure code, via MooringCLICore; th
   - an old path → Needs update.
 - **CLI:** `mooring notify` exits 0 or 2. `doctor` check 8 covers its three states.
 
-## Owner check
+## Manual check
 
 1. **Shortcuts:** run "Keep Mac Awake" for 30 min. The menu shows it. "Get Awake Status" reports on, with the summary.
 2. **Raycast:**
@@ -221,7 +221,7 @@ The CLI reads the same two files with the same pure code, via MooringCLICore; th
    - Then `mooring://off`, then `mooring://on?level=lid`. A "Raycast wants…" notification appears.
    - Open `mooring://onn`. The error notification appears.
 3. **Claude Desktop:**
-   - In Settings → Agents, click **Add** for Claude Desktop and restart it.
+   - In Settings → Awake → Agents, click **Add** for Claude Desktop and restart it.
    - Ask it to keep the Mac awake for 20 minutes. "Claude Desktop" appears in the menu.
    - Ask it to tell you when it's done. A notification arrives.
 4. **Claude Code:** ask it to run `mooring notify "Test" "from Claude Code"`.

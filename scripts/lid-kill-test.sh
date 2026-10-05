@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stage 1c gate (docs/SPEC.md 1.11 and Stages, row 1c): with lid mode on,
+# Stage 1c gate (docs/SPEC.md 1.11 and Build history, row 1c): with lid mode on,
 # kill -9 the app and check SleepDisabled is back to 0 within 15 s. That is
 # the helper's watchdog at work; the app never gets a chance to clean up.
 #

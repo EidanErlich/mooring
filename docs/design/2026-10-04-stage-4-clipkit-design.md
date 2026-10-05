@@ -1,6 +1,6 @@
 # Stage 4: ClipKit (Maccy inside Mooring)
 
-Oct 4, 2026 · Eidan Erlich · Status: design decided under the owner's standing instruction to complete the project end to end (decisions follow SPEC.md Part 4 and the stage 3a pattern)
+Oct 4, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -55,9 +55,9 @@ Maccy's clipboard history runs inside Mooring as **ClipKit**, behind the same ic
   - the Settings pages show only keys that are read;
   - the Shortcuts conflict for the clipboard hotkey;
   - `AgentWallTests`.
-- **Performance:** a test builds the popup's item list from 200 fixture items and asserts it takes under 100 ms on a warm run. The live popup timing is checked in the owner check.
+- **Performance:** a test builds the popup's item list from 200 fixture items and asserts it takes under 100 ms on a warm run. The live popup timing is checked in the manual check.
 
-## Owner check
+## Manual check
 
 1. Leave Clipboard off: no `Clipboard/` folder exists.
 2. Turn it on, copy text, an image and a file, then open ⇧⌘C. Search, pin, then paste with ⌥Return. With Accessibility granted it pastes; without, it copies.

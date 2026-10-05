@@ -5,7 +5,6 @@
   "last_assistant_message": "`ls` shows: one.txt and two.txt. Agent counted: 3 lines in one.txt.",
   "permission_mode": "default",
   "prompt_id": "824c1ef5-6153-49ed-a31b-7895faa64110",
-  "scratchpad_dir": "/Users/test/scratch",
   "session_crons": [],
   "session_id": "00000000-0000-0000-0000-000000000001",
   "stop_hook_active": false,

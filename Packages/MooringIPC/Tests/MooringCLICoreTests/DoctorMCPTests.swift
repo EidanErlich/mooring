@@ -54,7 +54,7 @@ private func mcpCheck(home: MCPHome, helperPath: String = "/Apps/mooring") -> Do
     try home.install(.cursor, command: "/Old/mooring")
     #expect(mcpCheck(home: home) == Doctor.Check(
         name: "MCP clients", state: "fail", detail: "Claude Desktop needs update, Cursor needs update",
-        fix: "Settings → Agents → Update"
+        fix: "Settings → Awake → Agents → Update"
     ))
     try home.install(.claudeDesktop, command: "/Apps/mooring")
     #expect(mcpCheck(home: home).detail == "Cursor needs update")

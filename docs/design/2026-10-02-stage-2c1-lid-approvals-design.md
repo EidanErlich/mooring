@@ -1,6 +1,6 @@
 # Stage 2c-1: lid mode for agents, with approvals
 
-Oct 2, 2026 · Eidan Erlich · Status: design approved in conversation; spec awaiting owner review
+Oct 2, 2026 · Eidan Erlich · Status: built (shipped in 0.1.0)
 
 ## Goal
 
@@ -10,7 +10,7 @@ Lid mode for work that has an end needs no prompt. That covers work tied to a pr
 
 This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`, the `mooring://` URL scheme and App Intents), gets its own spec.
 
-## Owner decisions (2026-10-02)
+## Decisions (2026-10-02)
 
 | Question | Decision |
 | --- | --- |
@@ -73,7 +73,7 @@ This is the first half of SPEC.md stage 2c. The second half, 2c-2 (`mooring mcp`
   - actions: **Allow once**, **Always allow this agent** and **Deny**. Category actions are static, so the title can't name the agent; the agent's name leads the body instead ("<Agent> · <reason> · <end>");
   - the request id goes in `userInfo`;
   - macOS lists the actions under the notification's **Options** menu. `NSUserNotificationAlertStyle` is `alert`, so requests stay on screen until answered instead of vanishing as banners.
-- **Clicking the notification body** opens Settings → Agents and counts as no answer.
+- **Clicking the notification body** opens Settings → Awake → Agents and counts as no answer.
 - **At launch,** the app withdraws delivered approvals left from an earlier run, whose buttons would answer nothing.
 - **Permission:** requested the first time an approval is needed. If it's denied or off, the request is refused immediately with the notifications message.
 - **Waiting:**
@@ -144,7 +144,7 @@ One line is added to `skills/mooring/SKILL.md`: "To keep the Mac awake with the 
 - **CLI:** the 65 s timeout applies only to lid requests; `denied` exits 2 with the message; `status` shows the pending text; doctor check 7 covers its cases.
 - **Settings:** older settings decode to the defaults, and the new keys round-trip.
 
-## Owner check
+## Manual check
 
 1. On AC, start a Claude task and close the lid. Claude keeps working, and the LID tag shows.
 2. Ask Claude to run `mooring lease acquire job-x --level lid --ttl 30m --watch-pid auto`. No prompt.
@@ -163,7 +163,7 @@ One line is added to `skills/mooring/SKILL.md`: "To keep the Mac awake with the 
   - the new settings keys;
   - `approve.wait` stays reserved but unused;
   - `pendingApproval` and `notifications` on the wire.
-- **Stages:** split row 2c into 2c-1 and 2c-2.
+- **Build history:** split row 2c into 2c-1 and 2c-2.
 
 ## Out of scope
 

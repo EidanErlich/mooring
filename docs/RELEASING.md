@@ -1,8 +1,14 @@
 # Releasing Mooring
 
-The owner's checklist for publishing a release. Everything here runs on your Mac, with your Keychain. Nothing in the repo, its scripts or CI publishes anything: `scripts/release.sh --publish` (step 4) builds once and only **prints** the publishing commands, and you run them yourself in step 7.
+The maintainer's checklist for publishing a release. Everything here runs on your Mac, with your Keychain. Nothing in the repo, its scripts or CI publishes anything: `scripts/release.sh --publish` (step 4) builds once and only **prints** the publishing commands, and you run them yourself in step 7.
 
 Mooring has no paid Apple account, so a release is signed with the maintainer's own certificate (yours, not notarized) and updates are verified with Sparkle's EdDSA signature instead. Keep using the same signing certificate for every release, so people's Accessibility grants survive updates; if it ever changes, say so in the release notes.
+
+## Signing identity and privacy
+
+Your release certificate's name and your Team ID are embedded in every app you sign, and anyone who downloads a release can read them with `codesign -dv /Applications/Mooring.app` (the `Authority=` and `TeamIdentifier=` lines). For an Apple Development certificate, the name is `Apple Development: <your Apple ID email> (<certificate id>)`, so a release signed with your personal Apple ID publishes that email address.
+
+To keep a personal email out of releases, create a separate free Apple ID just for the project, add it in Xcode → Settings → Accounts, and sign releases with the Apple Development certificate of its personal team (its identity and Team ID go in `Config/Local.xcconfig`). Decide before the first release: changing the certificate later means everyone has to grant Accessibility again. Never commit `Config/Local.xcconfig`, certificates (`.p12`, `.cer`) or provisioning profiles; `.gitignore` already excludes them.
 
 ## Before you start
 
@@ -56,7 +62,7 @@ This is the one build of the release. The script:
 1. checks the tree is clean and the tag is unused, locally and on `origin`;
 2. runs `make test`;
 3. builds Release with the identity in `Local.xcconfig` (`make build-release`);
-4. refuses the build if its `SUPublicEDKey` is empty (a release without it could never update itself) or if it isn't signed with a certificate (ad-hoc, or no Authority or TeamIdentifier in `codesign -dv`);
+4. refuses the build if `Contents/Resources/` lacks `LICENSE` or `THIRD_PARTY_NOTICES.md`, if its `SUPublicEDKey` is empty (a release without it could never update itself), or if it isn't signed with a certificate (ad-hoc, or no Authority or TeamIdentifier in `codesign -dv`);
 5. verifies it with `codesign --verify --deep --strict`;
 6. zips it with `ditto -c -k --sequesterRsrc --keepParent` (extended attributes go in `__MACOSX/`, so even a plain `unzip` gives an intact app);
 7. signs the zip with Sparkle's `sign_update`, using the key in your Keychain (macOS may ask to allow access);
@@ -78,7 +84,8 @@ Inspect the `dist/` that step 4 just built; the commands it printed publish exac
 
 Check that:
 
-- `unzip -l dist/Mooring-<version>.zip` shows `Mooring.app/…`, and the unzipped app passes `codesign --verify --deep --strict`;
+- `unzip -l dist/Mooring-<version>.zip` shows `Mooring.app/…`, including `Mooring.app/Contents/Resources/LICENSE` and `Mooring.app/Contents/Resources/THIRD_PARTY_NOTICES.md`, and the unzipped app passes `codesign --verify --deep --strict`;
+- `THIRD_PARTY_NOTICES.md` lists every vendored project and Swift package. Every build writes it from `THIRD_PARTY/*/` and the licenses of the packages pinned in `Config/Package.resolved` (`scripts/third-party-notices.sh`, run by the "Bundle license notices" build phase), and the build fails if a pinned package has no license file, so there is nothing to regenerate by hand. When you add a vendored project, give it a `THIRD_PARTY/<Repo>/` folder first;
 - `appcast.xml` has a non-empty `sparkle:edSignature`, `length` equals `stat -f%z dist/Mooring-<version>.zip`, and `xmllint --noout dist/appcast.xml` is quiet;
 - the cask's `sha256` equals `shasum -a 256 dist/Mooring-<version>.zip`, and its caveats offer **Open Anyway** or `xattr -dr com.apple.quarantine /Applications/Mooring.app`;
 - the built app has your public key (the script already refuses an empty one): `plutil -extract SUPublicEDKey raw build/DerivedData/Build/Products/Release/Mooring.app/Contents/Info.plist`.

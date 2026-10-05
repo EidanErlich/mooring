@@ -43,7 +43,7 @@ extension SettingsPage {
     }
 }
 
-/// One page of Settings → Windows (docs/superpowers/specs/2026-10-03-stage-3a-windowkit-design.md,
+/// One page of Settings → Windows (docs/design/2026-10-03-stage-3a-windowkit-design.md,
 /// "Settings → Windows"). Loop's Luminare page is hosted directly in the detail area.
 struct WindowsSettingsPage: View {
     let page: SettingsPage

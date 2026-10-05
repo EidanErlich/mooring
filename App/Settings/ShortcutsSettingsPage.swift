@@ -8,7 +8,7 @@ struct ShortcutRow: Equatable {
     let warning: String?
 }
 
-/// What General → Shortcuts shows (docs/superpowers/specs/2026-10-03-stage-3a-windowkit-design.md,
+/// What General → Shortcuts shows (docs/design/2026-10-03-stage-3a-windowkit-design.md,
 /// "General → Shortcuts").
 struct ShortcutsContent: Equatable {
     static let windowsOffNote = "Windows is off: turn it on to use its shortcuts"

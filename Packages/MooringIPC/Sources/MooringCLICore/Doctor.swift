@@ -186,7 +186,7 @@ public enum Doctor {
             return "\(client) needs update"
         }
         guard stale.isEmpty else {
-            return Check(name: name, state: "fail", detail: stale.joined(separator: ", "), fix: "Settings → Agents → Update")
+            return Check(name: name, state: "fail", detail: stale.joined(separator: ", "), fix: "Settings → Awake → Agents → Update")
         }
         let added = states.filter { $0.1 == .added }.map(\.0)
         guard !added.isEmpty else { return Check(name: name, state: "skip", detail: "none added", fix: nil) }
