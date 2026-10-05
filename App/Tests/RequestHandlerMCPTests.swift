@@ -9,10 +9,10 @@ import Testing
 struct RequestHandlerMCPTests {
     /// A lid lease the MCP server acquires for `client`, ending by its ttl and watching the caller.
     private func mcpAcquire(
-        _ fixture: RequestFixture, id: String = "mcp-claude-desktop-1", client: String? = "claude-ai"
+        _ fixture: RequestFixture, id: String = "mcp-claude-desktop-1", client: String? = "claude-ai", reason: String? = nil
     ) async -> Response {
         await fixture.send(.acquire(AcquireArgs(
-            kind: .lease, id: id, level: "lid", ttl: 1200, watchPid: fixture.caller.pid, reason: nil, agent: nil,
+            kind: .lease, id: id, level: "lid", ttl: 1200, watchPid: fixture.caller.pid, reason: reason, agent: nil,
             client: client
         )))
     }
@@ -31,6 +31,29 @@ struct RequestHandlerMCPTests {
 
         #expect(fixture.approver.calls.map(\.agent) == ["Claude Desktop"])
         #expect(try #require(fixture.lease("mcp-claude-desktop-1")).owner == .mcp(client: "Claude Desktop"))
+    }
+
+    @Test func extendingAnMCPLeaseKeepsItsReason() async throws {
+        let fixture = RequestFixture()
+        _ = await mcpAcquire(fixture, reason: "build")
+        fixture.knobs.clock.addTimeInterval(600)
+
+        #expect(await mcpAcquire(fixture).ok)
+        #expect(try #require(fixture.lease("mcp-claude-desktop-1")).reason == "build")
+    }
+
+    @Test func extendingAnExpiredMCPLeaseStillNamesTheClient() async throws {
+        let fixture = RequestFixture()
+        _ = await mcpAcquire(fixture, reason: "build")
+        // Expired, but not yet ticked away: the extension, which sends no reason, starts a fresh lease.
+        fixture.knobs.clock.addTimeInterval(1201)
+
+        #expect(await mcpAcquire(fixture).ok)
+        #expect(try #require(fixture.lease("mcp-claude-desktop-1")).reason == "Requested by Claude Desktop")
+
+        // Other callers keep the id.
+        _ = await fixture.acquire(.lease, id: "job", ttl: 600)
+        #expect(try #require(fixture.lease("job")).reason == "job")
     }
 
     @Test func mcpLidWithEndNeedsNoPromptByDefault() async throws {

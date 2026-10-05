@@ -28,6 +28,75 @@ extension ArrangerTests {
         #expect(await arranger.undo() == nil)
     }
 
+    @Test func undoKeepsTheEntryWhenWindowsAreOutOfReach() async {
+        _ = await arrange(WinPlacement(app: "chrome", region: "right-half", screen: "main"),
+                          WinPlacement(app: "slack", region: "left-half", screen: "main"))
+        let shown = fake.appList
+        hideWindows(of: [WindowFixture.chrome, WindowFixture.slack])
+        let before = fake.calls.count
+        let kept = await arranger.undo()
+        #expect(kept == WinArrangeResult(results: [
+            WinPlacementResult(app: "chrome", status: .notFound, reason: Self.outOfReach),
+            WinPlacementResult(app: "slack", status: .notFound, reason: Self.outOfReach)
+        ], undoAvailable: true))
+        #expect(fake.calls.count == before)
+
+        fake.appList = shown
+        let undone = await arranger.undo()
+        #expect(undone?.results.map(\.status) == [.ok, .ok])
+        #expect(undone?.undoAvailable == false)
+        #expect(frame(WindowFixture.chromeInbox) == CGRect(x: 100, y: 100, width: 800, height: 600))
+        #expect(frame(WindowFixture.slackMain) == CGRect(x: -1800, y: -100, width: 1000, height: 700))
+    }
+
+    @Test func undoGivesUpAfterASecondMiss() async {
+        _ = await arrange(WinPlacement(app: "chrome", region: "right-half", screen: "main"))
+        _ = await arrange(WinPlacement(app: "slack", region: "left-half", screen: "main"))
+        // Closed, but Slack keeps running: the first miss keeps the arrangement, the second removes it.
+        hideWindows(of: [WindowFixture.slack])
+        #expect(await arranger.undo() == WinArrangeResult(results: [
+            WinPlacementResult(app: "slack", status: .notFound, reason: Self.outOfReach)
+        ], undoAvailable: true))
+        #expect(await arranger.undo() == WinArrangeResult(results: [
+            WinPlacementResult(app: "slack", status: .notFound, reason: "still couldn't find the window; removed from undo")
+        ], undoAvailable: true))
+
+        let undone = await arranger.undo()
+        #expect(undone?.results.map(\.status) == [.ok])
+        #expect(undone?.undoAvailable == false)
+        #expect(frame(WindowFixture.chromeInbox) == CGRect(x: 100, y: 100, width: 800, height: 600))
+    }
+
+    @Test func undoKeepsAMixedEntryWhileAnAppStillRuns() async {
+        _ = await arrange(WinPlacement(app: "chrome", region: "right-half", screen: "main"),
+                          WinPlacement(app: "slack", region: "left-half", screen: "main"))
+        hideWindows(of: [WindowFixture.chrome])
+        fake.appList.removeAll { $0.pid == WindowFixture.slack }
+        #expect(await arranger.undo() == WinArrangeResult(results: [
+            WinPlacementResult(app: "chrome", status: .notFound, reason: Self.outOfReach),
+            WinPlacementResult(app: "slack", status: .notFound, reason: "the window is gone")
+        ], undoAvailable: true))
+    }
+
+    @Test func undoDropsTheEntryWhenTheAppQuit() async {
+        _ = await arrange(WinPlacement(app: "slack", region: "left-half", screen: "main"))
+        fake.appList.removeAll { $0.pid == WindowFixture.slack }
+        let undone = await arranger.undo()
+        #expect(undone == WinArrangeResult(results: [
+            WinPlacementResult(app: "slack", status: .notFound, reason: "the window is gone")
+        ], undoAvailable: false))
+        #expect(await arranger.undo() == nil)
+    }
+
+    static let outOfReach = "couldn't find the window — it may be on another Space; switch to it and try again"
+
+    /// As on another Space, where Accessibility lists the apps with no windows.
+    func hideWindows(of pids: [pid_t]) {
+        for index in fake.appList.indices where pids.contains(fake.appList[index].pid) {
+            fake.appList[index].windows = []
+        }
+    }
+
     @Test func undoKeepsTen() async {
         func slackFrame(_ step: Int) -> CGRect {
             CGRect(x: Double(step) * 72, y: 25, width: 720, height: 437.5)

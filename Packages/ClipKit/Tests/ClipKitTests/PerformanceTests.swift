@@ -9,6 +9,11 @@ extension ClipKitGlobalStateTests {
     @Suite
     @MainActor
     struct PerformanceTests {
+        /// The wall-clock limits, with room for a shared CI runner (`CI=true`), which runs several times slower.
+        static func budget(_ limit: Duration) -> Duration {
+            ProcessInfo.processInfo.environment["CI"] == "true" ? limit * 5 : limit
+        }
+
         /// A ~55 MB image copy is read and recorded on the main thread; it must not stall the menu for long.
         @Test func largeItemRecordsWithinBudget() throws {
             let scratch = TestPasteboard()
@@ -29,21 +34,21 @@ extension ClipKitGlobalStateTests {
             let clock = ContinuousClock()
             let elapsed = clock.measure { Fixture.poll() }
             #expect(History.shared.all.count == 1)
-            #expect(elapsed < .seconds(2), "recording a \(tiff.count / 1_000_000) MB image took \(elapsed)")
+            #expect(elapsed < Self.budget(.seconds(2)), "recording a \(tiff.count / 1_000_000) MB image took \(elapsed)")
 
             // A copy of many files has one pasteboard item per file. Up to the limit it's recorded...
             scratch.pasteboard.clearContents()
             scratch.pasteboard.writeObjects(fileURLs(Clipboard.maxRecordedContents))
             let atLimit = clock.measure { Fixture.poll() }
             #expect(History.shared.all.count == 2)
-            #expect(atLimit < .seconds(1), "recording \(Clipboard.maxRecordedContents) files took \(atLimit)")
+            #expect(atLimit < Self.budget(.seconds(1)), "recording \(Clipboard.maxRecordedContents) files took \(atLimit)")
 
             // ...and past it, skipped quickly instead of stalling for seconds.
             scratch.pasteboard.clearContents()
             scratch.pasteboard.writeObjects(fileURLs(10_000))
             let tenThousand = clock.measure { Fixture.poll() }
             #expect(History.shared.all.count == 2)
-            #expect(tenThousand < .milliseconds(500), "skipping 10,000 files took \(tenThousand)")
+            #expect(tenThousand < Self.budget(.milliseconds(500)), "skipping 10,000 files took \(tenThousand)")
 
             // Fewer items, but more contents than the limit: skipped too.
             let rows = (0..<600).map { index in
@@ -56,7 +61,7 @@ extension ClipKitGlobalStateTests {
             scratch.pasteboard.writeObjects(rows)
             let manyContents = clock.measure { Fixture.poll() }
             #expect(History.shared.all.count == 2)
-            #expect(manyContents < .milliseconds(500), "skipping 1,200 contents took \(manyContents)")
+            #expect(manyContents < Self.budget(.milliseconds(500)), "skipping 1,200 contents took \(manyContents)")
         }
 
         private func fileURLs(_ count: Int) -> [NSURL] {
@@ -87,7 +92,7 @@ extension ClipKitGlobalStateTests {
                 _ = kit.recent(limit: 200)
             }
             #expect(History.shared.items.count == 200)
-            #expect(elapsed < .milliseconds(100), "building 200 popup items took \(elapsed)")
+            #expect(elapsed < Self.budget(.milliseconds(100)), "building 200 popup items took \(elapsed)")
         }
     }
 }

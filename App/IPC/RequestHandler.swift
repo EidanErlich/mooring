@@ -302,8 +302,10 @@ final class RequestHandler {
         case .lease:
             guard let id = args.id else { throw WireError(code: .badRequest, message: "Missing lease id") }
             try checkMCPPrefix(id, client: args.client)
+            // An MCP client sends no reason when it extends a lease, so one that has expired is named for the client.
+            let fallback = args.client.map { "Requested by \(MCPClientName.display($0))" } ?? id
             return Plan(
-                id: id, owner: owner, reason: cleaned(args.reason) ?? id,
+                id: id, owner: owner, reason: cleaned(args.reason) ?? fallback,
                 level: level ?? .system, ttl: ttl, watchPID: args.watchPid, caller: .named
             )
         }

@@ -233,6 +233,20 @@ import Testing
     #expect(args.last?.ttl == 1800)
 }
 
+@Test func extendingKeepsTheReason() async {
+    let harness = MCPHarness()
+    let id = "mcp-claude-desktop-500-1"
+    _ = await harness.run([
+        initialize(), call(2, "keep_awake", #"{"minutes":3,"reason":"X"}"#),
+        call(3, "keep_awake", #"{"minutes":1,"lease_id":"\#(id)"}"#),
+        call(4, "keep_awake", #"{"minutes":1,"lease_id":"\#(id)","reason":"Y"}"#)
+    ])
+    let args = harness.client.requests.compactMap { acquireArgs(of: $0) }
+    #expect(args.map(\.id) == [id, id, id])
+    // No reason on an extension leaves the app to keep the lease's own; only a new lease gets the default.
+    #expect(args.map(\.reason) == ["X", nil, "Y"])
+}
+
 // MARK: - release_awake
 
 @Test func releaseWithoutIdReleasesOnlyOwnLeases() async {
