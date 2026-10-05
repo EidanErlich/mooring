@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Mooring
@@ -57,5 +58,46 @@ struct UninstallTrashTests {
         } catch {
             #expect(error.localizedDescription == Uninstaller.dragToTrashMessage)
         }
+    }
+}
+
+/// AppKit won't terminate while a sheet is attached ("App termination blocked by modal sheet"), and the uninstall
+/// sheet is still up when the steps finish.
+@MainActor
+struct UninstallQuitTests {
+    /// A real window, shown off-screen, with a sheet attached (AppKit attaches sheets only to visible windows).
+    private func windowWithSheet() async throws -> NSWindow {
+        let window = NSWindow(contentRect: NSRect(x: -6000, y: -6000, width: 200, height: 200), styleMask: [.titled],
+                              backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.orderFrontRegardless()
+        let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 100, height: 100), styleMask: [.titled],
+                             backing: .buffered, defer: false)
+        window.beginSheet(sheet, completionHandler: nil)
+        try await Task.sleep(for: .milliseconds(100))
+        return window
+    }
+
+    @Test func endsSheetsBeforeTerminating() async throws {
+        let window = try await windowWithSheet()
+        defer { window.close() }
+        #expect(window.attachedSheet != nil)
+        var sheetsWhenTerminating: Int?
+        Uninstaller.quitAfterUninstall(
+            windows: [window],
+            terminate: { sheetsWhenTerminating = window.attachedSheet == nil ? 0 : 1 },
+            exit: {},
+            fallback: .seconds(30)
+        )
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(window.attachedSheet == nil)
+        #expect(sheetsWhenTerminating == 0)
+    }
+
+    @Test func exitsIfTerminationStillDoesNotHappen() async throws {
+        var exited = false
+        Uninstaller.quitAfterUninstall(windows: [], terminate: {}, exit: { exited = true }, fallback: .milliseconds(100))
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(exited)
     }
 }

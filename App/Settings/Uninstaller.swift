@@ -118,6 +118,23 @@ enum Uninstaller {
         }
     }
 
+    /// Quits once Uninstall is done. AppKit refuses to terminate while a sheet is attached ("App termination
+    /// blocked by modal sheet"), and the uninstall sheet is still up, so sheets are ended first. Everything has
+    /// been undone by now, so if something still blocks termination, the app exits after `fallback`.
+    static func quitAfterUninstall(
+        windows: [NSWindow], terminate: @escaping @MainActor () -> Void, exit: @escaping @MainActor () -> Void,
+        fallback: Duration = .seconds(5)
+    ) {
+        for window in windows {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+        }
+        Task { @MainActor in
+            terminate()
+            try? await Task.sleep(for: fallback)
+            exit()
+        }
+    }
+
     /// The failure summary shown before quitting. If lid sleep may still be off, it says how to fix that by hand.
     static func summary(_ failures: [UninstallFailure]) -> String {
         var text = failures.map { "• \($0.step.title): \($0.message)" }.joined(separator: "\n")
@@ -329,6 +346,13 @@ final class LiveUninstallSteps: UninstallPerforming {
     }
 
     func quit() {
-        NSApp.terminate(nil)
+        Uninstaller.quitAfterUninstall(
+            windows: NSApp.windows,
+            terminate: { NSApp.terminate(nil) },
+            exit: {
+                SettingsDomainsRemover.shared.removeAgainAtQuit()
+                Darwin.exit(0)
+            }
+        )
     }
 }
