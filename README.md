@@ -26,14 +26,12 @@ Lid mode runs through a small root helper that only accepts the app signed with 
 
 ### Prebuilt download
 
-Once 0.1.0 is published, download `Mooring-<version>.zip` from [GitHub Releases](https://github.com/EidanErlich/mooring/releases), unzip it and drag `Mooring.app` to `/Applications`. Mooring is signed with the maintainer's own certificate, not notarized, so macOS blocks the first open. Either:
+Download `Mooring-<version>.zip` from the [latest release](https://github.com/EidanErlich/mooring/releases/latest), unzip it and drag `Mooring.app` to `/Applications`. Mooring is signed with the maintainer's own certificate, not notarized, so macOS blocks the first open. Either:
 
 - open System Settings → Privacy & Security and click **Open Anyway**, or
 - run `xattr -dr com.apple.quarantine /Applications/Mooring.app` in Terminal.
 
 ### Homebrew
-
-Once the tap is published:
 
 ```sh
 brew install --cask eidanerlich/tap/mooring
@@ -75,7 +73,7 @@ Settings → General → Shortcuts lists every global shortcut and flags clashes
 
 ## Updates
 
-Mooring makes no network requests of its own on a build without an update key, and the Updates settings don't appear. A release build with Sparkle's public key (`MOORING_SPARKLE_PUBLIC_KEY` in `Config/Local.xcconfig`) asks once, on first launch, whether to check for updates automatically; **Not Now** leaves checks off. Settings → Mooring → Advanced then has **Check for updates automatically** and **Check Now**. The updates come from `https://eidanerlich.github.io/mooring/appcast.xml` (live once 0.1.0 is published) and are verified with an EdDSA signature (Sparkle 2.10.0). When an automatic check finds an update while you're working in another app, Mooring doesn't pop a window up behind it: it posts a notification and adds **Update Available…** to the menu, which shows the update. If you built from source, update with `git pull && make install` instead.
+Mooring makes no network requests of its own on a build without an update key, and the Updates settings don't appear. A release build with Sparkle's public key (`MOORING_SPARKLE_PUBLIC_KEY` in `Config/Local.xcconfig`) asks once, on first launch, whether to check for updates automatically; **Not Now** leaves checks off. Settings → Mooring → Advanced then has **Check for updates automatically** and **Check Now**. The updates come from `https://eidanerlich.github.io/mooring/appcast.xml` and are verified with an EdDSA signature (Sparkle 2.10.0). When an automatic check finds an update while you're working in another app, Mooring doesn't pop a window up behind it: it posts a notification and adds **Update Available…** to the menu, which shows the update. If you built from source, update with `git pull && make install` instead.
 
 ## Uninstall
 
