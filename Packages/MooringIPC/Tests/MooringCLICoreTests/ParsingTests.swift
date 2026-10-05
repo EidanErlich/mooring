@@ -265,9 +265,8 @@ private func usageObject(_ message: String) -> String {
     #expect(await parse.run(["on", "--for", "5"]) == 1)
     #expect(parse.capture.stdout.isEmpty)
     #expect(parse.capture.stderr == """
-    Error: Invalid duration '5' for --for. Use forms like 90s, 15m, 2h or 1h30m
-    Usage: mooring on [--level <level>] [--for <for>] [--reason <reason>] [--json] [--no-launch]
-      See 'mooring on --help' for more information.
+    mooring: Invalid duration '5' for --for. Use forms like 90s, 15m, 2h or 1h30m
+    Run 'mooring on --help' for usage.
 
     """)
 
@@ -276,6 +275,49 @@ private func usageObject(_ message: String) -> String {
     #expect(await execute.run(["lease", "acquire", "job", "--watch-pid", "auto"]) == 1)
     #expect(execute.capture.stdout.isEmpty)
     #expect(execute.capture.stderr == "mooring: Couldn't find a process to watch\n")
+}
+
+@Test func parseErrorUsesMooringPrefix() async {
+    /// What a run of `arguments` prints on stderr, after checking it exits 1 with nothing on stdout.
+    func stderr(_ arguments: [String]) async -> String {
+        let harness = Harness()
+        #expect(await harness.run(arguments) == 1)
+        #expect(harness.capture.stdout.isEmpty)
+        #expect(harness.client.requests.isEmpty)
+        return harness.capture.stderr
+    }
+    #expect(await stderr(["lease", "acquire", "x", "--ttl", "15"]) == """
+    mooring: Invalid duration '15' for --ttl. Use forms like 90s, 15m, 2h or 1h30m
+    Run 'mooring lease acquire --help' for usage.
+
+    """)
+    #expect(await stderr(["frobnicate"]) == "mooring: Unexpected argument 'frobnicate'\nRun 'mooring --help' for usage.\n")
+    #expect(await stderr(["lease", "frobnicate"]) == "mooring: Unexpected argument 'frobnicate'\nRun 'mooring lease --help' for usage.\n")
+    #expect(await stderr(["lease", "release"]) == """
+    mooring: Missing expected argument '<id>'
+    Run 'mooring lease release --help' for usage.
+
+    """)
+    #expect(await stderr(["win", "layout", "apply", "--json-ish"]).hasSuffix("Run 'mooring win layout apply --help' for usage.\n"))
+    // Commands whose names ArgumentParser derives from the type name, and a nested one with an argument.
+    #expect(await stderr(["status", "--bogus"]).hasSuffix("\nRun 'mooring status --help' for usage.\n"))
+    #expect(await stderr(["off", "--bogus"]).hasSuffix("\nRun 'mooring off --help' for usage.\n"))
+    #expect(await stderr(["anchor", "--pid", "abc"]).hasSuffix("\nRun 'mooring anchor --help' for usage.\n"))
+    #expect(await stderr(["win", "layout", "save", "a", "--bogus"]).hasSuffix("\nRun 'mooring win layout save --help' for usage.\n"))
+}
+
+@Test func helpAndVersionUnchanged() async {
+    let version = Harness()
+    #expect(await version.run(["--version"]) == 0)
+    #expect(version.capture.stdout == "mooring 9.9.9-test\n")
+    for arguments in [["--help"], [], ["lease", "acquire", "--help"], ["help", "lease"]] {
+        let harness = Harness()
+        #expect(await harness.run(arguments) == 0)
+        #expect(harness.capture.stdout.hasPrefix("OVERVIEW: "))
+        #expect(harness.capture.stdout.contains("USAGE: mooring"))
+        #expect(!harness.capture.stdout.contains("mooring: "))
+        #expect(harness.capture.stderr.isEmpty)
+    }
 }
 
 @Test func noLaunchFlagIsPassedThrough() async {

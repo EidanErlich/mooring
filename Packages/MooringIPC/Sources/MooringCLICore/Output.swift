@@ -49,7 +49,7 @@ enum CLIText {
         case (.acquire(let acquired), .acquire(let request)):
             acquire(acquired, kind: request.kind, now: now, processes: processes)
         case (.renew(let lease), _): "Renewed \(lease.id) · \(timeText(lease, now: now))"
-        case (.release(let released), .release(let request)): release(released, request: request)
+        case (.release(let released), .release(let request)): release(released, request: request, now: now)
         case (.status(let status), _): StatusText.human(status, now: now)
         case (.notify(let result), _): result.posted ? "Notified" : "Not notified"
         case (.winList(let list), _): WinText.list(list)
@@ -87,12 +87,26 @@ enum CLIText {
         return "\(watching) · \(remaining(expiry.timeIntervalSince(now))) cap"
     }
 
-    private static func release(_ result: ReleaseResult, request: ReleaseArgs) -> String {
+    private static func release(_ result: ReleaseResult, request: ReleaseArgs, now: Date) -> String {
         let name = request.id ?? "lease"
         switch request.kind {
         case .off: return result.released ? "Off" : "Already off"
-        case .lease: return result.released ? "Released \(name)" : "\(name) wasn't active"
+        case .lease:
+            guard result.released else { return "\(name) wasn't active" }
+            guard let after = request.after, let expiresAt = result.expiresAt else { return "Released \(name)" }
+            return releaseAfter(name, after: after, expiresAt: expiresAt, now: now)
         }
+    }
+
+    /// How much earlier than `now + after` a lease must end to count as already ending sooner: more than the reply's trip back.
+    private static let replyLatency: TimeInterval = 2
+
+    /// "job ends in 2m", or "job already ends sooner, in 1m" when `--after` left an earlier expiry alone. An app from before
+    /// `ReleaseResult.expiresAt` doesn't say when the lease ends, so the caller prints "Released job" for it instead.
+    private static func releaseAfter(_ name: String, after: TimeInterval, expiresAt: Date, now: Date) -> String {
+        let left = remaining(expiresAt.timeIntervalSince(now))
+        guard expiresAt < now.addingTimeInterval(after - replyLatency) else { return "\(name) ends in \(left)" }
+        return "\(name) already ends sooner, in \(left)"
     }
 }
 

@@ -29,6 +29,8 @@ final class Arranger {
     static let outOfReach = "couldn't find the window — it may be on another Space; switch to it and try again"
     /// Why undo removed a kept arrangement whose windows it still couldn't find.
     static let givenUp = "still couldn't find the window; removed from undo"
+    /// Why a running app's window can't be placed when Accessibility lists none, as on another Space.
+    static let noWindowsHere = "has no windows here (they may be on another Space or in full screen; switch to them and try again)"
 
     let system: any WindowSystem
     let layouts: LayoutStore
@@ -265,10 +267,10 @@ extension Arranger {
     /// decides is ambiguous. With no title, the app's frontmost window.
     private static func window(for placement: WinPlacement, in app: WSApp) throws -> WSWindow {
         let label = placement.app
+        guard let frontmost = app.windows.first else {
+            throw Refusal(result: .init(app: label, status: .notFound, reason: noWindowsHere))
+        }
         guard let title = placement.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else {
-            guard let frontmost = app.windows.first else {
-                throw Refusal(result: .init(app: label, status: .notFound, reason: "has no windows"))
-            }
             return frontmost
         }
         let exact = app.windows.filter { $0.title.caseInsensitiveCompare(title) == .orderedSame }

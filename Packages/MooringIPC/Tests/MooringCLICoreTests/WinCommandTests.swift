@@ -212,11 +212,11 @@ private func layoutReply(_ names: [String], arrange: WinArrangeResult? = nil) ->
 }
 
 @Test func layoutApplyReportsPlacementsAndExitCode() async {
-    let results = [okResult("chrome"), WinPlacementResult(app: "slack", status: .notFound, reason: "has no windows")]
+    let results = [okResult("chrome"), WinPlacementResult(app: "slack", status: .notFound, reason: "has no windows here")]
     let applied = layoutReply(["coding"], arrange: WinArrangeResult(results: results, undoAvailable: true))
     let harness = Harness(windowClient: RecordingClient(reply: .success(applied)))
     #expect(await harness.run(["win", "layout", "apply", "coding"]) == 2)
-    #expect(harness.capture.stdout == "chrome ok\nslack not found: has no windows\n")
+    #expect(harness.capture.stdout == "chrome ok\nslack not found: has no windows here\n")
 }
 
 @Test func layoutNeedsAName() async {

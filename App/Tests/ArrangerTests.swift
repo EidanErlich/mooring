@@ -96,6 +96,17 @@ struct ArrangerTests {
         #expect(missing == [WinPlacementResult(app: "chrome", status: .notFound, reason: "no window titled “calendar”")])
     }
 
+    @Test func noVisibleWindowsHintsAtOtherSpaces() async {
+        hideWindows(of: [WindowFixture.slack])
+        let hint = "has no windows here (they may be on another Space or in full screen; switch to them and try again)"
+        let results = await arrange(WinPlacement(app: "slack", region: "left-half"))
+        #expect(results == [WinPlacementResult(app: "slack", status: .notFound, reason: hint)])
+        // A title can't match when there are no windows to look at, so the hint is the same.
+        let titled = await arrange(WinPlacement(app: "slack", region: "left-half", title: "general"))
+        #expect(titled == [WinPlacementResult(app: "slack", status: .notFound, reason: hint)])
+        #expect(moves.isEmpty)
+    }
+
     @Test func titleMatchingTwoIsAmbiguous() async {
         let results = await arrange(WinPlacement(app: "chrome", region: "left-half", title: "google"))
         #expect(results == [WinPlacementResult(app: "chrome", status: .ambiguous,

@@ -180,6 +180,11 @@ func releasedFlag(_ response: Response) -> Bool? {
     if case .release(let result)? = response.result { result.released } else { nil }
 }
 
+/// When a lease released with `after` now ends, as the reply reports it.
+func releasedExpiry(_ response: Response) -> Date? {
+    if case .release(let result)? = response.result { result.expiresAt } else { nil }
+}
+
 func renewedLease(_ response: Response) -> LeaseInfo? {
     if case .renew(let info)? = response.result { info } else { nil }
 }
